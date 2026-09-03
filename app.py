@@ -154,13 +154,21 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         params["page_no"] = n
         return f"/businesses?{urlencode(params)}"
 
+    # An empty result is ambiguous: the search found nothing, or the other
+    # filters excluded what it found. Only worth a second query when empty.
+    search_only_total = 0
+    if not rows and q:
+        _, search_only_total = db.list_businesses(q=q, limit=1)
+
     return page(
         request, "businesses.html",
         nav="businesses",
         businesses=rows, total=total, f=filters,
+        search_only_total=search_only_total,
+        search_only_url=f"/businesses?{urlencode({'q': q, 'sort': sort})}",
         has_filters=bool(query_string.replace("sort=score", "").strip("&")),
         regions=db.distinct_values("region"),
-        industries=db.distinct_values("industry"),
+        industries=db.industry_options(),
         sorts=SORTS,
         page=page_no,
         pages=max(1, -(-total // PAGE_SIZE)),

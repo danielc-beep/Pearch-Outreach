@@ -126,8 +126,13 @@
       </div>
       {% else %}
       <div class="empty">
+        {% if search_only_total %}
+        <strong>{{ search_only_total }} business{{ '' if search_only_total == 1 else 'es' }} match “{{ f.q }}”, but the other filters exclude {{ 'it' if search_only_total == 1 else 'them' }}.</strong>
+        <a href="{{ search_only_url }}">Search “{{ f.q }}” on its own</a>, or adjust the filters above.
+        {% else %}
         <strong>Nothing matches those filters.</strong>
         {% if has_filters %}<a href="/businesses">Clear them</a> or {% endif %}<a href="/prospect">prospect for more businesses</a>.
+        {% endif %}
       </div>
       {% endif %}
     </div>

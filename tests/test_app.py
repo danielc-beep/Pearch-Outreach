@@ -199,3 +199,43 @@ def test_the_sample_source_is_off_unless_switched_on(monkeypatch):
     importlib.reload(config)
     importlib.reload(seed)
     assert seed.available()[0] is True
+
+
+def test_search_covers_the_trade_as_google_names_it(client):
+    """Google files a broker under category "Mortgage broker"; scoring calls it
+    "Home loans". Searching either word must find them."""
+    import db as db_module
+    db_module.insert_business({
+        "name": "Wisebuy Home Loans", "domain": "wisebuygroup.com.au",
+        "industry": "Home loans", "category": "Mortgage broker",
+        "suburb": "Cooks Hill", "region": "Newcastle", "fit_score": 100,
+    })
+    for term in ("wisebuy", "mortgage broker", "home loans", "cooks hill"):
+        assert client.get(f"/api/businesses?q={term}").json()["total"] == 1, term
+
+
+def test_the_industry_filter_matches_either_vocabulary(client):
+    import db as db_module
+    db_module.insert_business({
+        "name": "Wisebuy Home Loans", "domain": "wisebuygroup.com.au",
+        "industry": "Home loans", "category": "Mortgage broker", "fit_score": 100,
+    })
+    for label in ("Home loans", "Mortgage broker"):
+        assert client.get(f"/api/businesses?industry={label}").json()["total"] == 1, label
+    assert client.get("/api/businesses?industry=Dental").json()["total"] == 0
+
+
+def test_an_empty_result_explains_which_half_failed(client):
+    """The exact confusion from the field: a good search, an excluding filter."""
+    import db as db_module
+    db_module.insert_business({
+        "name": "Wisebuy Home Loans", "domain": "wisebuygroup.com.au",
+        "industry": "Home loans", "category": "Mortgage broker", "fit_score": 100,
+    })
+    body = client.get("/businesses?q=wisebuy&industry=Dental").text
+    assert "the other filters exclude" in body
+    assert "Search “wisebuy” on its own" in body
+
+    # A search that genuinely matches nothing keeps the plain message.
+    plain = client.get("/businesses?q=zzzznothing").text
+    assert "Nothing matches those filters" in plain

@@ -345,15 +345,18 @@ def list_businesses(
     where: list[str] = []
     args: list[Any] = []
     if q:
-        where.append("(name LIKE ? OR domain LIKE ? OR suburb LIKE ? OR industry LIKE ? OR email LIKE ?)")
-        args += [f"%{q}%"] * 5
+        where.append(
+            "(name LIKE ? OR domain LIKE ? OR suburb LIKE ? OR industry LIKE ? "
+            "OR category LIKE ? OR email LIKE ?)"
+        )
+        args += [f"%{q}%"] * 6
     for column, value in (("status", status), ("region", region), ("state", state), ("source", source)):
         if value:
             where.append(f"{column} = ?")
             args.append(value)
     if industry:
-        where.append("industry LIKE ?")
-        args.append(f"%{industry}%")
+        where.append("(industry LIKE ? OR category LIKE ?)")
+        args += [f"%{industry}%"] * 2
     if has_email is True:
         where.append("email IS NOT NULL AND email != ''")
     elif has_email is False:
@@ -381,13 +384,29 @@ def list_businesses(
 
 
 def distinct_values(column: str) -> list[str]:
-    if column not in {"region", "state", "industry", "source", "status"}:
+    if column not in {"region", "state", "industry", "source", "status", "category"}:
         raise ValueError(f"not a filterable column: {column}")
     rows = get_conn().execute(
         f"SELECT DISTINCT {column} AS v FROM businesses "
         f"WHERE {column} IS NOT NULL AND {column} != '' ORDER BY v"
     ).fetchall()
     return [r["v"] for r in rows]
+
+
+def industry_options() -> list[str]:
+    """
+    Every label the industry filter can match, deduplicated.
+
+    Records carry two vocabularies: `industry` is the ICP label scoring uses
+    ("Home loans"), while `category` is the trade as the source names it
+    ("Mortgage broker"). Both are offered because the filter matches both —
+    otherwise the dropdown lists options that return nothing.
+    """
+    seen: dict[str, str] = {}
+    for column in ("industry", "category"):
+        for value in distinct_values(column):
+            seen.setdefault(value.strip().lower(), value.strip())
+    return sorted(seen.values(), key=str.lower)
 
 
 # ---------- Contacts ----------
