@@ -74,3 +74,17 @@ def test_wrong_password_is_rejected(monkeypatch):
 def test_a_password_still_leaves_unsubscribe_open(monkeypatch):
     c = _client(monkeypatch, "s3cret")
     assert c.get("/unsubscribe", headers={"host": "x.onrender.com"}).status_code == 200
+
+
+def test_a_password_pasted_with_stray_whitespace_still_works(monkeypatch):
+    """Hosting dashboards use textareas; a trailing newline must not lock you out."""
+    c = _client(monkeypatch, "  s3cret\n")
+    response = c.get("/", headers={"host": "x.onrender.com", **_basic("pearch", "s3cret")})
+    assert response.status_code == 200
+
+
+def test_credentials_typed_with_stray_whitespace_still_work(monkeypatch):
+    """A password autofilled or pasted with a trailing space must still sign in."""
+    c = _client(monkeypatch, "s3cret")
+    response = c.get("/", headers={"host": "x.onrender.com", **_basic(" pearch ", "s3cret ")})
+    assert response.status_code == 200

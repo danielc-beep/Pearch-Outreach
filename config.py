@@ -23,8 +23,12 @@ APP_TAGLINE = "Find the Australian businesses worth talking to — then talk to 
 # serves localhost freely for development but REFUSES to serve any other host —
 # so a deployment without a password fails loudly instead of quietly publishing
 # the contact database to the internet.
-APP_USERNAME = os.getenv("PEARCH_USERNAME", "pearch")
-APP_PASSWORD = os.getenv("PEARCH_PASSWORD", "")
+# .strip() matters: hosting dashboards often use a multi-line textarea for
+# environment variables, so a pasted password easily arrives with a trailing
+# newline or space. Without this, the value shown in the dashboard and the
+# value that actually unlocks the app differ by an invisible character.
+APP_USERNAME = os.getenv("PEARCH_USERNAME", "pearch").strip()
+APP_PASSWORD = os.getenv("PEARCH_PASSWORD", "").strip()
 
 # Paths that stay public even when a password is set: the health check Render
 # polls, and the unsubscribe page recipients click from an email.

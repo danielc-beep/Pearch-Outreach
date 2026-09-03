@@ -57,6 +57,7 @@ def _credentials_ok(header: str) -> bool:
     except (binascii.Error, UnicodeDecodeError, ValueError):
         return False
     username, _, password = decoded.partition(":")
+    username, password = username.strip(), password.strip()
     # Check both halves so a wrong username costs the same time as a wrong password.
     return (secrets.compare_digest(username, APP_USERNAME)
             & secrets.compare_digest(password, APP_PASSWORD))
