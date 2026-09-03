@@ -1,12 +1,12 @@
 # Render Blueprint for Pearch Outreach.
 #
-# One-click deploy:
-#   https://render.com/deploy?repo=https://github.com/danielc-beep/Pearch-Outreach
+# Deliberately close to the ai-prompt-audit service that already runs in this
+# workspace — same runtime, build and start commands, same health check — with
+# a persistent disk added, which the SQLite database needs to survive deploys.
+# Disks require a paid instance type, hence `plan: starter`.
 #
-# Same shape as the existing ai-prompt-audit service — uvicorn on $PORT,
-# /health as the health check — plus a persistent disk, which the SQLite
-# database needs to survive deploys and restarts. Disks require a paid
-# instance type, hence `plan: starter` rather than free.
+# Every secret is `sync: false`, so Render prompts for it when you click Apply
+# and nothing sensitive is stored in the repo.
 
 services:
   - type: web
@@ -17,32 +17,28 @@ services:
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     disk:
-      name: pearch-outreach-data
+      name: pearch-data
       mountPath: /var/data
       sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: "3.12"
-      # The database lives on the disk, so it survives every deploy.
       - key: PEARCH_DB_PATH
         value: /var/data/pearch_outreach.db
-      # The shared password everyone signs in with. Without it the app refuses
-      # to serve any host other than localhost.
-      - key: PEARCH_PASSWORD
-        generateValue: true
       - key: PEARCH_USERNAME
         value: pearch
-      # Off, because the disk keeps real prospects. Flip to "1" if you ever
-      # want an empty database to fill itself with sample businesses for a demo.
+      - key: PEARCH_SEND_ENABLED
+        value: "0"
       - key: PEARCH_DEMO_SEED
         value: "0"
-      # Set these in the dashboard when you are ready for them.
+      # Render prompts for these on Apply. PEARCH_PASSWORD is the shared
+      # sign-in password and is the only one required — the app refuses to
+      # serve a public host without it.
+      - key: PEARCH_PASSWORD
+        sync: false
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: RESEND_API_KEY
         sync: false
-      # Sending stays off until you deliberately turn it on.
-      - key: PEARCH_SEND_ENABLED
-        value: "0"
