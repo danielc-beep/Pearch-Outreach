@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS businesses (
     fit_score         INTEGER NOT NULL DEFAULT 0,
     score_reasons     TEXT,
     notes             TEXT,
+    website_status    TEXT,
     do_not_contact    INTEGER NOT NULL DEFAULT 0,
     last_contacted_at TEXT,
     enriched_at       TEXT
@@ -139,6 +140,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 # Columns added after the first release. Each entry is applied if missing.
 MIGRATIONS: list[tuple[str, str]] = [
     ("prospecting_runs", "ALTER TABLE prospecting_runs ADD COLUMN result_ids TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
 ]
 
 
@@ -202,7 +204,7 @@ BUSINESS_FIELDS = (
     "industry", "category", "size_band", "rating", "review_count",
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
-    "notes", "do_not_contact", "last_contacted_at", "enriched_at",
+    "notes", "website_status", "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
 STATUSES = [
@@ -359,6 +361,7 @@ def list_businesses(
     industry: str = "",
     source: str = "",
     has_email: bool | None = None,
+    website_status: str = "",
     min_score: int = 0,
     sort: str = "score",
     limit: int = 50,
@@ -373,7 +376,8 @@ def list_businesses(
             "OR category LIKE ? OR email LIKE ?)"
         )
         args += [f"%{q}%"] * 6
-    for column, value in (("status", status), ("region", region), ("state", state), ("source", source)):
+    for column, value in (("status", status), ("region", region), ("state", state),
+                          ("source", source), ("website_status", website_status)):
         if value:
             where.append(f"{column} = ?")
             args.append(value)

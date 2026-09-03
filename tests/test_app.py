@@ -285,3 +285,49 @@ def test_the_database_page_offers_to_remove_sample_records(client):
     body = client.get("/businesses").text
     assert "1 fictional business in the database" in body
     assert "btn-purge-sample" in body
+
+
+def test_verification_flags_a_website_that_does_not_resolve(client, monkeypatch):
+    """A fabricated domain has no DNS record — that is how it gets caught."""
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Real Co", "domain": "wisebuygroup.com.au",
+                               "website": "https://wisebuygroup.com.au", "fit_score": 90})
+    db_module.insert_business({"name": "Invented Co", "domain": "riverbank.example.com.au",
+                               "website": "https://riverbank.example.com.au", "fit_score": 90})
+
+    monkeypatch.setattr(enrich, "website_is_live",
+                        lambda url: "unreachable" if "example.com.au" in url else "live")
+
+    result = client.post("/api/websites/verify").json()
+    assert result == {"checked": 2, "live": 1, "unreachable": 1}
+
+    dead = client.get("/api/businesses?").json()["businesses"]
+    by_name = {b["name"]: b["website_status"] for b in dead}
+    assert by_name["Real Co"] == "live"
+    assert by_name["Invented Co"] == "unreachable"
+
+
+def test_the_page_warns_about_unreachable_websites(client, monkeypatch):
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Invented Co", "domain": "x.example.com.au",
+                               "website": "https://x.example.com.au", "fit_score": 90})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "unreachable")
+    client.post("/api/websites/verify")
+
+    body = client.get("/businesses").text
+    assert "1 website didn't respond" in body
+    assert "site dead" in body
+
+
+def test_verification_skips_what_it_has_already_checked(client, monkeypatch):
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Co", "domain": "a.com.au",
+                               "website": "https://a.com.au", "fit_score": 50})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "live")
+
+    assert client.post("/api/websites/verify").json()["checked"] == 1
+    assert client.post("/api/websites/verify").json()["checked"] == 0      # already known
+    assert client.post("/api/websites/verify?recheck=true").json()["checked"] == 1

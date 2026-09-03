@@ -118,7 +118,10 @@ def enrich_from_website(website: str) -> dict[str, Any]:
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=ACCEPT_HEADERS) as client:
         home = _fetch(client, url)
         if not home:
-            return {"enrich_error": "could not fetch site"}
+            # Nothing served. A dead domain, a blocked bot, or — the reason this
+            # is recorded rather than shrugged off — a website that was never
+            # real. Either way it is not somewhere to send a prospect.
+            return {"enrich_error": "could not fetch site", "website_status": "unreachable"}
         pages.append(home)
 
         # Prefer pages the homepage actually links to, then fall back to the
@@ -175,9 +178,29 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
     found["website"] = url
     found["domain"] = domain_of(url)
+    found["website_status"] = "live"
     if not found.get("email"):
         found["enrich_note"] = f"No email published on {len(pages)} page(s) checked"
     return found
+
+
+def website_is_live(website: str) -> str:
+    """
+    Does this website serve anything? "live", "unreachable", or "" for no URL.
+
+    Only the homepage, so it is cheap enough to run across a whole database.
+    A fabricated domain has no DNS record and fails here, which is the point.
+    """
+    url = normalise_url(website)
+    if not url:
+        return ""
+    try:
+        with httpx.Client(timeout=TIMEOUT, follow_redirects=True,
+                          headers=ACCEPT_HEADERS) as client:
+            response = client.get(url)
+        return "live" if response.status_code < 400 else "unreachable"
+    except httpx.HTTPError:
+        return "unreachable"
 
 
 def lookup_abn(name_or_abn: str) -> dict[str, Any]:

@@ -16,6 +16,7 @@ from typing import Any
 import db
 import sources
 from config import region_for_postcode
+import enrich
 from enrich import enrich_from_website, guess_industry
 from scoring import apply_score
 from util import clean_email, clean_phone, domain_of, normalise_url, parse_address, truncate
@@ -80,6 +81,10 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:                      # a hostile site is not our problem
         log.debug("enrich failed for %s: %s", record.get("website"), e)
         return record
+    # website_status is the point of the visit as much as the email is, so it
+    # is merged even when the fetch failed and everything else came back empty.
+    if found.get("website_status"):
+        record["website_status"] = found["website_status"]
     found.pop("enrich_error", None)
     note = found.pop("enrich_note", "")
     contacts = found.pop("all_emails", [])
@@ -224,6 +229,40 @@ def rescore_all() -> int:
         })
         count += 1
     return count
+
+
+def verify_websites(limit: int = 500, recheck: bool = False) -> dict[str, Any]:
+    """
+    Check that each business's website actually serves a page.
+
+    A prospect whose website does not resolve is not a prospect — the record is
+    stale, the domain is dead, or it was never real. Only the homepage is
+    fetched, so this is cheap enough to run over the whole database.
+    """
+    rows, _ = db.list_businesses(limit=limit)
+    targets = [b for b in rows if b.get("website")
+               and (recheck or not b.get("website_status"))]
+    if not targets:
+        return {"checked": 0, "live": 0, "unreachable": 0}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        statuses = list(pool.map(lambda b: enrich.website_is_live(b["website"]), targets))
+
+    live = unreachable = 0
+    for business, status in zip(targets, statuses):
+        if not status:
+            continue
+        db.update_business(int(business["id"]), {"website_status": status})
+        if status == "live":
+            live += 1
+        else:
+            unreachable += 1
+            db.log_activity(int(business["id"]), "verified",
+                            f"{business['website']} did not respond")
+
+    log.info("verified %s websites: %s live, %s unreachable",
+             len(targets), live, unreachable)
+    return {"checked": len(targets), "live": live, "unreachable": unreachable}
 
 
 def reenrich_score_only(business_id: int) -> dict[str, Any] | None:

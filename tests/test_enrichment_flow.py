@@ -45,6 +45,7 @@ def test_scraper_recovers_a_hidden_address(monkeypatch):
     assert result["industry"] == "Home loans"  # guessed from the page text
     assert result["facebook"]
     assert "Newcastle home loan" in result["description"]
+    assert result["website_status"] == "live"
 
     visited = " ".join(url for url, _ in seen)
     assert "/our-team" in visited              # followed a non-"contact" link
@@ -73,4 +74,8 @@ def test_an_unreachable_site_reports_an_error(monkeypatch):
     monkeypatch.setattr(enrich.httpx, "Client",
                         lambda *a, **kw: original(*a, **{**kw, "transport": transport}))
 
-    assert enrich.enrich_from_website("https://down.com.au") == {"enrich_error": "could not fetch site"}
+    result = enrich.enrich_from_website("https://down.com.au")
+    assert result["enrich_error"] == "could not fetch site"
+    # The status is the useful half: a domain that serves nothing is not a
+    # prospect, whether it is dead or was never real.
+    assert result["website_status"] == "unreachable"

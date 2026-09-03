@@ -31,7 +31,14 @@
           <dl class="kv">
             <dt>Email</dt><dd>{% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted">Not found yet</span>{% endif %}</dd>
             <dt>Phone</dt><dd>{{ b.phone or '—' }}</dd>
-            <dt>Website</dt><dd>{% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.website }}</a>{% else %}—{% endif %}</dd>
+            <dt>Website</dt><dd>
+              {% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.website }}</a>
+                {% if b.website_status == 'unreachable' %}
+                <span class="pill" style="background:#FFF1F0;border-color:#F6CFCB;color:var(--danger)">doesn't resolve</span>
+                {% elif b.website_status == 'live' %}
+                <span class="pill hot">live</span>
+                {% endif %}
+              {% else %}—{% endif %}</dd>
             <dt>Address</dt><dd>{{ b.address or '—' }}</dd>
             <dt>Region</dt><dd>{{ b.region or '—' }}{{ ' · ' ~ b.state if b.state }}</dd>
             <dt>Industry</dt><dd>{{ b.industry or '—' }}{% if b.category and b.category != b.industry %} <span class="muted small">({{ b.category }})</span>{% endif %}</dd>

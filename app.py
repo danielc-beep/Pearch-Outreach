@@ -132,13 +132,14 @@ def home(request: Request) -> HTMLResponse:
 @app.get("/businesses", response_class=HTMLResponse)
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
-               has_email: str = "", min_score: str = "", sort: str = "score",
-               page_no: str = "1") -> HTMLResponse:
+               has_email: str = "", website_status: str = "", min_score: str = "",
+               sort: str = "score", page_no: str = "1") -> HTMLResponse:
     min_score_value = _int_param(min_score)
     page_no = max(1, _int_param(page_no, 1))
     rows, total = db.list_businesses(
         q=q, status=status, region=region, state=state, industry=industry, source=source,
         has_email={"1": True, "0": False}.get(has_email),
+        website_status=website_status,
         min_score=min_score_value, sort=sort,
         limit=PAGE_SIZE, offset=(page_no - 1) * PAGE_SIZE,
     )
@@ -146,7 +147,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
     # typed, rather than replacing an empty box with a 0.
     filters = {"q": q, "status": status, "region": region, "state": state,
                "industry": industry, "source": source, "has_email": has_email,
-               "min_score": min_score, "sort": sort}
+               "website_status": website_status, "min_score": min_score, "sort": sort}
     query_string = urlencode({k: v for k, v in filters.items() if v})
 
     def page_url(n: int) -> str:
@@ -175,6 +176,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         page_url=page_url,
         export_query=f"?{query_string}" if query_string else "",
         sample_count=db.count_sample_businesses(),
+        unreachable_count=db.list_businesses(website_status="unreachable", limit=1)[1],
     )
 
 
@@ -380,6 +382,12 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
         if "email" in data or "industry" in data:
             prospect.reenrich_score_only(business_id)
     return JSONResponse(db.get_business(business_id) or {})
+
+
+@app.post("/api/websites/verify")
+def api_verify_websites(recheck: bool = False) -> JSONResponse:
+    """Check every business's website actually serves a page."""
+    return JSONResponse(prospect.verify_websites(recheck=recheck))
 
 
 @app.post("/api/sample/purge")

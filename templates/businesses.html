@@ -27,6 +27,28 @@
     });
   }
 
+  document.getElementById('btn-verify').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const flash = document.getElementById('flash');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> Checking…';
+    flash.innerHTML = '<div class="notice notice-info">Requesting each business\'s homepage. '
+      + 'A domain that does not resolve is flagged.</div>';
+    try {
+      const res = await fetch('/api/websites/verify', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      flash.innerHTML = '<div class="notice notice-ok">Checked ' + data.checked
+        + ': ' + data.live + ' live, ' + data.unreachable + " didn't respond.</div>";
+      setTimeout(() => window.location.reload(), 1400);
+    } catch (err) {
+      flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
+      btn.disabled = false; btn.textContent = 'Verify websites';
+    }
+  });
+
   document.getElementById('btn-find-emails').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     const flash = document.getElementById('flash');
@@ -62,7 +84,8 @@
         <p class="lede">Filter the list, then open one to see the score breakdown, contacts and drafts.</p>
       </div>
       <div class="row">
-        <button class="btn" id="btn-find-emails">Find missing emails</button>
+        <button class="btn" id="btn-verify">Verify websites</button>
+      <button class="btn" id="btn-find-emails">Find missing emails</button>
         <a class="btn" href="/api/export.csv{{ export_query }}">Export CSV</a>
         <a class="btn btn-primary" href="/prospect">Add more</a>
       </div>
@@ -117,6 +140,14 @@
       {% if has_filters %}<a class="btn" href="/businesses">Clear</a>{% endif %}
     </form>
 
+    {% if unreachable_count %}
+    <div class="notice notice-warn">
+      <strong>{{ unreachable_count }} website{{ '' if unreachable_count == 1 else 's' }} didn't respond.</strong>
+      A business whose site doesn't resolve is either stale or was never real.
+      <a href="/businesses?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
+    </div>
+    {% endif %}
+
     {% if sample_count %}
     <div class="notice notice-warn">
       <strong>{{ sample_count }} fictional business{{ '' if sample_count == 1 else 'es' }} in the database.</strong>
@@ -145,7 +176,12 @@
               </td>
               <td>{{ b.industry or '—' }}</td>
               <td>{{ b.suburb or b.region or '—' }}{% if b.region and b.region != b.suburb %}<div class="sub">{{ b.region }}</div>{% endif %}</td>
-              <td>{% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted small">—</span>{% endif %}</td>
+              <td>
+                {% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted small">—</span>{% endif %}
+                {% if b.website_status == 'unreachable' %}
+                <div><span class="pill" style="background:#FFF1F0;border-color:#F6CFCB;color:var(--danger)">site dead</span></div>
+                {% endif %}
+              </td>
               <td class="small">{{ b.phone or '—' }}</td>
               <td>{{ score_widget(b.fit_score) }}</td>
               <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
