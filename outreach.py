@@ -334,6 +334,38 @@ def preflight(message: dict[str, Any]) -> list[str]:
     return problems
 
 
+def edit_message(message_id: int, subject: str, body: str) -> dict[str, Any]:
+    """
+    Rewrite a draft's subject and body.
+
+    A sent message is a record of what went out and cannot be edited. Editing
+    an approved one returns it to draft: the approval was for the text that has
+    just been replaced, so it has to be given again.
+    """
+    message = db.get_message(message_id)
+    if not message:
+        raise ValueError(f"no message with id {message_id}")
+    if message["status"] == "sent":
+        raise ValueError("This message has already been sent and cannot be edited.")
+
+    subject, body = subject.strip(), body.strip()
+    if not subject:
+        raise ValueError("The subject cannot be empty.")
+    if not body:
+        raise ValueError("The body cannot be empty.")
+
+    changes: dict[str, Any] = {"subject": subject, "body": body}
+    reapproval_needed = message["status"] == "approved"
+    if reapproval_needed:
+        changes["status"] = "draft"
+    db.update_message(message_id, changes)
+
+    db.log_activity(int(message["business_id"]), "edited",
+                    "Draft edited — needs approving again" if reapproval_needed
+                    else "Draft edited")
+    return db.get_message(message_id) or {}
+
+
 def approve_message(message_id: int) -> dict[str, Any] | None:
     db.update_message(message_id, {"status": "approved"})
     message = db.get_message(message_id)

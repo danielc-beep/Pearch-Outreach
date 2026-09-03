@@ -454,6 +454,20 @@ def api_draft(business_id: int, req: DraftRequest) -> JSONResponse:
     return JSONResponse(message)
 
 
+class MessageEdit(BaseModel):
+    subject: str
+    body: str
+
+
+@app.post("/api/messages/{message_id}")
+def api_edit_message(message_id: int, edit: MessageEdit) -> JSONResponse:
+    """Save changes to a draft."""
+    try:
+        return JSONResponse(outreach.edit_message(message_id, edit.subject, edit.body))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.post("/api/messages/{message_id}/approve")
 def api_approve(message_id: int) -> JSONResponse:
     message = outreach.approve_message(message_id)

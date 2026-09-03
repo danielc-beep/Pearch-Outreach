@@ -79,26 +79,47 @@
 
           <div id="messages" style="margin-top:16px">
             {% for m in messages %}
-            <div class="card" style="margin-bottom:14px;background:var(--surface)">
+            <div class="card js-message" data-id="{{ m.id }}" style="margin-bottom:14px;background:var(--surface)">
               <div class="row" style="margin-bottom:10px">
                 <span class="pill">{{ m.status }}</span>
                 <span class="muted small">to {{ m.to_email }}</span>
                 <span class="muted small right">{{ m.created_at[:16].replace('T',' ') }}</span>
               </div>
-              <strong>{{ m.subject }}</strong>
-              <div class="draft-body" style="margin-top:10px">{{ m.body }}</div>
+
+              <!-- Reading view -->
+              <div class="js-read">
+                <strong class="js-subject-text">{{ m.subject }}</strong>
+                <div class="draft-body js-body-text" style="margin-top:10px">{{ m.body }}</div>
+              </div>
+
+              <!-- Editing view. Claude's draft is a starting point, not a verdict. -->
+              <div class="js-edit is-hidden">
+                <div class="field-block">
+                  <label for="subj-{{ m.id }}">Subject</label>
+                  <input id="subj-{{ m.id }}" class="js-subject-input" type="text" value="{{ m.subject }}" />
+                </div>
+                <div class="field-block" style="margin-bottom:0">
+                  <label for="body-{{ m.id }}">Body</label>
+                  <textarea id="body-{{ m.id }}" class="js-body-input" style="min-height:260px">{{ m.body }}</textarea>
+                </div>
+              </div>
+
               {% if m.error %}<div class="notice notice-error" style="margin-top:10px">{{ m.error }}</div>{% endif %}
-              {% if m.status == 'draft' %}
+
               <div class="row" style="margin-top:12px">
+                {% if m.status != 'sent' %}
+                <button class="btn btn-sm js-edit-btn">Edit</button>
+                <button class="btn btn-sm btn-primary js-save-btn is-hidden">Save changes</button>
+                <button class="btn btn-sm js-cancel-btn is-hidden">Cancel</button>
+                {% endif %}
+                {% if m.status == 'draft' %}
                 <button class="btn btn-sm btn-primary js-approve" data-id="{{ m.id }}">Approve</button>
-                <span class="muted small">Approving does not send — you send from the Outbox.</span>
-              </div>
-              {% elif m.status == 'approved' %}
-              <div class="row" style="margin-top:12px">
+                <span class="muted small js-hint">Approving does not send — you send from the Outbox.</span>
+                {% elif m.status == 'approved' %}
                 <button class="btn btn-sm btn-accent js-send" data-id="{{ m.id }}">Send now</button>
-                {% if not send_enabled %}<span class="muted small">Sending is disabled — set PEARCH_SEND_ENABLED=1.</span>{% endif %}
+                {% if not send_enabled %}<span class="muted small js-hint">Sending is disabled — set PEARCH_SEND_ENABLED=1.</span>{% endif %}
+                {% endif %}
               </div>
-              {% endif %}
             </div>
             {% else %}
             <p class="muted small">No drafts yet.</p>
@@ -226,6 +247,51 @@
       try { await post('/api/businesses/' + BUSINESS_ID + '/enrich'); window.location.reload(); }
       catch (err) { flash(err.message, 'error'); btn.disabled = false; btn.textContent = 'Re-enrich'; }
     }));
+
+  // Each draft card toggles between reading and editing in place.
+  document.querySelectorAll('.js-message').forEach((card) => {
+    const read = card.querySelector('.js-read');
+    const edit = card.querySelector('.js-edit');
+    const editBtn = card.querySelector('.js-edit-btn');
+    const saveBtn = card.querySelector('.js-save-btn');
+    const cancelBtn = card.querySelector('.js-cancel-btn');
+    if (!editBtn) return;                       // a sent message is read-only
+
+    const others = card.querySelectorAll('.js-approve, .js-send, .js-hint');
+    const show = (editing) => {
+      read.classList.toggle('is-hidden', editing);
+      edit.classList.toggle('is-hidden', !editing);
+      editBtn.classList.toggle('is-hidden', editing);
+      saveBtn.classList.toggle('is-hidden', !editing);
+      cancelBtn.classList.toggle('is-hidden', !editing);
+      others.forEach((el) => el.classList.toggle('is-hidden', editing));
+    };
+
+    editBtn.addEventListener('click', () => {
+      show(true);
+      card.querySelector('.js-body-input').focus();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      // Throw away the edit by restoring what was last saved.
+      card.querySelector('.js-subject-input').value = card.querySelector('.js-subject-text').textContent.trim();
+      card.querySelector('.js-body-input').value = card.querySelector('.js-body-text').textContent;
+      show(false);
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const subject = card.querySelector('.js-subject-input').value;
+      const body = card.querySelector('.js-body-input').value;
+      saveBtn.disabled = true;
+      try {
+        await post('/api/messages/' + card.dataset.id, {subject: subject, body: body});
+        window.location.reload();
+      } catch (err) {
+        flash(err.message, 'error');
+        saveBtn.disabled = false;
+      }
+    });
+  });
 
   document.getElementById('btn-delete').addEventListener('click', async () => {
     if (!confirm('Permanently delete {{ b.name|replace("'", "\\'") }}? This cannot be undone.')) return;
