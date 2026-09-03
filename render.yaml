@@ -36,8 +36,6 @@ services:
       # serve a public host without it.
       - key: PEARCH_PASSWORD
         sync: false
-      - key: EXPLORIUM_API_KEY
-        sync: false
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY

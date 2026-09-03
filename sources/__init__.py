@@ -3,10 +3,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from sources import csv_import, explorium, google_places, seed
+from sources import csv_import, google_places, seed
 from sources.base import Field, SourceInfo
 
-_MODULES = [explorium, google_places, csv_import, seed]
+_MODULES = [google_places, csv_import, seed]
 
 
 def all_sources() -> list[SourceInfo]:

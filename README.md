@@ -45,7 +45,6 @@ required; each key just switches on more of the app.
 | Variable | What it turns on |
 | --- | --- |
 | `PEARCH_PASSWORD` | The shared sign-in password. **Required in production** — see below |
-| `EXPLORIUM_API_KEY` | Prospecting via Explorium — firmographics, revenue and employee bands |
 | `GOOGLE_PLACES_API_KEY` | Real business prospecting via Google Places |
 | `ANTHROPIC_API_KEY` | Per-business email drafts written by Claude |
 | `PEARCH_DRAFT_MODEL` | Which model drafts (default `claude-opus-5`) |
@@ -85,25 +84,6 @@ Sources live in `sources/` and are registered in `sources/__init__.py`. Each
 one implements a single `search(query) -> list[dict]`; everything downstream
 — normalising, region mapping, enrichment, scoring, deduping — is shared, so
 adding a source is one function.
-
-- **`explorium`** — Explorium's business database, the data behind Vibe
-  Prospecting. Employee and revenue bands, NAICS/SIC classification, and a
-  description of what the business does. Filters on Explorium's own category
-  vocabulary and on state. Needs `EXPLORIUM_API_KEY`, and every fetch spends
-  credits.
-
-  Explorium reports at state level with no postcode, so records arrive without
-  an ACM region and score lower on the region signal than a Places record does.
-
-  **Credits are the real constraint.** One credit per business returned, and a
-  starter plan is 100 credits in total — so a single careless search can spend
-  a quarter of the allowance. Google Places has no per-result cost and covers
-  the same businesses, so use Places for volume and Explorium when the
-  firmographics genuinely change a decision.
-
-  Run `scripts/probe_explorium.py` once against a live key before any real
-  search. It costs one credit, reports which API version answered, prints a
-  real record, and flags any column the mapping got wrong.
 
 - **`google_places`** — Places API (New) text search. Name, address, website,
   phone, rating, review count. Needs `GOOGLE_PLACES_API_KEY`.

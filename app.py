@@ -81,7 +81,7 @@ templates.env.globals.update(
 def preferred_source(infos: list[sources.SourceInfo]) -> str:
     """Default the source picker to the best thing that actually works today."""
     by_key = {s.key: s for s in infos}
-    for key in ("explorium", "google_places", "sample", "csv"):
+    for key in ("google_places", "sample", "csv"):
         if key in by_key and by_key[key].available:
             return key
     return infos[0].key
@@ -300,17 +300,12 @@ class ProspectRequest(BaseModel):
     location: str = ""
     limit: int | str = 40
     csv: str = ""
-    # Explorium filters on its own category vocabulary and on state.
-    category: str = ""
-    state: str = ""
-    size: str = ""
 
 
 @app.post("/api/prospect/run")
 def api_prospect_run(req: ProspectRequest) -> JSONResponse:
     query = {"industry": req.industry, "location": req.location,
-             "limit": req.limit, "csv": req.csv,
-             "category": req.category, "state": req.state, "size": req.size}
+             "limit": req.limit, "csv": req.csv}
     try:
         result = prospect.run(req.source, query, enrich=req.enrich)
     except KeyError as e:
