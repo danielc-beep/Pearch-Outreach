@@ -323,6 +323,29 @@ def get_business(business_id: int) -> dict[str, Any] | None:
     return row_to_dict(row)
 
 
+# Sample records are identifiable two ways: the source that created them, and
+# the reserved domain the generator always uses. Both are checked, so a record
+# whose source was overwritten by a later merge is still caught.
+SAMPLE_CLAUSE = "(source = 'sample' OR domain LIKE '%.example.com.au')"
+
+
+def count_sample_businesses() -> int:
+    """How many fictional businesses are sitting in the database."""
+    row = get_conn().execute(
+        f"SELECT COUNT(*) AS n FROM businesses WHERE {SAMPLE_CLAUSE}"
+    ).fetchone()
+    return int(row["n"])
+
+
+def delete_sample_businesses() -> int:
+    """Remove every fictional business. Returns how many went."""
+    count = count_sample_businesses()
+    if count:
+        with tx() as conn:
+            conn.execute(f"DELETE FROM businesses WHERE {SAMPLE_CLAUSE}")
+    return count
+
+
 def delete_business(business_id: int) -> None:
     with tx() as conn:
         conn.execute("DELETE FROM businesses WHERE id = ?", (business_id,))

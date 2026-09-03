@@ -174,6 +174,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         pages=max(1, -(-total // PAGE_SIZE)),
         page_url=page_url,
         export_query=f"?{query_string}" if query_string else "",
+        sample_count=db.count_sample_businesses(),
     )
 
 
@@ -379,6 +380,28 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
         if "email" in data or "industry" in data:
             prospect.reenrich_score_only(business_id)
     return JSONResponse(db.get_business(business_id) or {})
+
+
+@app.post("/api/sample/purge")
+def api_purge_sample() -> JSONResponse:
+    """
+    Delete every fictional business.
+
+    The sample source is off by default now, but records created before that
+    stay until something removes them — and a database that mixes invented
+    companies with real prospects is worse than either alone.
+    """
+    removed = db.delete_sample_businesses()
+    log.info("purged %s sample businesses", removed)
+    return JSONResponse({"removed": removed, "remaining": db.stats()["total"]})
+
+
+@app.post("/api/businesses/{business_id}/delete")
+def api_delete_business(business_id: int) -> JSONResponse:
+    if not db.get_business(business_id):
+        raise HTTPException(status_code=404, detail="No such business")
+    db.delete_business(business_id)
+    return JSONResponse({"deleted": business_id})
 
 
 @app.post("/api/enrich/missing")

@@ -134,7 +134,11 @@
             <button class="btn btn-sm btn-danger" id="btn-dnc">
               {{ 'Allow contact' if b.do_not_contact else 'Mark do-not-contact' }}
             </button>
+            <button class="btn btn-sm btn-danger" id="btn-delete">Delete</button>
           </div>
+          <p class="muted small" style="margin-top:8px">
+            Do-not-contact keeps the record but excludes it from outreach. Delete removes it entirely.
+          </p>
         </div>
 
         {% if contacts %}
@@ -220,6 +224,14 @@
       try { await post('/api/businesses/' + BUSINESS_ID + '/enrich'); window.location.reload(); }
       catch (err) { flash(err.message, 'error'); btn.disabled = false; btn.textContent = 'Re-enrich'; }
     }));
+
+  document.getElementById('btn-delete').addEventListener('click', async () => {
+    if (!confirm('Permanently delete {{ b.name|replace("'", "\\'") }}? This cannot be undone.')) return;
+    try {
+      await post('/api/businesses/' + BUSINESS_ID + '/delete');
+      window.location = '/businesses';
+    } catch (err) { flash(err.message, 'error'); }
+  });
 
   document.querySelectorAll('.js-approve').forEach((btn) =>
     btn.addEventListener('click', async () => {

@@ -5,6 +5,28 @@
 <script>
   // Re-runs the website scrape across everything still missing an email. Worth
   // doing after the scraper improves, without clicking through each record.
+  const purgeBtn = document.getElementById('btn-purge-sample');
+  if (purgeBtn) {
+    purgeBtn.addEventListener('click', async () => {
+      if (!confirm('Permanently delete every fictional business? Real prospects are untouched.')) return;
+      purgeBtn.disabled = true;
+      purgeBtn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span>';
+      try {
+        const res = await fetch('/api/sample/purge', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed');
+        window.location = '/businesses';
+      } catch (err) {
+        document.getElementById('flash').innerHTML =
+          '<div class="notice notice-error">' + err.message + '</div>';
+        purgeBtn.disabled = false;
+        purgeBtn.textContent = 'Remove them';
+      }
+    });
+  }
+
   document.getElementById('btn-find-emails').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     const flash = document.getElementById('flash');
@@ -94,6 +116,16 @@
       <button class="btn btn-primary" type="submit">Apply</button>
       {% if has_filters %}<a class="btn" href="/businesses">Clear</a>{% endif %}
     </form>
+
+    {% if sample_count %}
+    <div class="notice notice-warn">
+      <strong>{{ sample_count }} fictional business{{ '' if sample_count == 1 else 'es' }} in the database.</strong>
+      Left over from sample runs — their websites don't exist and nobody should be emailed.
+      <button class="btn btn-sm" id="btn-purge-sample" style="margin-left:8px">
+        Remove {{ 'it' if sample_count == 1 else 'them' }}
+      </button>
+    </div>
+    {% endif %}
 
     <div id="flash"></div>
 

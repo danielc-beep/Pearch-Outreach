@@ -239,3 +239,49 @@ def test_an_empty_result_explains_which_half_failed(client):
     # A search that genuinely matches nothing keeps the plain message.
     plain = client.get("/businesses?q=zzzznothing").text
     assert "Nothing matches those filters" in plain
+
+
+def test_sample_records_can_be_purged_without_touching_real_ones(client):
+    """Fictional businesses left over from sample runs must be removable."""
+    import db as db_module
+    db_module.insert_business({"name": "Riverbank Mortgage Brokers & Co",
+                               "domain": "riverbank-mortgage-brokers-co.example.com.au",
+                               "source": "sample", "fit_score": 95})
+    db_module.insert_business({"name": "Orphaned sample", "domain": "old.example.com.au",
+                               "source": "google_places", "fit_score": 50})
+    db_module.insert_business({"name": "Wisebuy Home Loans", "domain": "wisebuygroup.com.au",
+                               "source": "google_places", "fit_score": 100})
+
+    assert db_module.count_sample_businesses() == 2      # caught by source and by domain
+    result = client.post("/api/sample/purge").json()
+    assert result["removed"] == 2
+    assert result["remaining"] == 1
+    assert [b["name"] for b in client.get("/api/businesses").json()["businesses"]] \
+        == ["Wisebuy Home Loans"]
+
+
+def test_purging_with_nothing_to_purge_is_harmless(client, sample_run):
+    import db as db_module
+    db_module.get_conn().execute("UPDATE businesses SET source = 'google_places', "
+                                 "domain = replace(domain, '.example.com.au', '.com.au')")
+    db_module.get_conn().commit()
+    before = client.get("/api/businesses").json()["total"]
+    assert client.post("/api/sample/purge").json()["removed"] == 0
+    assert client.get("/api/businesses").json()["total"] == before
+
+
+def test_a_single_business_can_be_deleted(client, sample_run):
+    business = client.get("/api/businesses").json()["businesses"][0]
+    before = client.get("/api/businesses").json()["total"]
+    assert client.post(f"/api/businesses/{business['id']}/delete").status_code == 200
+    assert client.get("/api/businesses").json()["total"] == before - 1
+    assert client.post(f"/api/businesses/{business['id']}/delete").status_code == 404
+
+
+def test_the_database_page_offers_to_remove_sample_records(client):
+    import db as db_module
+    db_module.insert_business({"name": "Fake Co", "domain": "fake.example.com.au",
+                               "source": "sample", "fit_score": 90})
+    body = client.get("/businesses").text
+    assert "1 fictional business in the database" in body
+    assert "btn-purge-sample" in body
