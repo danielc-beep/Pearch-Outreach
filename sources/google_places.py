@@ -31,8 +31,12 @@ FIELDS = [
     Field("industry", "Business type", "mortgage brokers", required=True),
     Field("location", "Location", "Newcastle NSW", required=True),
     Field("limit", "How many", "60", kind="number", default="60",
-          help="Google returns 20 per page; we page until we hit this."),
+          help="Google returns 20 per page and caps a text search at 60 results."),
 ]
+
+# Text Search (New) returns 20 results per page and stops after three pages.
+PAGE_SIZE = 20
+MAX_RESULTS = 60
 
 ENDPOINT = "https://places.googleapis.com/v1/places:searchText"
 FIELD_MASK = ",".join([
@@ -57,6 +61,14 @@ def available() -> tuple[bool, str]:
     return True, ""
 
 
+def _error_detail(response: httpx.Response) -> str:
+    """Google's error message, falling back to raw text for non-JSON bodies."""
+    try:
+        return response.json().get("error", {}).get("message", "")[:300] or response.text[:200]
+    except ValueError:
+        return response.text[:200]
+
+
 def _component(place: dict[str, Any], type_name: str) -> str:
     for component in place.get("addressComponents") or []:
         if type_name in (component.get("types") or []):
@@ -64,12 +76,19 @@ def _component(place: dict[str, Any], type_name: str) -> str:
     return ""
 
 
+def _display_name(value: Any) -> str:
+    """Places returns localised text as {"text": ..., "languageCode": ...}."""
+    if isinstance(value, dict):
+        return value.get("text", "")
+    return value or ""
+
+
 def _to_record(place: dict[str, Any]) -> dict[str, Any]:
     address = place.get("formattedAddress", "")
     parsed = parse_address(address)
     website = normalise_url(place.get("websiteUri", ""))
     return {
-        "name": (place.get("displayName") or {}).get("text", "").strip(),
+        "name": _display_name(place.get("displayName")).strip(),
         "website": website,
         "domain": domain_of(website),
         "phone": clean_phone(place.get("nationalPhoneNumber")
@@ -78,9 +97,7 @@ def _to_record(place: dict[str, Any]) -> dict[str, Any]:
         "suburb": _component(place, "locality") or parsed["suburb"],
         "state": _component(place, "administrative_area_level_1") or parsed["state"],
         "postcode": _component(place, "postal_code") or parsed["postcode"],
-        "category": place.get("primaryTypeDisplayName", {}).get("text", "")
-        if isinstance(place.get("primaryTypeDisplayName"), dict)
-        else place.get("primaryTypeDisplayName", ""),
+        "category": _display_name(place.get("primaryTypeDisplayName")),
         "rating": place.get("rating"),
         "review_count": place.get("userRatingCount"),
         "source_ref": place.get("id", ""),
@@ -98,7 +115,7 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     if not text_query:
         raise ValueError("industry or location is required")
     try:
-        limit = max(1, min(200, int(query.get("limit") or 60)))
+        limit = max(1, min(MAX_RESULTS, int(query.get("limit") or 60)))
     except (TypeError, ValueError):
         limit = 60
 
@@ -111,17 +128,21 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     page_token = ""
     with httpx.Client(timeout=httpx.Timeout(20.0)) as client:
         while len(results) < limit:
+            # Every field must stay identical across a paged sequence: Google
+            # rejects a pageToken whose request differs from the one that
+            # produced it, so pageSize is fixed and the trim happens at the end.
             body: dict[str, Any] = {
                 "textQuery": text_query,
                 "regionCode": "AU",
-                "pageSize": min(20, limit - len(results)),
+                "pageSize": PAGE_SIZE,
             }
             if page_token:
                 body["pageToken"] = page_token
             response = client.post(ENDPOINT, headers=headers, json=body)
             if response.status_code >= 400:
-                detail = response.json().get("error", {}).get("message", response.text[:200])
-                raise RuntimeError(f"Google Places error {response.status_code}: {detail}")
+                raise RuntimeError(
+                    f"Google Places error {response.status_code}: {_error_detail(response)}"
+                )
             payload = response.json()
             places = payload.get("places") or []
             for place in places:
