@@ -271,7 +271,24 @@ def do_unsubscribe(request: Request, email: str = Form(...)) -> HTMLResponse:
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "businesses": db.stats()["total"]}
+    """
+    Liveness plus a configuration read-out.
+
+    Reports whether each integration is switched on from the running process's
+    point of view — which is the only view that matters when a key looks set in
+    a dashboard but the app disagrees. Booleans only: no key, or any part of
+    one, is ever returned here.
+    """
+    return {
+        "status": "ok",
+        "businesses": db.stats()["total"],
+        "sources": {s.key: s.available for s in sources.all_sources()},
+        "configured": {
+            "password": bool(APP_PASSWORD),
+            "anthropic": bool(ANTHROPIC_API_KEY),
+            "sending": SEND_ENABLED,
+        },
+    }
 
 
 # ---------- JSON API ----------

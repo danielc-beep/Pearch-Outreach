@@ -96,3 +96,44 @@ def test_demo_seed_is_off_by_default(sample_run):
     before = __import__("db").stats()["total"]
     assert demo.seed_if_empty() == 0
     assert __import__("db").stats()["total"] == before
+
+
+def test_health_reports_which_integrations_are_live(client):
+    """The read-out that settles 'the key looks set but the app disagrees'."""
+    payload = client.get("/health").json()
+    assert payload["status"] == "ok"
+    assert payload["sources"]["sample"] is True
+    assert payload["sources"]["google_places"] is False   # no key in the test env
+    assert set(payload["configured"]) == {"password", "anthropic", "sending"}
+
+
+def test_health_never_leaks_a_key(client, monkeypatch):
+    import importlib
+    import config, app as app_module
+    monkeypatch.setenv("GOOGLE_PLACES_API_KEY", "AIzaSuperSecretValue")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-secret")
+    importlib.reload(config)
+
+    body = client.get("/health").text
+    assert "AIzaSuperSecretValue" not in body
+    assert "sk-ant-secret" not in body
+
+    monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    importlib.reload(config)
+    importlib.reload(app_module)
+
+
+def test_an_api_key_pasted_with_a_trailing_newline_still_counts(monkeypatch):
+    """Render's env editor is a textarea; a stray newline must not disable a source."""
+    import importlib
+    import config, sources.google_places as gp
+    monkeypatch.setenv("GOOGLE_PLACES_API_KEY", "AIzaKey\n")
+    importlib.reload(config)
+    importlib.reload(gp)
+    assert gp.available()[0] is True
+    assert gp.GOOGLE_PLACES_API_KEY == "AIzaKey"
+
+    monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
+    importlib.reload(config)
+    importlib.reload(gp)

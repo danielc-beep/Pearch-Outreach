@@ -49,17 +49,17 @@ PEARCH_DEMO_SEED = os.getenv("PEARCH_DEMO_SEED", "0") == "1"
 
 
 # ---------- Prospecting sources ----------
-GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
 
 # Explorium (the data behind Vibe Prospecting). Each fetch spends credits.
-EXPLORIUM_API_KEY = os.getenv("EXPLORIUM_API_KEY", "")
+EXPLORIUM_API_KEY = os.getenv("EXPLORIUM_API_KEY", "").strip()
 
 # Australian Business Register (ABN Lookup) GUID — free, register at
 # https://abr.business.gov.au/Tools/WebServices
-ABR_GUID = os.getenv("ABR_GUID", "")
+ABR_GUID = os.getenv("ABR_GUID", "").strip()
 
 # ---------- Drafting ----------
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
 DRAFT_MODEL = os.getenv("PEARCH_DRAFT_MODEL", "claude-sonnet-5")
 
 # ---------- Sending ----------
@@ -67,7 +67,7 @@ DRAFT_MODEL = os.getenv("PEARCH_DRAFT_MODEL", "claude-sonnet-5")
 # on. Drafts are always written to the database first and need an explicit
 # approve step, so nothing can leave the building by accident.
 SEND_ENABLED = os.getenv("PEARCH_SEND_ENABLED", "0") == "1"
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
 FROM_NAME = os.getenv("PEARCH_FROM_NAME", "Pearch")
 FROM_EMAIL = os.getenv("PEARCH_FROM_EMAIL", "onboarding@resend.dev")
 REPLY_TO_EMAIL = os.getenv("PEARCH_REPLY_TO", "danielc@austcommunitymedia.com.au")
