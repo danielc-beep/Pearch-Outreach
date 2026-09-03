@@ -1,8 +1,8 @@
-# Render Blueprint for a standalone pearch-outreach repository.
+# Render Blueprint. Deploy the whole service in one click:
+#   https://render.com/deploy?repo=https://github.com/danielc-beep/Pearch-Outreach
 #
-# If you are deploying from a subdirectory of another repo instead, don't use
-# this file — create the service in the dashboard and set Root Directory to
-# `pearch-outreach`. See DEPLOY.md.
+# Render reads this file and creates the web service, the disk, the health
+# check and a generated sign-in password. See DEPLOY.md for the detail.
 services:
   - type: web
     name: pearch-outreach
