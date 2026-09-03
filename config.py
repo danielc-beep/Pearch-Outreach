@@ -37,6 +37,13 @@ LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "testserver", "[::1]")
 # disk (e.g. /var/data/pearch_outreach.db) to persist between deploys.
 DB_PATH = Path(os.getenv("PEARCH_DB_PATH", ROOT_DIR / "pearch_outreach.db"))
 
+# On a free Render instance there is no persistent disk, so the database is
+# empty every time the service redeploys or wakes from sleep. With this set,
+# the app fills an empty database with sample businesses on boot, so a shared
+# demo URL always shows a working tool rather than an empty shell.
+PEARCH_DEMO_SEED = os.getenv("PEARCH_DEMO_SEED", "0") == "1"
+
+
 # ---------- Prospecting sources ----------
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 

@@ -62,3 +62,37 @@ def test_unsubscribe_page_suppresses(client, sample_run):
     assert response.status_code == 200
     assert "off the list" in response.text
     assert client.get("/api/businesses").json()["businesses"]
+
+
+def test_demo_seed_fills_an_empty_database(monkeypatch):
+    """A free instance boots with no disk — the demo seed must fill it."""
+    import importlib
+    import config, demo, db as db_module
+    monkeypatch.setenv("PEARCH_DEMO_SEED", "1")
+    importlib.reload(config)
+    importlib.reload(demo)
+
+    assert db_module.stats()["total"] == 0
+    added = demo.seed_if_empty()
+    assert added > 0
+    stats = db_module.stats()
+    assert stats["total"] == added
+    assert stats["with_email"] > 0
+    assert stats["by_status"]["qualified"] > 0     # pipeline isn't one flat column
+    assert len(stats["top_regions"]) > 1           # more than one region represented
+
+    # Running again must not duplicate anything.
+    assert demo.seed_if_empty() == 0
+    assert db_module.stats()["total"] == added
+
+    monkeypatch.delenv("PEARCH_DEMO_SEED", raising=False)
+    importlib.reload(config)
+    importlib.reload(demo)
+
+
+def test_demo_seed_is_off_by_default(sample_run):
+    """Without the flag it must never touch the database."""
+    import demo
+    before = __import__("db").stats()["total"]
+    assert demo.seed_if_empty() == 0
+    assert __import__("db").stats()["total"] == before

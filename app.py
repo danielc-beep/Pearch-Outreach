@@ -26,6 +26,7 @@ from markupsafe import Markup
 from pydantic import BaseModel, Field
 
 import db
+import demo
 import outreach
 import prospect
 import sources
@@ -39,6 +40,10 @@ log = logging.getLogger(__name__)
 
 app = FastAPI(title=APP_NAME)
 app.add_middleware(PasswordMiddleware)
+
+# A free instance loses its database on every restart; this puts sample
+# businesses back so a shared URL is never an empty shell. No-op otherwise.
+demo.seed_if_empty()
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 

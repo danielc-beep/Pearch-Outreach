@@ -1,14 +1,17 @@
-# Render Blueprint. Deploy the whole service in one click:
+# Render Blueprint for Pearch Outreach.
+#
+# One-click deploy:
 #   https://render.com/deploy?repo=https://github.com/danielc-beep/Pearch-Outreach
 #
-# Render reads this file and creates the web service, the disk, the health
-# check and a generated sign-in password. See DEPLOY.md for the detail.
+# Same shape as the existing ai-prompt-audit service — uvicorn on $PORT,
+# /health as the health check — plus a persistent disk, which the SQLite
+# database needs to survive deploys and restarts. Disks require a paid
+# instance type, hence `plan: starter` rather than free.
+
 services:
   - type: web
     name: pearch-outreach
     runtime: python
-    # A persistent disk is required for the SQLite database, and disks are not
-    # available on the free plan — on free, every deploy would wipe the database.
     plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
@@ -19,16 +22,21 @@ services:
       sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.12"
+      # The database lives on the disk, so it survives every deploy.
       - key: PEARCH_DB_PATH
         value: /var/data/pearch_outreach.db
-      # The shared password everyone signs in with. Required: without it the
-      # app refuses to serve any host other than localhost.
+      # The shared password everyone signs in with. Without it the app refuses
+      # to serve any host other than localhost.
       - key: PEARCH_PASSWORD
         generateValue: true
       - key: PEARCH_USERNAME
         value: pearch
-      # Set these in the dashboard, not here.
+      # Off, because the disk keeps real prospects. Flip to "1" if you ever
+      # want an empty database to fill itself with sample businesses for a demo.
+      - key: PEARCH_DEMO_SEED
+        value: "0"
+      # Set these in the dashboard when you are ready for them.
       - key: GOOGLE_PLACES_API_KEY
         sync: false
       - key: ANTHROPIC_API_KEY
