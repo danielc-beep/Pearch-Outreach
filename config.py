@@ -51,6 +51,9 @@ PEARCH_DEMO_SEED = os.getenv("PEARCH_DEMO_SEED", "0") == "1"
 # ---------- Prospecting sources ----------
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
 
+# Explorium (the data behind Vibe Prospecting). Each fetch spends credits.
+EXPLORIUM_API_KEY = os.getenv("EXPLORIUM_API_KEY", "")
+
 # Australian Business Register (ABN Lookup) GUID — free, register at
 # https://abr.business.gov.au/Tools/WebServices
 ABR_GUID = os.getenv("ABR_GUID", "")

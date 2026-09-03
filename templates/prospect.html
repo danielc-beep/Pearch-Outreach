@@ -57,10 +57,17 @@
     sourceKeyInput.value = key;
     fieldsEl.innerHTML = source.fields.map((f) => {
       const id = 'f-' + f.name;
-      const input = f.kind === 'textarea'
-        ? `<textarea id="${id}" name="${f.name}" placeholder="${f.placeholder}"></textarea>`
-        : `<input id="${id}" name="${f.name}" type="${f.kind === 'number' ? 'number' : 'text'}"
-             placeholder="${f.placeholder}" value="${f.default || ''}" />`;
+      let input;
+      if (f.kind === 'textarea') {
+        input = `<textarea id="${id}" name="${f.name}" placeholder="${f.placeholder}"></textarea>`;
+      } else if (f.kind === 'select') {
+        const options = (f.options || []).map((o) =>
+          `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o || 'Any'}</option>`).join('');
+        input = `<select id="${id}" name="${f.name}">${options}</select>`;
+      } else {
+        input = `<input id="${id}" name="${f.name}" type="${f.kind === 'number' ? 'number' : 'text'}"
+                   placeholder="${f.placeholder}" value="${f.default || ''}" />`;
+      }
       return `<div class="field-block"><label for="${id}">${f.label}</label>${input}
               ${f.help ? '<div class="help">' + f.help + '</div>' : ''}</div>`;
     }).join('');

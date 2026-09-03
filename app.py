@@ -81,7 +81,7 @@ templates.env.globals.update(
 def preferred_source(infos: list[sources.SourceInfo]) -> str:
     """Default the source picker to the best thing that actually works today."""
     by_key = {s.key: s for s in infos}
-    for key in ("google_places", "sample", "csv"):
+    for key in ("explorium", "google_places", "sample", "csv"):
         if key in by_key and by_key[key].available:
             return key
     return infos[0].key
@@ -175,7 +175,8 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
             "available": s.available, "unavailable_reason": s.unavailable_reason,
             "fields": [
                 {"name": f.name, "label": f.label, "placeholder": f.placeholder,
-                 "kind": f.kind, "default": f.default, "help": f.help}
+                 "kind": f.kind, "default": f.default, "help": f.help,
+                 "options": f.options}
                 for f in s.fields
             ],
         }
@@ -282,12 +283,17 @@ class ProspectRequest(BaseModel):
     location: str = ""
     limit: int | str = 40
     csv: str = ""
+    # Explorium filters on its own category vocabulary and on state.
+    category: str = ""
+    state: str = ""
+    size: str = ""
 
 
 @app.post("/api/prospect/run")
 def api_prospect_run(req: ProspectRequest) -> JSONResponse:
     query = {"industry": req.industry, "location": req.location,
-             "limit": req.limit, "csv": req.csv}
+             "limit": req.limit, "csv": req.csv,
+             "category": req.category, "state": req.state, "size": req.size}
     try:
         result = prospect.run(req.source, query, enrich=req.enrich)
     except KeyError as e:
