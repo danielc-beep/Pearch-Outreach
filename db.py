@@ -410,6 +410,18 @@ def list_businesses(
     return [row_to_dict(r) for r in rows], int(total)
 
 
+def businesses_needing_website_check(limit: int = 25) -> tuple[list[dict[str, Any]], int]:
+    """A batch of businesses whose website has never been checked, plus the total."""
+    clause = ("website IS NOT NULL AND website != '' "
+              "AND (website_status IS NULL OR website_status = '')")
+    conn = get_conn()
+    total = conn.execute(f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}").fetchone()["n"]
+    rows = conn.execute(
+        f"SELECT * FROM businesses WHERE {clause} ORDER BY id LIMIT ?", (limit,)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows], int(total)
+
+
 def distinct_values(column: str) -> list[str]:
     if column not in {"region", "state", "industry", "source", "status", "category"}:
         raise ValueError(f"not a filterable column: {column}")

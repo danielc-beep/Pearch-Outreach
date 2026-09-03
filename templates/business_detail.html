@@ -184,15 +184,10 @@
     window.scrollTo({top: 0, behavior: 'smooth'});
   };
 
-  async function post(url, body) {
-    const res = await fetch(url, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body || {}),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Something went wrong');
-    return data;
-  }
+  // window.postJSON (static/app.js) reads the body as text before parsing, so a
+  // proxy's HTML error page produces a readable message rather than a JSON
+  // syntax error.
+  const post = (url, body) => window.postJSON(url, body);
 
   async function draft(useAi, btn) {
     const label = btn.textContent;

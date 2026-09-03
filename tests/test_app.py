@@ -300,7 +300,7 @@ def test_verification_flags_a_website_that_does_not_resolve(client, monkeypatch)
                         lambda url: "unreachable" if "example.com.au" in url else "live")
 
     result = client.post("/api/websites/verify").json()
-    assert result == {"checked": 2, "live": 1, "unreachable": 1}
+    assert result == {"checked": 2, "live": 1, "unreachable": 1, "remaining": 0}
 
     dead = client.get("/api/businesses?").json()["businesses"]
     by_name = {b["name"]: b["website_status"] for b in dead}
@@ -331,3 +331,55 @@ def test_verification_skips_what_it_has_already_checked(client, monkeypatch):
     assert client.post("/api/websites/verify").json()["checked"] == 1
     assert client.post("/api/websites/verify").json()["checked"] == 0      # already known
     assert client.post("/api/websites/verify?recheck=true").json()["checked"] == 1
+
+
+def test_verification_is_batched_so_it_cannot_outlive_the_proxy(client, monkeypatch):
+    """
+    A few hundred sites take minutes; a hosting proxy cuts the request off long
+    before that and answers with HTML, which is what broke the page. Each call
+    does a bounded batch and says how many are left.
+    """
+    import db as db_module
+    import enrich
+    for i in range(12):
+        db_module.insert_business({"name": f"Co {i}", "domain": f"co{i}.com.au",
+                                   "website": f"https://co{i}.com.au", "fit_score": 50})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "live")
+
+    first = client.post("/api/websites/verify?limit=5").json()
+    assert first["checked"] == 5 and first["remaining"] == 7
+
+    second = client.post("/api/websites/verify?limit=5").json()
+    assert second["checked"] == 5 and second["remaining"] == 2
+
+    third = client.post("/api/websites/verify?limit=5").json()
+    assert third["checked"] == 2 and third["remaining"] == 0
+
+    # Every record ends up checked, and a further call is a no-op.
+    assert client.post("/api/websites/verify?limit=5").json()["checked"] == 0
+    rows = client.get("/api/businesses?limit=50").json()["businesses"]
+    assert all(b["website_status"] == "live" for b in rows)
+
+
+def test_a_batch_never_stalls_on_already_checked_records(client, monkeypatch):
+    """The old query took the first N businesses then filtered, so once the head
+    of the list was checked it did nothing while unchecked records sat below."""
+    import db as db_module
+    import enrich
+    for i in range(6):
+        db_module.insert_business({"name": f"Done {i}", "domain": f"d{i}.com.au",
+                                   "website": f"https://d{i}.com.au",
+                                   "website_status": "live", "fit_score": 50})
+    db_module.insert_business({"name": "Unchecked", "domain": "new.com.au",
+                               "website": "https://new.com.au", "fit_score": 50})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "live")
+
+    result = client.post("/api/websites/verify?limit=3").json()
+    assert result["checked"] == 1          # finds the one that needs it
+    assert result["remaining"] == 0
+
+
+def test_enrichment_reports_what_is_left(client, sample_run):
+    result = client.post("/api/enrich/missing?limit=1").json()
+    assert "remaining" in result
+    assert result["checked"] <= 1

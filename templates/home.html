@@ -227,13 +227,7 @@
     btn.innerHTML = '<span class="spinner"></span>';
     hint.textContent = 'Searching, enriching and scoring — this can take up to a minute.';
     try {
-      const res = await fetch('/api/prospect/run', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Prospecting failed');
+      const data = await window.postJSON('/api/prospect/run', body);
       window.location = '/prospect?run=' + data.run_id;
     } catch (err) {
       hint.innerHTML = '<span style="color:#C0392B">' + err.message + '</span>';

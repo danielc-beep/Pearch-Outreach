@@ -66,12 +66,7 @@
   const flash = (msg, kind) => {
     document.getElementById('flash').innerHTML = '<div class="notice notice-' + kind + '">' + msg + '</div>';
   };
-  async function act(url) {
-    const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail || 'Failed');
-    return data;
-  }
+  const act = (url) => window.postJSON(url);
   document.querySelectorAll('.js-approve').forEach((b) => b.addEventListener('click', async () => {
     try { await act('/api/messages/' + b.dataset.id + '/approve'); location.reload(); }
     catch (e) { flash(e.message, 'error'); }

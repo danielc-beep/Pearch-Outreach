@@ -5,6 +5,46 @@
 <script>
   // Re-runs the website scrape across everything still missing an email. Worth
   // doing after the scraper improves, without clicking through each record.
+  // Both jobs run in batches server-side; loop until nothing is left, showing
+  // progress as we go. A batch that fails leaves earlier batches saved.
+  async function runInBatches(button, url, label, describe) {
+    const flash = document.getElementById('flash');
+    const original = button.textContent;
+    button.disabled = true;
+    const totals = {};
+    try {
+      for (let pass = 0; pass < 200; pass++) {
+        button.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> '
+          + label + '…';
+        const data = await window.postJSON(url);
+        Object.keys(data).forEach((k) => {
+          if (typeof data[k] === 'number' && k !== 'remaining') {
+            totals[k] = (totals[k] || 0) + data[k];
+          }
+        });
+        flash.innerHTML = '<div class="notice notice-info">' + describe(totals)
+          + (data.remaining ? ' — ' + data.remaining + ' to go.' : '') + '</div>';
+        if (!data.remaining || !data.checked) break;
+      }
+      flash.innerHTML = '<div class="notice notice-ok">' + describe(totals) + ' Done.</div>';
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+      flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
+      button.disabled = false;
+      button.textContent = original;
+    }
+  }
+
+  document.getElementById('btn-verify').addEventListener('click', (e) =>
+    runInBatches(e.currentTarget, '/api/websites/verify', 'Checking',
+      (t) => 'Checked ' + (t.checked || 0) + ': ' + (t.live || 0) + ' live, '
+             + (t.unreachable || 0) + " didn't respond."));
+
+  document.getElementById('btn-find-emails').addEventListener('click', (e) =>
+    runInBatches(e.currentTarget, '/api/enrich/missing', 'Visiting sites',
+      (t) => 'Visited ' + (t.checked || 0) + ' website(s), found '
+             + (t.found || 0) + ' email address(es).'));
+
   const purgeBtn = document.getElementById('btn-purge-sample');
   if (purgeBtn) {
     purgeBtn.addEventListener('click', async () => {
@@ -12,11 +52,7 @@
       purgeBtn.disabled = true;
       purgeBtn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span>';
       try {
-        const res = await fetch('/api/sample/purge', {
-          method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Failed');
+        await window.postJSON('/api/sample/purge');
         window.location = '/businesses';
       } catch (err) {
         document.getElementById('flash').innerHTML =
@@ -26,51 +62,6 @@
       }
     });
   }
-
-  document.getElementById('btn-verify').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const flash = document.getElementById('flash');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> Checking…';
-    flash.innerHTML = '<div class="notice notice-info">Requesting each business\'s homepage. '
-      + 'A domain that does not resolve is flagged.</div>';
-    try {
-      const res = await fetch('/api/websites/verify', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed');
-      flash.innerHTML = '<div class="notice notice-ok">Checked ' + data.checked
-        + ': ' + data.live + ' live, ' + data.unreachable + " didn't respond.</div>";
-      setTimeout(() => window.location.reload(), 1400);
-    } catch (err) {
-      flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
-      btn.disabled = false; btn.textContent = 'Verify websites';
-    }
-  });
-
-  document.getElementById('btn-find-emails').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const flash = document.getElementById('flash');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> Checking…';
-    flash.innerHTML = '<div class="notice notice-info">Visiting each website that has no email on file. '
-      + 'This can take a minute.</div>';
-    try {
-      const res = await fetch('/api/enrich/missing', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Failed');
-      flash.innerHTML = '<div class="notice notice-ok">Checked ' + data.checked
-        + ' website(s), found ' + data.found + ' new email address(es).</div>';
-      setTimeout(() => window.location.reload(), 1200);
-    } catch (err) {
-      flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
-      btn.disabled = false;
-      btn.textContent = 'Find missing emails';
-    }
-  });
 </script>
 {% endblock %}
 

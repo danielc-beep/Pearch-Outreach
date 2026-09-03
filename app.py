@@ -385,9 +385,14 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
 
 
 @app.post("/api/websites/verify")
-def api_verify_websites(recheck: bool = False) -> JSONResponse:
-    """Check every business's website actually serves a page."""
-    return JSONResponse(prospect.verify_websites(recheck=recheck))
+def api_verify_websites(limit: int = 25, recheck: bool = False) -> JSONResponse:
+    """
+    Check a batch of business websites.
+
+    Batched so the request finishes well inside a hosting proxy's timeout —
+    the response carries `remaining` and the caller loops until it is zero.
+    """
+    return JSONResponse(prospect.verify_websites(limit=min(limit, 50), recheck=recheck))
 
 
 @app.post("/api/sample/purge")
@@ -413,9 +418,14 @@ def api_delete_business(business_id: int) -> JSONResponse:
 
 
 @app.post("/api/enrich/missing")
-def api_enrich_missing(limit: int = 50) -> JSONResponse:
-    """Re-check every business that has a website but still no email."""
-    return JSONResponse(prospect.enrich_missing(limit=min(limit, 200)))
+def api_enrich_missing(limit: int = 15) -> JSONResponse:
+    """
+    Re-check a batch of businesses that have a website but still no email.
+
+    Each one costs several page fetches, so this is batched and reports
+    `remaining` for the caller to loop on.
+    """
+    return JSONResponse(prospect.enrich_missing(limit=min(limit, 40)))
 
 
 @app.post("/api/businesses/{business_id}/enrich")

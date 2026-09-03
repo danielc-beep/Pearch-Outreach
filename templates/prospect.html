@@ -90,11 +90,7 @@
     document.getElementById('results').innerHTML =
       '<div class="notice notice-info">Prospecting… searching, visiting websites, and scoring. This can take a minute.</div>';
     try {
-      const res = await fetch('/api/prospect/run', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Prospecting failed');
+      const data = await window.postJSON('/api/prospect/run', body);
       window.location = '/prospect?run=' + data.run_id;
     } catch (err) {
       document.getElementById('results').innerHTML =

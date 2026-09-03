@@ -181,7 +181,7 @@ def reenrich(business_id: int) -> dict[str, Any] | None:
     return db.get_business(business_id)
 
 
-def enrich_missing(limit: int = 50) -> dict[str, Any]:
+def enrich_missing(limit: int = 15) -> dict[str, Any]:
     """
     Re-run enrichment across every business that has a website but no email.
 
@@ -189,10 +189,13 @@ def enrich_missing(limit: int = 50) -> dict[str, Any]:
     read Cloudflare-obfuscated addresses deserves another look, and nobody
     wants to click through fifty records to trigger that one at a time.
     """
-    targets, _ = db.list_businesses(has_email=False, limit=limit)
-    targets = [b for b in targets if b.get("website")]
+    # Batched for the same reason as verify_websites: each business here costs
+    # several page fetches, so a big batch outlives the proxy's patience.
+    candidates, _ = db.list_businesses(has_email=False, limit=500)
+    candidates = [b for b in candidates if b.get("website")]
+    targets = candidates[:limit]
     if not targets:
-        return {"checked": 0, "found": 0, "businesses": []}
+        return {"checked": 0, "found": 0, "remaining": 0, "businesses": []}
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         enriched = list(pool.map(lambda b: enrich_record(dict(b)), targets))
@@ -215,7 +218,8 @@ def enrich_missing(limit: int = 50) -> dict[str, Any]:
         updated.append(db.get_business(business_id) or {})
 
     log.info("enrich_missing checked %s, found %s emails", len(targets), found)
-    return {"checked": len(targets), "found": found, "businesses": updated}
+    return {"checked": len(targets), "found": found,
+            "remaining": max(0, len(candidates) - len(targets)), "businesses": updated}
 
 
 def rescore_all() -> int:
@@ -231,19 +235,28 @@ def rescore_all() -> int:
     return count
 
 
-def verify_websites(limit: int = 500, recheck: bool = False) -> dict[str, Any]:
+def verify_websites(limit: int = 25, recheck: bool = False) -> dict[str, Any]:
     """
     Check that each business's website actually serves a page.
 
     A prospect whose website does not resolve is not a prospect — the record is
-    stale, the domain is dead, or it was never real. Only the homepage is
-    fetched, so this is cheap enough to run over the whole database.
+    stale, the domain is dead, or it was never real.
+
+    Deliberately batched. Visiting a few hundred sites takes minutes, and a
+    hosting proxy will cut the request off long before that and answer with an
+    HTML error page — so this does a bounded batch and reports how many remain,
+    and the caller loops. Progress survives an interruption because each batch
+    commits before returning.
     """
-    rows, _ = db.list_businesses(limit=limit)
-    targets = [b for b in rows if b.get("website")
-               and (recheck or not b.get("website_status"))]
+    if recheck:
+        rows, _ = db.list_businesses(limit=limit)
+        targets = [b for b in rows if b.get("website")]
+        outstanding = 0
+    else:
+        targets, outstanding = db.businesses_needing_website_check(limit)
+
     if not targets:
-        return {"checked": 0, "live": 0, "unreachable": 0}
+        return {"checked": 0, "live": 0, "unreachable": 0, "remaining": 0}
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         statuses = list(pool.map(lambda b: enrich.website_is_live(b["website"]), targets))
@@ -262,7 +275,8 @@ def verify_websites(limit: int = 500, recheck: bool = False) -> dict[str, Any]:
 
     log.info("verified %s websites: %s live, %s unreachable",
              len(targets), live, unreachable)
-    return {"checked": len(targets), "live": live, "unreachable": unreachable}
+    return {"checked": len(targets), "live": live, "unreachable": unreachable,
+            "remaining": max(0, outstanding - len(targets))}
 
 
 def reenrich_score_only(business_id: int) -> dict[str, Any] | None:
