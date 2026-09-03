@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Unsubscribed — Pearch Outreach{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="max-width:620px">
+    <div class="eyebrow">Unsubscribe</div>
+    {% if done %}
+    <h2>You're off the list.</h2>
+    <p class="lede"><span class="mono">{{ email }}</span> has been suppressed. We won't email you again.</p>
+    {% else %}
+    <h2>Unsubscribe from Pearch</h2>
+    <p class="lede">Enter the address you'd like removed.</p>
+    <form method="post" action="/unsubscribe" style="margin-top:22px">
+      <div class="field-block">
+        <label for="u-email">Email address</label>
+        <input id="u-email" name="email" type="email" value="{{ email or '' }}" required />
+      </div>
+      <button class="btn btn-primary" type="submit">Unsubscribe</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

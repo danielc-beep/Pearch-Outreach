@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Prospect — Pearch Outreach{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section">
+    <div class="eyebrow">Prospect</div>
+    <h2>Put new businesses <em>into the database</em></h2>
+    <p class="lede" style="margin-bottom:32px">Pick a source, describe who you're after, and Pearch finds
+      them, visits their websites for contact details, scores them, and skips anyone already on file.</p>
+
+    <div class="grid grid-3" style="margin-bottom:28px">
+      {% for s in sources %}
+      <button type="button" class="source-card {{ 'is-active' if s.key == active_source }} {{ 'is-off' if not s.available }}"
+              data-source="{{ s.key }}">
+        <h3>{{ s.label }}
+          {% if s.available %}<span class="pill" style="font-size:10px">ready</span>
+          {% else %}<span class="pill" style="font-size:10px">needs a key</span>{% endif %}
+        </h3>
+        <p>{{ s.description }}</p>
+        {% if not s.available %}<p class="small" style="margin-top:8px;color:var(--warning)">{{ s.unavailable_reason }}</p>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+
+    <div class="card" style="max-width:760px">
+      <form id="prospect-form">
+        <input type="hidden" name="source" id="source-key" value="{{ active_source }}" />
+        <div id="source-fields"></div>
+        <label class="row small muted" style="margin:4px 0 18px;gap:8px">
+          <input type="checkbox" id="do-enrich" checked style="width:auto" />
+          Visit each website to look for an email address (slower, much better data)
+        </label>
+        <div class="row">
+          <button class="btn btn-primary" type="submit" id="run-btn">Run prospecting</button>
+          <span class="muted small" id="run-note"></span>
+        </div>
+      </form>
+    </div>
+
+    <div id="results" style="margin-top:34px">
+      {% if run_result %}{{ results_html }}{% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const SOURCES = {{ sources_json }};
+  const sourceKeyInput = document.getElementById('source-key');
+  const fieldsEl = document.getElementById('source-fields');
+
+  function renderFields(key) {
+    const source = SOURCES.find((s) => s.key === key);
+    if (!source) return;
+    sourceKeyInput.value = key;
+    fieldsEl.innerHTML = source.fields.map((f) => {
+      const id = 'f-' + f.name;
+      const input = f.kind === 'textarea'
+        ? `<textarea id="${id}" name="${f.name}" placeholder="${f.placeholder}"></textarea>`
+        : `<input id="${id}" name="${f.name}" type="${f.kind === 'number' ? 'number' : 'text'}"
+             placeholder="${f.placeholder}" value="${f.default || ''}" />`;
+      return `<div class="field-block"><label for="${id}">${f.label}</label>${input}
+              ${f.help ? '<div class="help">' + f.help + '</div>' : ''}</div>`;
+    }).join('');
+    document.getElementById('run-note').textContent = source.available ? '' : source.unavailable_reason;
+    document.getElementById('run-btn').disabled = !source.available;
+    document.querySelectorAll('.source-card').forEach((c) =>
+      c.classList.toggle('is-active', c.dataset.source === key));
+  }
+
+  document.querySelectorAll('.source-card').forEach((card) =>
+    card.addEventListener('click', () => renderFields(card.dataset.source)));
+
+  document.getElementById('prospect-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('run-btn');
+    const body = {source: sourceKeyInput.value, enrich: document.getElementById('do-enrich').checked};
+    new FormData(e.target).forEach((value, key) => { if (key !== 'source') body[key] = value; });
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    document.getElementById('results').innerHTML =
+      '<div class="notice notice-info">Prospecting… searching, visiting websites, and scoring. This can take a minute.</div>';
+    try {
+      const res = await fetch('/api/prospect/run', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Prospecting failed');
+      window.location = '/prospect?run=' + data.run_id;
+    } catch (err) {
+      document.getElementById('results').innerHTML =
+        '<div class="notice notice-error">' + err.message + '</div>';
+      btn.disabled = false; btn.textContent = 'Run prospecting';
+    }
+  });
+
+  renderFields('{{ active_source }}');
+</script>
+{% endblock %}

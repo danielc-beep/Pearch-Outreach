@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Suppression list — Pearch Outreach{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section">
+    <div class="eyebrow">Compliance</div>
+    <h2>Suppression <em>list</em></h2>
+    <p class="lede" style="margin-bottom:28px">Anyone here is permanently excluded from outreach. Unsubscribes
+      land here automatically; you can add an address or a whole domain by hand.</p>
+
+    <div class="detail-grid">
+      <div class="table-wrap">
+        {% if suppressions %}
+        <table>
+          <thead><tr><th>Address or domain</th><th>Reason</th><th>Added</th></tr></thead>
+          <tbody>
+            {% for s in suppressions %}
+            <tr><td class="mono">{{ s.value }}</td><td class="small muted">{{ s.reason or '—' }}</td>
+                <td class="sub">{{ s.created_at[:10] }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="empty"><strong>Nobody suppressed yet.</strong>That's a good thing.</div>
+        {% endif %}
+      </div>
+      <div class="card">
+        <h3>Add one</h3>
+        <form method="post" action="/suppressions">
+          <div class="field-block">
+            <label for="s-value">Email address or domain</label>
+            <input id="s-value" name="value" type="text" placeholder="someone@example.com.au" required />
+          </div>
+          <div class="field-block">
+            <label for="s-reason">Reason</label>
+            <input id="s-reason" name="reason" type="text" placeholder="asked not to be contacted" />
+          </div>
+          <button class="btn btn-primary" type="submit">Suppress</button>
+        </form>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

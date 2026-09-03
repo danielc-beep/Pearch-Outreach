@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <meta name="description" content="{% block description %}Pearch Outreach — build a database of Australian businesses worth talking to, then run the outreach.{% endblock %}" />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,wght@1,400;1,500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="logo" href="/">Pearch<span class="mark">Outreach</span></a>
+      <nav class="nav">
+        <a href="/" class="{{ 'is-active' if nav == 'home' }}">Dashboard</a>
+        <a href="/businesses" class="{{ 'is-active' if nav == 'businesses' }}">Database</a>
+        <a href="/prospect" class="{{ 'is-active' if nav == 'prospect' }}">Prospect</a>
+        <a href="/campaigns" class="{{ 'is-active' if nav == 'campaigns' }}">Campaigns</a>
+        <a href="/outbox" class="{{ 'is-active' if nav == 'outbox' }}">Outbox</a>
+      </nav>
+      <a class="nav-cta" href="/prospect">Find businesses</a>
+    </div>
+  </header>
+
+  {% block body %}{% endblock %}
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>
+        <div class="logo logo-sm">Pearch<span class="mark">Outreach</span></div>
+        <p class="footer-note">{{ tagline }}</p>
+      </div>
+      <div class="footer-meta">
+        <span>{{ send_enabled and 'Sending enabled' or 'Sending disabled — drafts only' }}</span>
+        <span>·</span>
+        <a href="/suppressions">Suppression list</a>
+        <span>·</span>
+        <a href="/api/export.csv">Export CSV</a>
+      </div>
+    </div>
+  </footer>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

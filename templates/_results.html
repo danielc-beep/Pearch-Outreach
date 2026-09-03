@@ -1,0 +1,32 @@
+<div class="section-head">
+  <div>
+    <div class="eyebrow">Run #{{ run.id }} · {{ run.source }}</div>
+    <h2>{{ run.new_count }} new, {{ run.dupe_count }} already on file</h2>
+    <p class="lede">{{ run.found_count }} businesses found for
+      “{{ run.query.get('industry', '') }} {{ run.query.get('location', '') }}”.</p>
+  </div>
+  <a class="btn btn-primary" href="/businesses?sort=newest">Open the database</a>
+</div>
+{% if run.error %}<div class="notice notice-error">{{ run.error }}</div>{% endif %}
+{% if businesses %}
+<div class="table-wrap"><div class="table-scroll">
+  <table>
+    <thead><tr><th>Business</th><th>Industry</th><th>Location</th><th>Email</th><th>Fit</th><th></th></tr></thead>
+    <tbody>
+      {% for b in businesses %}
+      <tr>
+        <td><a href="/businesses/{{ b.id }}"><span class="name">{{ b.name }}</span></a>
+            <div class="sub">{{ b.domain or '—' }}</div></td>
+        <td>{{ b.industry or '—' }}</td>
+        <td>{{ b.suburb or b.region or '—' }}{% if b.region and b.region != b.suburb %}<div class="sub">{{ b.region }}</div>{% endif %}</td>
+        <td>{% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted small">—</span>{% endif %}</td>
+        <td>{{ score_widget(b.fit_score) }}</td>
+        <td><a class="btn btn-sm" href="/businesses/{{ b.id }}">Open</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div></div>
+{% else %}
+<div class="table-wrap"><div class="empty"><strong>Nothing came back.</strong>Try a broader industry or a bigger location.</div></div>
+{% endif %}

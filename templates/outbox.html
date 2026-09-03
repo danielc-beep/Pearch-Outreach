@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Outbox — Pearch Outreach{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Outbox</div>
+        <h2>{{ messages|length }} {{ 'message' if messages|length == 1 else 'messages' }}</h2>
+        <p class="lede">Drafts need approving before they can be sent. Sending happens one message at a time,
+          on purpose.</p>
+      </div>
+      <div class="row">
+        {% for key, label in tabs %}
+        <a class="btn btn-sm {{ 'btn-primary' if key == active_tab }}" href="/outbox?status={{ key }}">{{ label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if not send_enabled %}
+    <div class="notice notice-warn">
+      Sending is disabled. Drafts are written and approved, but nothing leaves this machine until
+      <code>PEARCH_SEND_ENABLED=1</code> and <code>RESEND_API_KEY</code> are set.
+    </div>
+    {% else %}
+    <div class="notice notice-info">
+      Sending is live. {{ sends_today }} of {{ daily_cap }} sends used today.
+    </div>
+    {% endif %}
+    <div id="flash"></div>
+
+    <div class="table-wrap">
+      {% if messages %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Business</th><th>To</th><th>Subject</th><th>Status</th><th>When</th><th></th></tr></thead>
+          <tbody>
+            {% for m in messages %}
+            <tr>
+              <td><a href="/businesses/{{ m.business_id }}"><span class="name">{{ m.business_name }}</span></a></td>
+              <td class="mono small">{{ m.to_email }}</td>
+              <td>{{ m.subject }}</td>
+              <td><span class="pill">{{ m.status }}</span></td>
+              <td class="sub">{{ (m.sent_at or m.created_at)[:16].replace('T',' ') }}</td>
+              <td class="row">
+                {% if m.status == 'draft' %}<button class="btn btn-sm js-approve" data-id="{{ m.id }}">Approve</button>{% endif %}
+                {% if m.status == 'approved' %}<button class="btn btn-sm btn-accent js-send" data-id="{{ m.id }}">Send</button>{% endif %}
+                <a class="btn btn-sm" href="/businesses/{{ m.business_id }}">Open</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><strong>Nothing here.</strong>Draft your first email from a business page.</div>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const flash = (msg, kind) => {
+    document.getElementById('flash').innerHTML = '<div class="notice notice-' + kind + '">' + msg + '</div>';
+  };
+  async function act(url) {
+    const res = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'});
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Failed');
+    return data;
+  }
+  document.querySelectorAll('.js-approve').forEach((b) => b.addEventListener('click', async () => {
+    try { await act('/api/messages/' + b.dataset.id + '/approve'); location.reload(); }
+    catch (e) { flash(e.message, 'error'); }
+  }));
+  document.querySelectorAll('.js-send').forEach((b) => b.addEventListener('click', async () => {
+    b.disabled = true;
+    try {
+      const data = await act('/api/messages/' + b.dataset.id + '/send');
+      if (data.sent) location.reload();
+      else { flash('Not sent: ' + (data.problems || []).join(' '), 'warn'); b.disabled = false; }
+    } catch (e) { flash(e.message, 'error'); b.disabled = false; }
+  }));
+</script>
+{% endblock %}

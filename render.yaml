@@ -1,0 +1,40 @@
+# Render Blueprint for a standalone pearch-outreach repository.
+#
+# If you are deploying from a subdirectory of another repo instead, don't use
+# this file — create the service in the dashboard and set Root Directory to
+# `pearch-outreach`. See DEPLOY.md.
+services:
+  - type: web
+    name: pearch-outreach
+    runtime: python
+    # A persistent disk is required for the SQLite database, and disks are not
+    # available on the free plan — on free, every deploy would wipe the database.
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    disk:
+      name: pearch-outreach-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: PEARCH_DB_PATH
+        value: /var/data/pearch_outreach.db
+      # The shared password everyone signs in with. Required: without it the
+      # app refuses to serve any host other than localhost.
+      - key: PEARCH_PASSWORD
+        generateValue: true
+      - key: PEARCH_USERNAME
+        value: pearch
+      # Set these in the dashboard, not here.
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      # Sending stays off until you deliberately turn it on.
+      - key: PEARCH_SEND_ENABLED
+        value: "0"

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}{{ b.name }} — Pearch Outreach{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section">
+    <div class="row" style="margin-bottom:8px">
+      <a class="muted small" href="/businesses">← Back to the database</a>
+    </div>
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">{{ b.source }}{{ ' · ' ~ b.region if b.region }}</div>
+        <h2>{{ b.name }}</h2>
+        <p class="lede">
+          {% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.domain }}</a> · {% endif %}
+          {{ b.industry or 'Industry unknown' }}{{ ' · ' ~ b.suburb if b.suburb }}
+        </p>
+      </div>
+      <div class="row">
+        {{ score_widget(b.fit_score) }}
+        <span class="pill status-{{ b.status }}">{{ b.status }}</span>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div class="detail-grid">
+      <div class="grid" style="gap:22px">
+        <div class="card">
+          <h3>Details</h3>
+          <dl class="kv">
+            <dt>Email</dt><dd>{% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted">Not found yet</span>{% endif %}</dd>
+            <dt>Phone</dt><dd>{{ b.phone or '—' }}</dd>
+            <dt>Website</dt><dd>{% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.website }}</a>{% else %}—{% endif %}</dd>
+            <dt>Address</dt><dd>{{ b.address or '—' }}</dd>
+            <dt>Region</dt><dd>{{ b.region or '—' }}{{ ' · ' ~ b.state if b.state }}</dd>
+            <dt>Industry</dt><dd>{{ b.industry or '—' }}{% if b.category and b.category != b.industry %} <span class="muted small">({{ b.category }})</span>{% endif %}</dd>
+            <dt>Size</dt><dd>{{ b.size_band or '—' }}</dd>
+            <dt>Reviews</dt><dd>{% if b.rating %}{{ b.rating }}★ from {{ b.review_count or 0 }}{% else %}—{% endif %}</dd>
+            <dt>ABN</dt><dd>{{ b.abn or '—' }}{% if b.legal_name %} <span class="muted small">{{ b.legal_name }}</span>{% endif %}</dd>
+            <dt>Social</dt><dd>
+              {% if b.linkedin or b.facebook or b.instagram %}
+                {% for key in ['linkedin', 'facebook', 'instagram'] if b[key] %}
+                <a class="pill" href="{{ b[key] }}" target="_blank" rel="noopener noreferrer">{{ key }}</a>
+                {% endfor %}
+              {% else %}—{% endif %}
+            </dd>
+            <dt>Last contacted</dt><dd>{{ b.last_contacted_at[:16].replace('T',' ') if b.last_contacted_at else 'Never' }}</dd>
+          </dl>
+          {% if b.description %}<p class="muted small" style="margin-top:18px">{{ b.description }}</p>{% endif %}
+          {% if b.notes %}<div class="notice notice-warn" style="margin-top:16px">{{ b.notes }}</div>{% endif %}
+        </div>
+
+        <div class="card">
+          <div class="row" style="margin-bottom:6px">
+            <h3 style="margin:0">Outreach</h3>
+            <div class="right row">
+              <button class="btn btn-sm" id="btn-draft" data-ai="0">Draft from template</button>
+              <button class="btn btn-sm btn-accent" id="btn-draft-ai" data-ai="1"
+                      {{ '' if ai_available else 'disabled title="Set ANTHROPIC_API_KEY to draft with Claude"' }}>
+                Draft with Claude
+              </button>
+            </div>
+          </div>
+          {% if b.do_not_contact %}
+          <div class="notice notice-error" style="margin-top:14px">This business is marked do-not-contact. Nothing can be drafted or sent.</div>
+          {% elif not b.email and not contacts %}
+          <div class="notice notice-warn" style="margin-top:14px">
+            No email address on file. <button class="btn btn-sm" id="btn-enrich-inline">Re-check the website</button>
+          </div>
+          {% endif %}
+
+          <div id="messages" style="margin-top:16px">
+            {% for m in messages %}
+            <div class="card" style="margin-bottom:14px;background:var(--surface)">
+              <div class="row" style="margin-bottom:10px">
+                <span class="pill">{{ m.status }}</span>
+                <span class="muted small">to {{ m.to_email }}</span>
+                <span class="muted small right">{{ m.created_at[:16].replace('T',' ') }}</span>
+              </div>
+              <strong>{{ m.subject }}</strong>
+              <div class="draft-body" style="margin-top:10px">{{ m.body }}</div>
+              {% if m.error %}<div class="notice notice-error" style="margin-top:10px">{{ m.error }}</div>{% endif %}
+              {% if m.status == 'draft' %}
+              <div class="row" style="margin-top:12px">
+                <button class="btn btn-sm btn-primary js-approve" data-id="{{ m.id }}">Approve</button>
+                <span class="muted small">Approving does not send — you send from the Outbox.</span>
+              </div>
+              {% elif m.status == 'approved' %}
+              <div class="row" style="margin-top:12px">
+                <button class="btn btn-sm btn-accent js-send" data-id="{{ m.id }}">Send now</button>
+                {% if not send_enabled %}<span class="muted small">Sending is disabled — set PEARCH_SEND_ENABLED=1.</span>{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            {% else %}
+            <p class="muted small">No drafts yet.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="gap:22px">
+        <div class="card">
+          <h3>Fit score</h3>
+          <div class="row"><div class="num" style="font-size:38px;font-weight:700;letter-spacing:-0.03em">{{ b.fit_score }}</div>
+            <span class="pill {{ band }}">{{ band }}</span></div>
+          <ul class="reasons">
+            {% for r in b.score_reasons %}<li>{{ r }}</li>{% else %}<li>No signals recorded.</li>{% endfor %}
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3>Update</h3>
+          <div class="field-block">
+            <label for="set-status">Status</label>
+            <select id="set-status">
+              {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if b.status == s }}>{{ s }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field-block">
+            <label for="set-email">Email</label>
+            <input id="set-email" type="email" value="{{ b.email or '' }}" placeholder="info@business.com.au" />
+          </div>
+          <div class="field-block">
+            <label for="set-notes">Notes</label>
+            <textarea id="set-notes" style="min-height:90px">{{ b.notes or '' }}</textarea>
+          </div>
+          <div class="row">
+            <button class="btn btn-primary" id="btn-save">Save</button>
+            <button class="btn" id="btn-enrich">Re-enrich</button>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <button class="btn btn-sm btn-danger" id="btn-dnc">
+              {{ 'Allow contact' if b.do_not_contact else 'Mark do-not-contact' }}
+            </button>
+          </div>
+        </div>
+
+        {% if contacts %}
+        <div class="card">
+          <h3>Contacts</h3>
+          {% for c in contacts %}
+          <div style="padding:8px 0;border-bottom:1px dashed var(--border)">
+            <strong>{{ (c.first_name or '') ~ ' ' ~ (c.last_name or '') if c.first_name else (c.email or 'Contact') }}</strong>
+            {% if c.role %}<div class="sub">{{ c.role }}</div>{% endif %}
+            {% if c.email %}<div class="mono small">{{ c.email }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="card">
+          <h3>Timeline</h3>
+          <ul class="timeline">
+            {% for a in activities %}
+            <li><div class="t">{{ a.created_at[:16].replace('T',' ') }}</div>{{ a.kind }} — {{ a.detail }}</li>
+            {% else %}<li class="muted">Nothing logged yet.</li>{% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const BUSINESS_ID = {{ b.id }};
+  const flash = (msg, kind) => {
+    document.getElementById('flash').innerHTML =
+      '<div class="notice notice-' + (kind || 'info') + '">' + msg + '</div>';
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  };
+
+  async function post(url, body) {
+    const res = await fetch(url, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Something went wrong');
+    return data;
+  }
+
+  async function draft(useAi, btn) {
+    const label = btn.textContent;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span>';
+    try {
+      await post('/api/businesses/' + BUSINESS_ID + '/draft', {use_ai: useAi === '1'});
+      window.location.reload();
+    } catch (e) {
+      flash(e.message, 'error'); btn.disabled = false; btn.textContent = label;
+    }
+  }
+  document.querySelectorAll('#btn-draft, #btn-draft-ai').forEach((btn) =>
+    btn.addEventListener('click', () => draft(btn.dataset.ai, btn)));
+
+  document.getElementById('btn-save').addEventListener('click', async (e) => {
+    try {
+      await post('/api/businesses/' + BUSINESS_ID, {
+        status: document.getElementById('set-status').value,
+        email: document.getElementById('set-email').value.trim(),
+        notes: document.getElementById('set-notes').value,
+      });
+      window.location.reload();
+    } catch (err) { flash(err.message, 'error'); }
+  });
+
+  document.getElementById('btn-dnc').addEventListener('click', async () => {
+    try {
+      await post('/api/businesses/' + BUSINESS_ID, {do_not_contact: {{ 0 if b.do_not_contact else 1 }}});
+      window.location.reload();
+    } catch (err) { flash(err.message, 'error'); }
+  });
+
+  document.querySelectorAll('#btn-enrich, #btn-enrich-inline').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span>';
+      try { await post('/api/businesses/' + BUSINESS_ID + '/enrich'); window.location.reload(); }
+      catch (err) { flash(err.message, 'error'); btn.disabled = false; btn.textContent = 'Re-enrich'; }
+    }));
+
+  document.querySelectorAll('.js-approve').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      try { await post('/api/messages/' + btn.dataset.id + '/approve'); window.location.reload(); }
+      catch (err) { flash(err.message, 'error'); }
+    }));
+
+  document.querySelectorAll('.js-send').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const data = await post('/api/messages/' + btn.dataset.id + '/send');
+        if (data.sent) { window.location.reload(); }
+        else { flash('Not sent: ' + (data.problems || []).join(' '), 'warn'); btn.disabled = false; }
+      } catch (err) { flash(err.message, 'error'); btn.disabled = false; }
+    }));
+</script>
+{% endblock %}

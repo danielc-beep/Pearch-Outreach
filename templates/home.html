@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% block title %}Pearch Outreach — the Australian business database{% endblock %}
+
+{% block body %}
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow" style="justify-content:center;display:inline-flex">Pearch Outreach</div>
+    <h1>Every Australian business worth<br class="hide-sm"> talking to, in <em>one database</em>.</h1>
+    <p class="lede">Prospect a suburb and a trade, and Pearch finds the businesses, scores them
+      against your ideal customer, and hands you the ones worth an email.</p>
+
+    <form class="searchbar" id="home-search" autocomplete="off">
+      <div class="field">
+        <label for="hs-industry">Industry</label>
+        <input id="hs-industry" name="industry" type="text" placeholder="mortgage brokers" required />
+      </div>
+      <div class="field">
+        <label for="hs-location">Location</label>
+        <input id="hs-location" name="location" type="text" placeholder="Newcastle NSW" required />
+      </div>
+      <div class="field" style="max-width:190px">
+        <label for="hs-source">Source</label>
+        <select id="hs-source" name="source">
+          {% for s in sources if s.key != 'csv' and s.available %}
+          <option value="{{ s.key }}" {{ 'selected' if s.key == default_source }}>{{ s.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" id="hs-go">Prospect</button>
+    </form>
+    <p class="search-hint" id="hs-hint">
+      {% if live_source %}Live search via {{ live_source }}.{% else %}
+      No prospecting API key set, so this runs on <strong>sample data</strong> —
+      everything works, the businesses are fictional.{% endif %}
+      Already have a list? <a href="/prospect?source=csv">Import a CSV</a>.
+    </p>
+  </div>
+</section>
+
+<div class="wrap">
+  <!-- Live counters -->
+  <section class="section" style="margin-top:8px">
+    <div class="grid grid-4">
+      <div class="card stat">
+        <div class="num">{{ stats.total }}</div>
+        <div class="label">Businesses in the database</div>
+        <div class="sub">+{{ stats.added_this_week }} in the last 7 days</div>
+      </div>
+      <div class="card stat">
+        <div class="num">{{ stats.with_email }}</div>
+        <div class="label">Contactable — with an email on file</div>
+        <div class="sub">{{ contactable_pct }}% of the database</div>
+      </div>
+      <div class="card stat">
+        <div class="num">{{ stats.by_status.qualified + stats.by_status.new }}</div>
+        <div class="label">Waiting to be worked</div>
+        <div class="sub">Average fit score {{ stats.avg_score }}</div>
+      </div>
+      <div class="card stat">
+        <div class="num">{{ stats.sent }}<span class="unit">sent</span></div>
+        <div class="label">Outreach emails</div>
+        <div class="sub">{{ stats.drafts }} drafts waiting for approval</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pipeline -->
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Pipeline</div>
+        <h2>Where the database <em>stands</em></h2>
+      </div>
+      <a class="btn" href="/businesses">Open the database</a>
+    </div>
+    <div class="pipeline">
+      {% for status, count in stats.by_status.items() %}
+      <a class="stage {{ 'is-hot' if status == 'qualified' and count }}" href="/businesses?status={{ status }}">
+        <div class="n">{{ count }}</div>
+        <div class="s">{{ status }}</div>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Best prospects -->
+  <section class="section">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Top of the list</div>
+        <h2>Highest-scoring <em>prospects</em></h2>
+        <p class="lede">Ranked on contactability, industry fit, and whether they sit in an ACM masthead region.</p>
+      </div>
+      <a class="btn" href="/businesses?sort=score">See all</a>
+    </div>
+    {% if top_businesses %}
+    <div class="table-wrap"><div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Business</th><th>Industry</th><th>Region</th><th>Contact</th><th>Fit</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for b in top_businesses %}
+          <tr>
+            <td>
+              <a href="/businesses/{{ b.id }}"><span class="name">{{ b.name }}</span></a>
+              <div class="sub">{{ b.domain or '—' }}</div>
+            </td>
+            <td>{{ b.industry or '—' }}</td>
+            <td>{{ b.region or b.state or '—' }}{% if b.suburb and b.suburb != b.region %}<div class="sub">{{ b.suburb }}</div>{% endif %}</td>
+            <td>
+              {% if b.email %}<span class="mono">{{ b.email }}</span>
+              {% else %}<span class="muted small">no email yet</span>{% endif %}
+            </td>
+            <td>{{ score_widget(b.fit_score) }}</td>
+            <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
+            <td><a class="btn btn-sm" href="/businesses/{{ b.id }}">Open</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div></div>
+    {% else %}
+    <div class="table-wrap"><div class="empty">
+      <strong>The database is empty.</strong>
+      Run a search above — or <a href="/prospect">open the prospecting page</a> — to put the first businesses in it.
+    </div></div>
+    {% endif %}
+  </section>
+
+  <!-- How it works -->
+  <section class="section">
+    <div class="eyebrow">How it works</div>
+    <h2>Prospect, score, draft, <em>send</em>.</h2>
+    <p class="lede" style="margin-bottom:40px">Four steps, and the database gets better every time you run one.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Prospect</h3>
+        <p>Search a trade and a town. Google Places, a CSV you already own, or sample data while you try it out.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Enrich</h3>
+        <p>Pearch visits each website for an email, a phone number, socials and what the business actually does.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>Score</h3>
+        <p>Everything is ranked 0–100 against your ideal customer profile, so the list sorts itself.</p>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <h3>Reach out</h3>
+        <p>Drafts are written per business, reviewed by a human, and only then sent — with unsubscribe built in.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Recent activity -->
+  <section class="section">
+    <div class="grid grid-2">
+      <div>
+        <div class="section-head"><div><div class="eyebrow">Recent runs</div><h2>Prospecting <em>history</em></h2></div></div>
+        <div class="table-wrap">
+          {% if runs %}
+          <div class="table-scroll"><table>
+            <thead><tr><th>When</th><th>Source</th><th>Query</th><th>Found</th><th>New</th></tr></thead>
+            <tbody>
+              {% for r in runs %}
+              <tr>
+                <td class="sub">{{ r.started_at[:16].replace('T', ' ') }}</td>
+                <td>{{ r.source }}</td>
+                <td class="sub">{{ r.query.get('industry', '') }} {{ r.query.get('location', '') }}</td>
+                <td>{{ r.found_count }}</td>
+                <td><strong>{{ r.new_count }}</strong></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table></div>
+          {% else %}
+          <div class="empty">No prospecting runs yet.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div>
+        <div class="section-head"><div><div class="eyebrow">Coverage</div><h2>Regions and <em>industries</em></h2></div></div>
+        <div class="card">
+          <h3>Top regions</h3>
+          {% if stats.top_regions %}
+          <div class="row" style="margin-bottom:20px">
+            {% for r in stats.top_regions %}
+            <a class="pill" href="/businesses?region={{ r.region|urlencode }}">{{ r.region }} · {{ r.n }}</a>
+            {% endfor %}
+          </div>
+          {% else %}<p class="muted small" style="margin-bottom:20px">Nothing yet.</p>{% endif %}
+          <h3>Top industries</h3>
+          {% if stats.top_industries %}
+          <div class="row">
+            {% for i in stats.top_industries %}
+            <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
+            {% endfor %}
+          </div>
+          {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // The home search bar runs a real prospecting job and then drops the user
+  // on the prospecting page with the results already loaded.
+  document.getElementById('home-search').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('hs-go');
+    const hint = document.getElementById('hs-hint');
+    const body = {
+      source: document.getElementById('hs-source').value,
+      industry: document.getElementById('hs-industry').value.trim(),
+      location: document.getElementById('hs-location').value.trim(),
+      limit: 40,
+    };
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    hint.textContent = 'Searching, enriching and scoring — this can take up to a minute.';
+    try {
+      const res = await fetch('/api/prospect/run', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Prospecting failed');
+      window.location = '/prospect?run=' + data.run_id;
+    } catch (err) {
+      hint.innerHTML = '<span style="color:#C0392B">' + err.message + '</span>';
+      btn.disabled = false;
+      btn.textContent = 'Prospect';
+    }
+  });
+</script>
+{% endblock %}
