@@ -9,6 +9,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 os.environ.setdefault("PEARCH_DB_PATH", str(Path(tempfile.mkdtemp()) / "test.db"))
+# Most tests prospect with the sample source, which is off by default in
+# production so fictional businesses cannot reach a real database.
+os.environ.setdefault("PEARCH_ENABLE_SAMPLE_SOURCE", "1")
 
 import pytest  # noqa: E402
 

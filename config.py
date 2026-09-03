@@ -48,6 +48,15 @@ DB_PATH = Path(os.getenv("PEARCH_DB_PATH", ROOT_DIR / "pearch_outreach.db"))
 PEARCH_DEMO_SEED = os.getenv("PEARCH_DEMO_SEED", "0") == "1"
 
 
+# The sample source invents businesses. That is exactly what you want when
+# demonstrating the workflow, and exactly what you do not want anyone doing to
+# a live database of real prospects — so it is off unless switched on. Demo
+# seeding needs the same generator, so turning that on turns this on too.
+ENABLE_SAMPLE_SOURCE = (
+    os.getenv("PEARCH_ENABLE_SAMPLE_SOURCE", "0") == "1" or PEARCH_DEMO_SEED
+)
+
+
 # ---------- Prospecting sources ----------
 GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "").strip()
 

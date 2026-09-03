@@ -137,3 +137,65 @@ def test_an_api_key_pasted_with_a_trailing_newline_still_counts(monkeypatch):
     monkeypatch.delenv("GOOGLE_PLACES_API_KEY", raising=False)
     importlib.reload(config)
     importlib.reload(gp)
+
+
+def test_the_filter_form_url_works_with_every_box_left_blank(client, sample_run):
+    """
+    An HTML form submits every field it holds, so untouched boxes arrive as "".
+    This is the exact URL the database filter form produces — it 422'd when
+    min_score was typed as an int.
+    """
+    response = client.get("/businesses?q=wisebuy&status=&region=&industry=Home+loans"
+                          "&has_email=&min_score=&sort=score")
+    assert response.status_code == 200
+
+
+def test_blank_and_junk_numbers_mean_no_filter(client, sample_run):
+    total = client.get("/api/businesses").json()["total"]
+    for value in ("", "abc", "  "):
+        assert client.get(f"/api/businesses?min_score={value}").json()["total"] == total
+    assert client.get("/businesses?page_no=").status_code == 200
+
+
+def test_a_real_min_score_still_filters(client, sample_run):
+    everything = client.get("/api/businesses").json()["total"]
+    filtered = client.get("/api/businesses?min_score=95").json()["total"]
+    assert filtered < everything
+
+
+def test_the_export_survives_a_blank_min_score(client, sample_run):
+    response = client.get("/api/export.csv?min_score=&q=&sort=score")
+    assert response.status_code == 200
+    assert response.text.startswith("id,name,website,email")
+
+
+def test_the_form_redisplays_what_was_typed(client, sample_run):
+    """A blank Min fit box must come back blank, not helpfully filled with a 0."""
+    import re
+
+    def min_fit_input(url: str) -> str:
+        body = client.get(url).text
+        match = re.search(r'<input id="f-score".*?/>', body, re.S)
+        assert match, "the min fit input should be on the page"
+        return match.group(0)
+
+    assert 'value=""' in min_fit_input("/businesses?min_score=")
+    assert 'value="75"' in min_fit_input("/businesses?min_score=75")
+
+
+def test_the_sample_source_is_off_unless_switched_on(monkeypatch):
+    """Fictional businesses must not be reachable on a live database."""
+    import importlib
+    import config, sources.seed as seed
+    monkeypatch.setenv("PEARCH_ENABLE_SAMPLE_SOURCE", "0")
+    monkeypatch.setenv("PEARCH_DEMO_SEED", "0")
+    importlib.reload(config)
+    importlib.reload(seed)
+    available, reason = seed.available()
+    assert available is False
+    assert "PEARCH_ENABLE_SAMPLE_SOURCE" in reason
+
+    monkeypatch.setenv("PEARCH_ENABLE_SAMPLE_SOURCE", "1")
+    importlib.reload(config)
+    importlib.reload(seed)
+    assert seed.available()[0] is True

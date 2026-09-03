@@ -31,6 +31,10 @@ services:
         value: "0"
       - key: PEARCH_DEMO_SEED
         value: "0"
+      # The sample source invents businesses — keep it off on anything holding
+      # real prospects. "1" to demo the workflow on a throwaway instance.
+      - key: PEARCH_ENABLE_SAMPLE_SOURCE
+        value: "0"
       # Render prompts for these on Apply. PEARCH_PASSWORD is the shared
       # sign-in password and is the only one required — the app refuses to
       # serve a public host without it.

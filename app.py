@@ -78,6 +78,23 @@ templates.env.globals.update(
 )
 
 
+def _int_param(value: str | int | None, default: int = 0) -> int:
+    """
+    Read a number from a query string that a form filled in.
+
+    An HTML form submits every field it holds, so an untouched number box
+    arrives as "" — which a plain `int` query parameter rejects with a 422.
+    Typed as a string and coerced here, a blank box means "no filter" and junk
+    means the same, rather than an error page.
+    """
+    if value in (None, ""):
+        return default
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def preferred_source(infos: list[sources.SourceInfo]) -> str:
     """Default the source picker to the best thing that actually works today."""
     by_key = {s.key: s for s in infos}
@@ -115,15 +132,18 @@ def home(request: Request) -> HTMLResponse:
 @app.get("/businesses", response_class=HTMLResponse)
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
-               has_email: str = "", min_score: int = 0, sort: str = "score",
-               page_no: int = 1) -> HTMLResponse:
-    page_no = max(1, page_no)
+               has_email: str = "", min_score: str = "", sort: str = "score",
+               page_no: str = "1") -> HTMLResponse:
+    min_score_value = _int_param(min_score)
+    page_no = max(1, _int_param(page_no, 1))
     rows, total = db.list_businesses(
         q=q, status=status, region=region, state=state, industry=industry, source=source,
         has_email={"1": True, "0": False}.get(has_email),
-        min_score=min_score, sort=sort,
+        min_score=min_score_value, sort=sort,
         limit=PAGE_SIZE, offset=(page_no - 1) * PAGE_SIZE,
     )
+    # Keep the raw string in the filter dict so the form redisplays what was
+    # typed, rather than replacing an empty box with a 0.
     filters = {"q": q, "status": status, "region": region, "state": state,
                "industry": industry, "source": source, "has_email": has_email,
                "min_score": min_score, "sort": sort}
@@ -321,10 +341,10 @@ def api_prospect_run(req: ProspectRequest) -> JSONResponse:
 
 @app.get("/api/businesses")
 def api_businesses(q: str = "", status: str = "", region: str = "", industry: str = "",
-                   min_score: int = 0, sort: str = "score", limit: int = 50,
+                   min_score: str = "", sort: str = "score", limit: int = 50,
                    offset: int = 0) -> JSONResponse:
     rows, total = db.list_businesses(q=q, status=status, region=region, industry=industry,
-                                     min_score=min_score, sort=sort,
+                                     min_score=_int_param(min_score), sort=sort,
                                      limit=min(limit, 500), offset=offset)
     return JSONResponse({"total": total, "businesses": rows})
 
@@ -400,9 +420,9 @@ def api_send(message_id: int, request: Request) -> JSONResponse:
 
 @app.get("/api/export.csv")
 def api_export(q: str = "", status: str = "", region: str = "", industry: str = "",
-               min_score: int = 0, has_email: str = "", sort: str = "score") -> StreamingResponse:
+               min_score: str = "", has_email: str = "", sort: str = "score") -> StreamingResponse:
     rows, _ = db.list_businesses(q=q, status=status, region=region, industry=industry,
-                                 min_score=min_score,
+                                 min_score=_int_param(min_score),
                                  has_email={"1": True, "0": False}.get(has_email),
                                  sort=sort, limit=100000)
     columns = ["id", "name", "website", "email", "phone", "address", "suburb", "state",

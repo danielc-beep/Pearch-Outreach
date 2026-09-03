@@ -12,7 +12,7 @@ import hashlib
 import random
 from typing import Any
 
-from config import POSTCODE_REGIONS
+from config import ENABLE_SAMPLE_SOURCE, POSTCODE_REGIONS
 from sources.base import Field
 
 KEY = "sample"
@@ -38,6 +38,9 @@ _SIZE_BANDS = ["1-4", "5-19", "20-49", "50-199"]
 
 
 def available() -> tuple[bool, str]:
+    if not ENABLE_SAMPLE_SOURCE:
+        return False, ("Off by default so fictional businesses cannot reach a live "
+                       "database. Set PEARCH_ENABLE_SAMPLE_SOURCE=1 to demo the workflow.")
     return True, ""
 
 
