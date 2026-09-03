@@ -60,7 +60,12 @@ ABR_GUID = os.getenv("ABR_GUID", "").strip()
 
 # ---------- Drafting ----------
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "").strip()
-DRAFT_MODEL = os.getenv("PEARCH_DRAFT_MODEL", "claude-sonnet-5")
+DRAFT_MODEL = os.getenv("PEARCH_DRAFT_MODEL", "claude-opus-5")
+
+# Effort trades thoroughness against token spend within one model. A 120-word
+# outreach email is not intelligence-sensitive work, so "medium" is the sensible
+# default; raise it if the drafts read thin, lower it if the bill does not.
+DRAFT_EFFORT = os.getenv("PEARCH_DRAFT_EFFORT", "medium")
 
 # ---------- Sending ----------
 # Sending is OFF by default and stays off until someone deliberately turns it

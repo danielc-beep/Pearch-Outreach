@@ -48,6 +48,8 @@ required; each key just switches on more of the app.
 | `EXPLORIUM_API_KEY` | Prospecting via Explorium — firmographics, revenue and employee bands |
 | `GOOGLE_PLACES_API_KEY` | Real business prospecting via Google Places |
 | `ANTHROPIC_API_KEY` | Per-business email drafts written by Claude |
+| `PEARCH_DRAFT_MODEL` | Which model drafts (default `claude-opus-5`) |
+| `PEARCH_DRAFT_EFFORT` | How hard it thinks: `low`–`max` (default `medium`) |
 | `RESEND_API_KEY` + `PEARCH_SEND_ENABLED=1` | Actually sending email |
 | `ABR_GUID` | ABN / legal entity lookup against the Australian Business Register |
 | `PEARCH_DB_PATH` | Where the SQLite file lives (use a mounted disk in production) |
@@ -162,7 +164,7 @@ pearch-outreach/
 ├── prospect.py         the pipeline: search → normalise → score → upsert
 ├── enrich.py           website scrape for email/phone/socials/industry, ABR lookup
 ├── scoring.py          the 0-100 fit score
-├── outreach.py         drafting, campaigns, approval, sending, unsubscribe
+├── outreach.py         drafting (Anthropic SDK), campaigns, approval, sending
 ├── util.py             URL/email/phone/address normalising
 ├── sources/            prospecting sources (google_places, csv, sample)
 ├── templates/          Jinja2 pages

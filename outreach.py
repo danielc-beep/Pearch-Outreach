@@ -19,12 +19,14 @@ import logging
 import re
 from typing import Any
 
+import anthropic
 import httpx
+from pydantic import BaseModel, Field
 
 import db
-from config import (ANTHROPIC_API_KEY, DAILY_SEND_CAP, DRAFT_MODEL, FROM_EMAIL,
-                    FROM_NAME, REPLY_TO_EMAIL, RESEND_API_KEY, SEND_ENABLED,
-                    SENDER_IDENTITY, UNSUBSCRIBE_URL)
+from config import (ANTHROPIC_API_KEY, DAILY_SEND_CAP, DRAFT_EFFORT, DRAFT_MODEL,
+                    FROM_EMAIL, FROM_NAME, REPLY_TO_EMAIL, RESEND_API_KEY,
+                    SEND_ENABLED, SENDER_IDENTITY, UNSUBSCRIBE_URL)
 
 log = logging.getLogger(__name__)
 
@@ -76,80 +78,111 @@ def render_template(template: str, fields: dict[str, str]) -> str:
 
 # ---------- Drafting ----------
 
+class DraftedEmail(BaseModel):
+    """The shape Claude must return. Validated by the SDK, so no parsing."""
+    subject: str = Field(description="Subject line. Under 60 characters, no clickbait.")
+    body: str = Field(description="Email body, under 120 words, signed off by the sender.")
+
+
+def _prospect_brief(business: dict[str, Any]) -> str:
+    """
+    Everything true we know about this business, for the model to draw on.
+
+    Only facts already in the database go in here. The model is told not to
+    invent anything, and giving it real detail is what makes that instruction
+    followable rather than an invitation to fill gaps.
+    """
+    rating = ""
+    if business.get("rating"):
+        rating = f"{business['rating']} stars from {business.get('review_count') or 0} Google reviews"
+
+    facts = {
+        "Business": business.get("name"),
+        "Industry": business.get("industry"),
+        "Suburb": business.get("suburb"),
+        "Region": business.get("region"),
+        "Website": business.get("website"),
+        "Google rating": rating,
+        "Staff": business.get("size_band"),
+        "What their site says": business.get("description"),
+    }
+    return "\n".join(f"- {k}: {v}" for k, v in facts.items() if v)
+
+
 def _claude_draft(business: dict[str, Any], fields: dict[str, str],
                   campaign: dict[str, Any]) -> tuple[str, str] | None:
-    """Ask Claude for a sharper version of the campaign template. None on failure."""
+    """
+    Rewrite the campaign template for one specific business.
+
+    Returns (subject, body), or None if Claude is unconfigured or the call
+    fails — the caller then falls back to a straight template merge, so a
+    drafting outage degrades rather than breaks.
+    """
     if not ANTHROPIC_API_KEY:
         return None
-    context = "\n".join(
-        f"{k}: {v}" for k, v in {
-            "Business": business.get("name"),
-            "Industry": business.get("industry"),
-            "Location": f"{business.get('suburb') or ''} {business.get('state') or ''}".strip(),
-            "Website": business.get("website"),
-            "Rating": f"{business.get('rating')} from {business.get('review_count')} reviews"
-            if business.get("rating") else None,
-            "What we know": business.get("description"),
-        }.items() if v
-    )
+
     prompt = f"""You write short B2B outreach emails for Pearch, an Australian
 company that gets businesses cited inside AI answers (Google AI Overviews,
 ChatGPT) by publishing editorial across the Australian Community Media
 masthead network.
 
-Here is the prospect:
-{context}
+Here is everything we know about the prospect. It all comes from their own
+website and their Google listing:
 
-Here is the campaign template we normally send:
+{_prospect_brief(business)}
+
+Here is the campaign template we would otherwise send as-is:
 ---
 Subject: {render_template(campaign['subject'], fields)}
 
 {render_template(campaign['body'], fields)}
 ---
 
-Rewrite it for this specific business. Rules:
-- Keep it under 120 words, Australian English, plain and direct — no hype,
-  no "I hope this email finds you well", no em-dash-heavy prose.
-- Reference something concrete and true about them from the context above.
-  Never invent a fact, a statistic, or a result.
-- One clear ask: a 15-minute call.
-- Sign off as {FROM_NAME}.
+Rewrite it for this specific business.
 
-Return exactly this shape and nothing else:
-SUBJECT: <subject line>
-BODY:
-<email body>"""
+Rules:
+- Under 120 words. Australian English. Plain and direct.
+- Open with something concrete and true about them, drawn from the facts
+  above. Their suburb, their trade, their review count, what their site says
+  they do.
+- Never invent a fact, a number, a result, or a claim about their current AI
+  visibility. If you would need a fact we have not given you, write around it.
+- No "I hope this email finds you well", no hype, no em-dash-heavy prose.
+- One ask: a 15-minute call.
+- Sign off as {FROM_NAME}."""
+
     try:
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": DRAFT_MODEL,
-                    "max_tokens": 700,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-        if response.status_code >= 300:
-            log.warning("Anthropic non-2xx: %s %s", response.status_code, response.text[:200])
-            return None
-        text = "".join(
-            block.get("text", "")
-            for block in response.json().get("content", [])
-            if block.get("type") == "text"
-        ).strip()
-    except httpx.HTTPError as e:
-        log.warning("Anthropic call failed: %s", e)
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        response = client.messages.parse(
+            model=DRAFT_MODEL,
+            # Generous, because thinking tokens count against this too — a tight
+            # ceiling truncates the email rather than the reasoning.
+            max_tokens=4000,
+            output_config={"effort": DRAFT_EFFORT},
+            messages=[{"role": "user", "content": prompt}],
+            output_format=DraftedEmail,
+        )
+    except anthropic.AuthenticationError:
+        log.warning("Anthropic rejected the API key — check ANTHROPIC_API_KEY")
+        return None
+    except anthropic.RateLimitError:
+        log.warning("Anthropic rate limited the draft request")
+        return None
+    except anthropic.APIStatusError as e:
+        log.warning("Anthropic API error %s: %s", e.status_code, e.message)
+        return None
+    except anthropic.APIConnectionError as e:
+        log.warning("Could not reach Anthropic: %s", e)
         return None
 
-    match = re.search(r"SUBJECT:\s*(.+?)\s*\nBODY:\s*\n?(.+)", text, re.S)
-    if not match:
+    if response.stop_reason == "refusal":
+        log.warning("Claude declined to draft for %s", business.get("name"))
         return None
-    return match.group(1).strip(), match.group(2).strip()
+
+    drafted = response.parsed_output
+    if not drafted or not drafted.subject.strip() or not drafted.body.strip():
+        return None
+    return drafted.subject.strip(), drafted.body.strip()
 
 
 def draft_message(business_id: int, campaign_id: int | None = None,
