@@ -81,7 +81,10 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
         log.debug("enrich failed for %s: %s", record.get("website"), e)
         return record
     found.pop("enrich_error", None)
+    note = found.pop("enrich_note", "")
     contacts = found.pop("all_emails", [])
+    if note:
+        record["_enrich_note"] = note
     for key, value in found.items():
         if value and not record.get(key):
             record[key] = value
@@ -163,12 +166,51 @@ def reenrich(business_id: int) -> dict[str, Any] | None:
         return None
     enriched = enrich_record(dict(business))
     extra_emails = enriched.pop("_extra_emails", [])
+    note = enriched.pop("_enrich_note", "")
     apply_score(enriched)
     db.update_business(business_id, enriched)
     for email in extra_emails:
         db.add_contact(business_id, {"email": email, "source": "website"})
-    db.log_activity(business_id, "enriched", "Re-checked the website for contact details")
+    db.log_activity(business_id, "enriched",
+                    note or f"Found {enriched.get('email')} on the website")
     return db.get_business(business_id)
+
+
+def enrich_missing(limit: int = 50) -> dict[str, Any]:
+    """
+    Re-run enrichment across every business that has a website but no email.
+
+    Exists because the scraper improves: a business checked before it could
+    read Cloudflare-obfuscated addresses deserves another look, and nobody
+    wants to click through fifty records to trigger that one at a time.
+    """
+    targets, _ = db.list_businesses(has_email=False, limit=limit)
+    targets = [b for b in targets if b.get("website")]
+    if not targets:
+        return {"checked": 0, "found": 0, "businesses": []}
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        enriched = list(pool.map(lambda b: enrich_record(dict(b)), targets))
+
+    found = 0
+    updated: list[dict[str, Any]] = []
+    for record in enriched:
+        business_id = int(record["id"])
+        extra_emails = record.pop("_extra_emails", [])
+        note = record.pop("_enrich_note", "")
+        apply_score(record)
+        db.update_business(business_id, record)
+        for email in extra_emails:
+            db.add_contact(business_id, {"email": email, "source": "website"})
+        if record.get("email"):
+            found += 1
+            db.log_activity(business_id, "enriched", f"Found {record['email']} on the website")
+        elif note:
+            db.log_activity(business_id, "enriched", note)
+        updated.append(db.get_business(business_id) or {})
+
+    log.info("enrich_missing checked %s, found %s emails", len(targets), found)
+    return {"checked": len(targets), "found": found, "businesses": updated}
 
 
 def rescore_all() -> int:

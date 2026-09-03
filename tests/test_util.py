@@ -35,3 +35,39 @@ def test_parse_australian_address():
     assert parse_address("12 Hunter St, Newcastle NSW 2300") == {
         "suburb": "Newcastle", "state": "NSW", "postcode": "2300",
     }
+
+
+def test_cloudflare_obfuscated_email_is_recovered():
+    """Cloudflare hides every address behind a XOR blob; sites using it look empty."""
+    from util import deobfuscate
+    plain, key = "info@hunterbrokers.com.au", 0x2a
+    encoded = format(key, "02x") + "".join(format(ord(c) ^ key, "02x") for c in plain)
+    html = f'<a href="/cdn-cgi/l/email-protection" data-cfemail="{encoded}">email us</a>'
+    assert find_emails(deobfuscate(html)) == [plain]
+
+
+def test_html_entity_encoded_email_is_recovered():
+    from util import deobfuscate
+    encoded = "&#105;&#110;&#102;&#111;&#64;darbylegal.com.au"
+    assert find_emails(deobfuscate(encoded)) == ["info@darbylegal.com.au"]
+
+
+def test_at_and_dot_spelled_out_is_recovered():
+    from util import deobfuscate
+    for text, expected in [
+        ("sales [at] hunterbrokers [dot] com [dot] au", "sales@hunterbrokers.com.au"),
+        ("hello (at) darbylegal (dot) com (dot) au", "hello@darbylegal.com.au"),
+        ("admin [ at ] merewetherdental [ dot ] com [ dot ] au", "admin@merewetherdental.com.au"),
+    ]:
+        assert find_emails(deobfuscate(text)) == [expected], text
+
+
+def test_deobfuscation_leaves_plain_addresses_alone():
+    from util import deobfuscate
+    assert find_emails(deobfuscate('<a href="mailto:info@acme.com.au">us</a>')) == ["info@acme.com.au"]
+
+
+def test_deobfuscation_survives_junk_input():
+    from util import deobfuscate
+    for junk in ("", "<p>no emails here</p>", 'data-cfemail="zzzz"'):
+        assert find_emails(deobfuscate(junk)) == []

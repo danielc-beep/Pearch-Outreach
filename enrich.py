@@ -16,17 +16,34 @@ from typing import Any
 import httpx
 
 from config import ABR_GUID
-from util import (domain_of, find_emails, find_phone, normalise_url,
-                  strip_tags, truncate)
+from util import (deobfuscate, domain_of, find_emails, find_phone,
+                  normalise_url, strip_tags, truncate)
 
+# A bot-shaped User-Agent gets a 403 from Cloudflare and most WAFs before a
+# single byte of the page is served, which is the difference between finding
+# an address and reporting the site has none.
 USER_AGENT = (
-    "Mozilla/5.0 (compatible; PearchOutreachBot/1.0; +https://pearch.com.au) "
-    "prospect-research"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
-TIMEOUT = httpx.Timeout(10.0, connect=6.0)
+ACCEPT_HEADERS = {
+    "User-Agent": USER_AGENT,
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-AU,en;q=0.9",
+}
+TIMEOUT = httpx.Timeout(12.0, connect=6.0)
 
 # Pages most likely to carry a real email address, best first.
-CONTACT_PATHS = ("/contact", "/contact-us", "/contactus", "/about", "/about-us", "/get-in-touch")
+CONTACT_PATHS = ("/contact", "/contact-us", "/contactus", "/get-in-touch",
+                 "/about", "/about-us", "/our-team", "/team")
+
+# Links worth following from the homepage — brokers and trades put the address
+# on a "meet the team" or "enquiries" page as often as on /contact.
+_LINK_RE = re.compile(
+    r'href=["\']([^"\']*(?:contact|about|team|enquir|connect|get-in-touch)[^"\']*)["\']',
+    re.I,
+)
+MAX_PAGES = 5
 
 SOCIAL_PATTERNS = {
     "linkedin": re.compile(r"https?://(?:[a-z]{2,3}\.)?linkedin\.com/(?:company|in)/[A-Za-z0-9_\-%.]+", re.I),
@@ -77,7 +94,8 @@ def _fetch(client: httpx.Client, url: str) -> str:
         r = client.get(url)
         if r.status_code >= 400 or "html" not in r.headers.get("content-type", "html"):
             return ""
-        return r.text
+        # Unhide anything the page obfuscated before anyone scans it.
+        return deobfuscate(r.text)
     except httpx.HTTPError:
         return ""
 
@@ -95,25 +113,34 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
     found: dict[str, Any] = {}
     pages: list[str] = []
-    with httpx.Client(
-        timeout=TIMEOUT, follow_redirects=True, headers={"User-Agent": USER_AGENT}
-    ) as client:
+    site_domain = domain_of(url)
+
+    with httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=ACCEPT_HEADERS) as client:
         home = _fetch(client, url)
         if not home:
             return {"enrich_error": "could not fetch site"}
         pages.append(home)
 
-        # Prefer a contact page that the homepage actually links to.
-        linked = re.findall(r'href=["\']([^"\']*contact[^"\']*)["\']', home, re.I)[:2]
-        candidates = [normalise_url(l) if l.startswith("http") else url.rstrip("/") + "/" + l.lstrip("/")
-                      for l in linked]
-        candidates += [url.rstrip("/") + p for p in CONTACT_PATHS[:2]]
-        for candidate in dict.fromkeys(c for c in candidates if c)[:3]:
+        # Prefer pages the homepage actually links to, then fall back to the
+        # usual paths. Same-host links only, so an offsite link can't send us
+        # crawling someone else's site.
+        candidates: list[str] = []
+        for link in _LINK_RE.findall(home)[:8]:
+            absolute = link if link.startswith("http") else url.rstrip("/") + "/" + link.lstrip("/")
+            absolute = normalise_url(absolute)
+            if absolute and domain_of(absolute) == site_domain:
+                candidates.append(absolute)
+        candidates += [url.rstrip("/") + path for path in CONTACT_PATHS]
+
+        for candidate in list(dict.fromkeys(c for c in candidates if c and c != url))[:MAX_PAGES]:
             page = _fetch(client, candidate)
-            if page:
-                pages.append(page)
-                if find_emails(page):
-                    break
+            if not page:
+                continue
+            pages.append(page)
+            # Stop as soon as we have an address on the business's own domain —
+            # anything else is worth another page or two to try to better.
+            if any(e.endswith("@" + site_domain) for e in find_emails(page)):
+                break
 
     blob = "\n".join(pages)
 
@@ -148,6 +175,8 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
     found["website"] = url
     found["domain"] = domain_of(url)
+    if not found.get("email"):
+        found["enrich_note"] = f"No email published on {len(pages)} page(s) checked"
     return found
 
 

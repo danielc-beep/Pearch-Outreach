@@ -1,6 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Database — Pearch Outreach{% endblock %}
 
+{% block scripts %}
+<script>
+  // Re-runs the website scrape across everything still missing an email. Worth
+  // doing after the scraper improves, without clicking through each record.
+  document.getElementById('btn-find-emails').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const flash = document.getElementById('flash');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> Checking…';
+    flash.innerHTML = '<div class="notice notice-info">Visiting each website that has no email on file. '
+      + 'This can take a minute.</div>';
+    try {
+      const res = await fetch('/api/enrich/missing', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Failed');
+      flash.innerHTML = '<div class="notice notice-ok">Checked ' + data.checked
+        + ' website(s), found ' + data.found + ' new email address(es).</div>';
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+      flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
+      btn.disabled = false;
+      btn.textContent = 'Find missing emails';
+    }
+  });
+</script>
+{% endblock %}
+
 {% block body %}
 <div class="wrap">
   <section class="section">
@@ -11,6 +40,7 @@
         <p class="lede">Filter the list, then open one to see the score breakdown, contacts and drafts.</p>
       </div>
       <div class="row">
+        <button class="btn" id="btn-find-emails">Find missing emails</button>
         <a class="btn" href="/api/export.csv{{ export_query }}">Export CSV</a>
         <a class="btn btn-primary" href="/prospect">Add more</a>
       </div>
@@ -64,6 +94,8 @@
       <button class="btn btn-primary" type="submit">Apply</button>
       {% if has_filters %}<a class="btn" href="/businesses">Clear</a>{% endif %}
     </form>
+
+    <div id="flash"></div>
 
     <div class="table-wrap">
       {% if businesses %}

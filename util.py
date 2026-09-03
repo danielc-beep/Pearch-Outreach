@@ -1,6 +1,7 @@
 """Small shared helpers: normalising the messy fields every source produces."""
 from __future__ import annotations
 
+import html as html_module
 import re
 from urllib.parse import urlparse
 
@@ -107,6 +108,52 @@ def parse_address(address: str | None) -> dict[str, str]:
         out["state"] = match.group("state").upper()
         out["postcode"] = match.group("postcode")
     return out
+
+
+# Cloudflare replaces every address on a page with an encoded blob, so a site
+# behind it looks like it has no email at all. The encoding is a single-byte
+# XOR whose key is the first byte — trivial to reverse, and worth doing: it is
+# one of the most common reasons a real address goes unfound.
+_CFEMAIL_RE = re.compile(r'data-cfemail=["\']([0-9a-fA-F]{8,})["\']')
+
+# "info [at] acme [dot] com [dot] au" and its many cousins.
+_OBFUSCATED_RE = re.compile(
+    r"([A-Za-z0-9._%+\-]+)\s*[\[(\{]\s*(?:at|@)\s*[\])\}]\s*"
+    r"((?:[A-Za-z0-9\-]+\s*[\[(\{]\s*(?:dot|\.)\s*[\])\}]\s*)+[A-Za-z]{2,})",
+    re.I,
+)
+
+
+def _decode_cfemail(encoded: str) -> str:
+    """Reverse Cloudflare's data-cfemail encoding."""
+    try:
+        key = int(encoded[:2], 16)
+        return "".join(
+            chr(int(encoded[i:i + 2], 16) ^ key) for i in range(2, len(encoded), 2)
+        )
+    except ValueError:
+        return ""
+
+
+def deobfuscate(html: str) -> str:
+    """
+    Make hidden email addresses visible to the scanner.
+
+    Sites hide addresses from scrapers three common ways — Cloudflare's
+    encoding, HTML entities, and "name [at] domain [dot] com" — and a plain
+    regex over raw HTML misses all three.
+    """
+    text = html or ""
+
+    decoded = [_decode_cfemail(match) for match in _CFEMAIL_RE.findall(text)]
+    text = html_module.unescape(text)
+
+    def unmask(match: re.Match[str]) -> str:
+        domain = re.sub(r"\s*[\[(\{]\s*(?:dot|\.)\s*[\])\}]\s*", ".", match.group(2))
+        return f"{match.group(1)}@{domain}"
+
+    text = _OBFUSCATED_RE.sub(unmask, text)
+    return text + "\n" + "\n".join(e for e in decoded if e)
 
 
 def strip_tags(html: str) -> str:

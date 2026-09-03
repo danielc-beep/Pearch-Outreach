@@ -358,6 +358,12 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
     return JSONResponse(db.get_business(business_id) or {})
 
 
+@app.post("/api/enrich/missing")
+def api_enrich_missing(limit: int = 50) -> JSONResponse:
+    """Re-check every business that has a website but still no email."""
+    return JSONResponse(prospect.enrich_missing(limit=min(limit, 200)))
+
+
 @app.post("/api/businesses/{business_id}/enrich")
 def api_enrich(business_id: int) -> JSONResponse:
     result = prospect.reenrich(business_id)
