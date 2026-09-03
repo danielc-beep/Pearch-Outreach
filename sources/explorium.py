@@ -9,7 +9,7 @@ big it is and what it sells.
 Set EXPLORIUM_API_KEY to turn this on. Each fetch spends Explorium credits, so
 the `limit` field on the form is a real budget control, not a display setting.
 
-    POST https://api.explorium.ai/v1/businesses
+    POST https://api.explorium.ai/v2/businesses
     header: api_key: <key>
 
 A caution on field names: Explorium's response keys are mapped below through
@@ -86,13 +86,21 @@ FIELDS = [
                "using the database filters."),
     Field("size", "Company size", kind="select", options=["", *SIZES], default="11-50",
           help="Employee band. Leave blank for any size."),
-    Field("limit", "How many", "25", kind="number", default="25",
-          help="Each business fetched spends a credit — this is your budget."),
+    Field("limit", "How many", "10", kind="number", default="10",
+          help="One credit per business. A starter Explorium plan is 100 credits "
+               "in total, so treat this as spending money, not a page size."),
 ]
 
-ENDPOINT = "https://api.explorium.ai/v1/businesses"
+# The AgentSource console documents v2; the older public reference says v1.
+# ENDPOINTS is tried in order, so a 404 on the first falls through rather than
+# failing the whole search — scripts/probe_explorium.py reports which answered.
+ENDPOINTS = (
+    "https://api.explorium.ai/v2/businesses",
+    "https://api.explorium.ai/v1/businesses",
+)
+ENDPOINT = ENDPOINTS[0]
 PAGE_SIZE = 100
-MAX_RESULTS = 500
+MAX_RESULTS = 200
 
 # Explorium's response keys, best-guess first. See the module docstring.
 CANDIDATES: dict[str, tuple[str, ...]] = {
@@ -196,9 +204,9 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     if not category:
         raise ValueError("an industry is required")
     try:
-        limit = max(1, min(MAX_RESULTS, int(query.get("limit") or 25)))
+        limit = max(1, min(MAX_RESULTS, int(query.get("limit") or 10)))
     except (TypeError, ValueError):
-        limit = 25
+        limit = 10
 
     filters: dict[str, Any] = {"linkedin_category": {"values": [category]}}
     # country_code and region_country_code are mutually exclusive — sending both
@@ -214,6 +222,7 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     headers = {"Content-Type": "application/json", "api_key": EXPLORIUM_API_KEY}
     results: list[dict[str, Any]] = []
     page = 1
+    working_endpoint = ENDPOINTS[0]
 
     with httpx.Client(timeout=httpx.Timeout(30.0)) as client:
         while len(results) < limit:
@@ -223,10 +232,17 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
                 "page_size": min(PAGE_SIZE, limit - len(results)),
                 "filters": filters,
             }
-            response = client.post(ENDPOINT, headers=headers, json=body)
-            if response.status_code >= 400:
+            response = None
+            for endpoint in (ENDPOINTS if page == 1 else (working_endpoint,)):
+                response = client.post(endpoint, headers=headers, json=body)
+                if response.status_code != 404:
+                    working_endpoint = endpoint
+                    break
+            if response is None or response.status_code >= 400:
+                status = response.status_code if response is not None else 0
                 raise RuntimeError(
-                    f"Explorium error {response.status_code}: {_error_detail(response)}"
+                    f"Explorium error {status}: {_error_detail(response)}"
+                    if response is not None else "Explorium did not respond"
                 )
             payload = response.json()
             rows = _first(payload, RESULT_KEYS) if isinstance(payload, dict) else payload

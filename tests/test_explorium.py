@@ -137,17 +137,55 @@ def test_pages_until_the_limit_is_met(keyed):
         body = json.loads(request.content)
         seen.append(body)
         page = body["page"]
-        # Two full pages, then a short one that ends the loop.
-        count = body["page_size"] if page < 3 else 2
-        return httpx.Response(200, json={"data": [dict(PREFIXED, business_id=f"p{page}-{i}",
-                                                       business_domain=f"p{page}x{i}.com.au")
-                                                  for i in range(count)]})
+        return httpx.Response(200, json={"data": [
+            dict(PREFIXED, business_id=f"p{page}-{i}", business_domain=f"p{page}x{i}.com.au")
+            for i in range(body["page_size"])
+        ]})
 
     _mock(handler)
     rows = ex.search({"category": "loan brokers", "limit": 250})
 
-    assert [b["page"] for b in seen] == [1, 2, 3]
-    assert len(rows) == 202
+    # 250 is clamped to MAX_RESULTS, then fetched a page at a time.
+    assert len(rows) == ex.MAX_RESULTS
+    assert [b["page"] for b in seen] == [1, 2]
+
+
+def test_a_short_page_ends_the_loop(keyed):
+    """Fewer rows than asked for means there are no more to get."""
+    seen: list[dict] = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        count = body["page_size"] if body["page"] == 1 else 3
+        return httpx.Response(200, json={"data": [
+            dict(PREFIXED, business_id=f"p{body['page']}-{i}",
+                 business_domain=f"p{body['page']}x{i}.com.au")
+            for i in range(count)
+        ]})
+
+    _mock(handler)
+    rows = ex.search({"category": "loan brokers", "limit": 200})
+    assert len(rows) == 103
+    assert [b["page"] for b in seen] == [1, 2]
+
+
+def test_falls_back_to_v1_when_v2_is_not_there(keyed):
+    """The console documents v2, the public reference v1 — try both."""
+    tried: list[str] = []
+
+    def handler(request):
+        tried.append(str(request.url))
+        if "/v2/" in str(request.url):
+            return httpx.Response(404, json={"message": "not found"})
+        return httpx.Response(200, json={"data": [PREFIXED]})
+
+    _mock(handler)
+    rows = ex.search({"category": "loan brokers", "limit": 5})
+
+    assert len(rows) == 1
+    assert any("/v2/" in u for u in tried)
+    assert any("/v1/" in u for u in tried)
 
 
 @pytest.mark.parametrize("envelope", ["data", "results", "businesses", "records"])

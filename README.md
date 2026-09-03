@@ -92,9 +92,16 @@ adding a source is one function.
 
   Explorium reports at state level with no postcode, so records arrive without
   an ACM region and score lower on the region signal than a Places record does.
-  Run `scripts/probe_explorium.py` once against a live key to confirm the
-  response field mapping — it prints a real record and flags any column that
-  came out empty.
+
+  **Credits are the real constraint.** One credit per business returned, and a
+  starter plan is 100 credits in total — so a single careless search can spend
+  a quarter of the allowance. Google Places has no per-result cost and covers
+  the same businesses, so use Places for volume and Explorium when the
+  firmographics genuinely change a decision.
+
+  Run `scripts/probe_explorium.py` once against a live key before any real
+  search. It costs one credit, reports which API version answered, prints a
+  real record, and flags any column the mapping got wrong.
 
 - **`google_places`** — Places API (New) text search. Name, address, website,
   phone, rating, review count. Needs `GOOGLE_PLACES_API_KEY`.

@@ -45,21 +45,36 @@ def main() -> int:
     else:
         filters["country_code"] = {"values": ["AU"]}
 
-    print(f"POST {ex.ENDPOINT}\nfilters: {json.dumps(filters)}\n")
-    try:
-        response = httpx.post(
-            ex.ENDPOINT,
-            headers={"Content-Type": "application/json", "api_key": key},
-            json={"mode": "full", "page": 1, "page_size": 1, "filters": filters},
-            timeout=30.0,
-        )
-    except httpx.HTTPError as e:
-        print(f"Could not reach Explorium: {e}")
+    print(f"filters: {json.dumps(filters)}\n")
+    body = {"mode": "full", "page": 1, "page_size": 1, "filters": filters}
+
+    # The console documents v2, the public reference says v1. Try each and
+    # report which one answers, so the source can be pinned to it.
+    response = None
+    for endpoint in ex.ENDPOINTS:
+        print(f"POST {endpoint}")
+        try:
+            response = httpx.post(
+                endpoint,
+                headers={"Content-Type": "application/json", "api_key": key},
+                json=body,
+                timeout=30.0,
+            )
+        except httpx.HTTPError as e:
+            print(f"  could not reach it: {e}")
+            continue
+        print(f"  HTTP {response.status_code}")
+        if response.status_code == 404:
+            print("  not this one, trying the next")
+            continue
+        print(f"\n>>> This is the live endpoint: {endpoint}\n")
+        break
+    else:
+        print("\nNeither endpoint answered. Check the key and your network.")
         return 1
 
-    print(f"HTTP {response.status_code}\n")
-    if response.status_code >= 400:
-        print(response.text[:1500])
+    if response is None or response.status_code >= 400:
+        print(response.text[:1500] if response is not None else "no response")
         return 1
 
     payload = response.json()
