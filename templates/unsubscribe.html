@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Unsubscribed — Pearch Outreach{% endblock %}
+{% block title %}Unsubscribed — ACM Outreach Database{% endblock %}
 
 {% block body %}
 <div class="wrap">
@@ -9,7 +9,7 @@
     <h2>You're off the list.</h2>
     <p class="lede"><span class="mono">{{ email }}</span> has been suppressed. We won't email you again.</p>
     {% else %}
-    <h2>Unsubscribe from Pearch</h2>
+    <h2>Unsubscribe from Australian Community Media</h2>
     <p class="lede">Enter the address you'd like removed.</p>
     <form method="post" action="/unsubscribe" style="margin-top:22px">
       <div class="field-block">

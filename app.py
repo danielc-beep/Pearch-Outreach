@@ -1,5 +1,5 @@
 """
-Pearch Outreach — web app.
+ACM Outreach Database — web app.
 
 Server-rendered pages for the humans (Jinja2), a small JSON API for the bits
 the pages do without a reload (prospecting, drafting, approving, sending).

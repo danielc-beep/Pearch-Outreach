@@ -121,10 +121,10 @@ def _claude_draft(business: dict[str, Any], fields: dict[str, str],
     if not ANTHROPIC_API_KEY:
         return None
 
-    prompt = f"""You write short B2B outreach emails for Pearch, an Australian
-company that gets businesses cited inside AI answers (Google AI Overviews,
-ChatGPT) by publishing editorial across the Australian Community Media
-masthead network.
+    prompt = f"""You write short B2B outreach emails for the AEO team at
+Australian Community Media. ACM gets businesses cited inside AI answers
+(Google AI Overviews, ChatGPT) by publishing credible editorial across its
+network of more than 140 mastheads — the sources those answers already trust.
 
 Here is everything we know about the prospect. It all comes from their own
 website and their Google listing:

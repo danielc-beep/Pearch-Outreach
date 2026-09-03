@@ -29,7 +29,7 @@ color:#1A2244;display:flex;min-height:100vh;align-items:center;justify-content:c
 .box{max-width:520px}h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 12px}
 p{color:#7A819E;line-height:1.6}code{background:#FFF7CD;padding:2px 6px;border-radius:5px;color:#1A2244}</style>
 </head><body><div class="box">
-<h1>Pearch Outreach is locked</h1>
+<h1>ACM Outreach Database is locked</h1>
 <p>This instance is reachable from the internet but no shared password is set, so
 it is refusing to serve the database.</p>
 <p>Set <code>PEARCH_PASSWORD</code> in the environment (on Render: Settings &rarr;
@@ -76,7 +76,7 @@ class PasswordMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         return Response(
-            "Sign in to Pearch Outreach.",
+            "Sign in to ACM Outreach Database.",
             status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="Pearch Outreach", charset="UTF-8"'},
+            headers={"WWW-Authenticate": 'Basic realm="ACM Outreach Database", charset="UTF-8"'},
         )

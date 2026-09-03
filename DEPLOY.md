@@ -1,4 +1,4 @@
-# Deploying Pearch Outreach to Render
+# Deploying the ACM Outreach Database to Render
 
 About 10 minutes. At the end you have a URL and one shared password to hand
 your colleagues.

@@ -55,7 +55,7 @@ def test_draft_uses_the_sdk_with_the_configured_model():
     with patch.object(anthropic, "Anthropic") as client_cls:
         client_cls.return_value.messages.parse.return_value = _response(
             "Wisebuy and Google's AI answers", "Hi there, ...")
-        result = outreach._claude_draft(BUSINESS, {"sender_name": "Pearch"},
+        result = outreach._claude_draft(BUSINESS, {"sender_name": "ACM AEO Team"},
                                         {"subject": "{business_name}", "body": "hello"})
 
     assert result == ("Wisebuy and Google's AI answers", "Hi there, ...")

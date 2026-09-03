@@ -1,15 +1,15 @@
-# Pearch Outreach
+# ACM Outreach Database
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/danielc-beep/Pearch-Outreach)
 
 A database of Australian businesses worth talking to — and the machinery to
-actually talk to them. Prospect a trade and a town, and Pearch finds the
+actually talk to them. Prospect a trade and a town, and it finds the
 businesses, visits their websites for contact details, scores them against
 your ideal customer, dedupes them against what you already have, and drafts
 the outreach email a human then approves.
 
-Built in the Pearch house style: deep editorial navy, one warm yellow accent,
-Inter with Newsreader italics.
+House style: deep editorial navy, one warm yellow accent, Inter with
+Newsreader italics.
 
 ```
 prospect  →  enrich  →  score  →  draft  →  approve  →  send
@@ -148,7 +148,7 @@ pearch-outreach/
 ├── util.py             URL/email/phone/address normalising
 ├── sources/            prospecting sources (google_places, csv, sample)
 ├── templates/          Jinja2 pages
-├── static/             the Pearch design system (app.css), app.js, favicon
+├── static/             the design system (app.css), app.js, favicon
 └── tests/              pytest suite, no network, no keys
 ```
 

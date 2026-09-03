@@ -1,4 +1,4 @@
-# Render Blueprint for Pearch Outreach.
+# Render Blueprint for the ACM Outreach Database.
 #
 # Deliberately close to the ai-prompt-audit service that already runs in this
 # workspace — same runtime, build and start commands, same health check — with

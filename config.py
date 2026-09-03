@@ -1,5 +1,5 @@
 """
-Pearch Outreach — configuration.
+ACM Outreach Database — configuration.
 
 Everything environment-dependent lives here so the rest of the app can be
 imported and tested without any keys set. With zero configuration the app
@@ -15,7 +15,7 @@ ROOT_DIR = Path(__file__).parent
 TEMPLATES_DIR = ROOT_DIR / "templates"
 STATIC_DIR = ROOT_DIR / "static"
 
-APP_NAME = "Pearch Outreach"
+APP_NAME = "ACM Outreach Database"
 APP_TAGLINE = "Find the Australian businesses worth talking to — then talk to them."
 
 # ---------- Access ----------
@@ -79,8 +79,8 @@ DRAFT_EFFORT = os.getenv("PEARCH_DRAFT_EFFORT", "medium")
 # approve step, so nothing can leave the building by accident.
 SEND_ENABLED = os.getenv("PEARCH_SEND_ENABLED", "0") == "1"
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
-FROM_NAME = os.getenv("PEARCH_FROM_NAME", "Pearch")
-FROM_EMAIL = os.getenv("PEARCH_FROM_EMAIL", "onboarding@resend.dev")
+FROM_NAME = os.getenv("PEARCH_FROM_NAME", "ACM AEO Team")
+FROM_EMAIL = os.getenv("PEARCH_FROM_EMAIL", "AEOteam@austcommunitymedia.com.au")
 REPLY_TO_EMAIL = os.getenv("PEARCH_REPLY_TO", "danielc@austcommunitymedia.com.au")
 
 # Spam Act 2003 (Cth) requires accurate sender identification and a working
@@ -88,7 +88,7 @@ REPLY_TO_EMAIL = os.getenv("PEARCH_REPLY_TO", "danielc@austcommunitymedia.com.au
 # every outgoing email by outreach.py — these are the values it uses.
 SENDER_IDENTITY = os.getenv(
     "PEARCH_SENDER_IDENTITY",
-    "Pearch · Australian Community Media · Newcastle NSW 2300",
+    "Australian Community Media · Newcastle NSW 2300",
 )
 UNSUBSCRIBE_URL = os.getenv("PEARCH_UNSUBSCRIBE_URL", "")  # falls back to the app's own /unsubscribe
 
