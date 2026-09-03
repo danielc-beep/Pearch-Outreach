@@ -422,6 +422,28 @@ def businesses_needing_website_check(limit: int = 25) -> tuple[list[dict[str, An
     return [row_to_dict(r) for r in rows], int(total)
 
 
+def businesses_needing_enrichment(limit: int = 20,
+                                  recheck: bool = False) -> tuple[list[dict[str, Any]], int]:
+    """
+    A batch of businesses to visit for a contact address, plus the total left.
+
+    Selects on enriched_at, not on the absence of an email. Selecting on "no
+    email" cannot terminate: a visit that finds nothing leaves the record
+    exactly as it was, so the same businesses come back in the next batch for
+    ever. enriched_at records the attempt, so every batch makes progress even
+    when it finds nothing.
+    """
+    clause = "website IS NOT NULL AND website != '' AND (email IS NULL OR email = '')"
+    if not recheck:
+        clause += " AND (enriched_at IS NULL OR enriched_at = '')"
+    conn = get_conn()
+    total = conn.execute(f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}").fetchone()["n"]
+    rows = conn.execute(
+        f"SELECT * FROM businesses WHERE {clause} ORDER BY fit_score DESC, id LIMIT ?", (limit,)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows], int(total)
+
+
 def distinct_values(column: str) -> list[str]:
     if column not in {"region", "state", "industry", "source", "status", "category"}:
         raise ValueError(f"not a filterable column: {column}")

@@ -418,14 +418,14 @@ def api_delete_business(business_id: int) -> JSONResponse:
 
 
 @app.post("/api/enrich/missing")
-def api_enrich_missing(limit: int = 15) -> JSONResponse:
+def api_enrich_missing(limit: int = 20, recheck: bool = False) -> JSONResponse:
     """
     Re-check a batch of businesses that have a website but still no email.
 
     Each one costs several page fetches, so this is batched and reports
     `remaining` for the caller to loop on.
     """
-    return JSONResponse(prospect.enrich_missing(limit=min(limit, 40)))
+    return JSONResponse(prospect.enrich_missing(limit=min(limit, 40), recheck=recheck))
 
 
 @app.post("/api/businesses/{business_id}/enrich")

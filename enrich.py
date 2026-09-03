@@ -16,8 +16,8 @@ from typing import Any
 import httpx
 
 from config import ABR_GUID
-from util import (deobfuscate, domain_of, find_emails, find_phone,
-                  normalise_url, strip_tags, truncate)
+from util import (clean_email, deobfuscate, domain_of, find_emails,
+                  find_phone, normalise_url, strip_tags, truncate)
 
 # A bot-shaped User-Agent gets a 403 from Cloudflare and most WAFs before a
 # single byte of the page is served, which is the difference between finding
@@ -31,7 +31,7 @@ ACCEPT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-AU,en;q=0.9",
 }
-TIMEOUT = httpx.Timeout(12.0, connect=6.0)
+TIMEOUT = httpx.Timeout(7.0, connect=4.0)
 
 # Pages most likely to carry a real email address, best first.
 CONTACT_PATHS = ("/contact", "/contact-us", "/contactus", "/get-in-touch",
@@ -43,13 +43,45 @@ _LINK_RE = re.compile(
     r'href=["\']([^"\']*(?:contact|about|team|enquir|connect|get-in-touch)[^"\']*)["\']',
     re.I,
 )
-MAX_PAGES = 5
+MAX_PAGES = 4
 
 SOCIAL_PATTERNS = {
     "linkedin": re.compile(r"https?://(?:[a-z]{2,3}\.)?linkedin\.com/(?:company|in)/[A-Za-z0-9_\-%.]+", re.I),
     "facebook": re.compile(r"https?://(?:www\.)?facebook\.com/[A-Za-z0-9_\-.]+", re.I),
     "instagram": re.compile(r"https?://(?:www\.)?instagram\.com/[A-Za-z0-9_\-.]+", re.I),
 }
+
+# WordPress sites — most Australian small businesses — emit schema.org JSON-LD
+# through Yoast or RankMath, and a LocalBusiness block often carries the email
+# even when the visible page shows only a contact form.
+_JSONLD_RE = re.compile(
+    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.I | re.S)
+
+
+def emails_from_jsonld(html: str) -> list[str]:
+    """Pull any "email" value out of a page's structured data."""
+    import json
+
+    found: list[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                if key.lower() == "email" and isinstance(value, str):
+                    found.append(value.replace("mailto:", ""))
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    for block in _JSONLD_RE.findall(html or ""):
+        try:
+            walk(json.loads(block.strip()))
+        except (json.JSONDecodeError, RecursionError):
+            continue
+    return [e for e in (clean_email(f) for f in found) if e]
+
 
 _META_DESC_RE = re.compile(
     r'<meta[^>]+(?:name|property)=["\'](?:description|og:description)["\'][^>]+content=["\']([^"\']+)',
@@ -89,9 +121,11 @@ def guess_industry(*texts: str | None) -> str:
     return ""
 
 
-def _fetch(client: httpx.Client, url: str) -> str:
+def _fetch(client: httpx.Client, url: str, blocked: list[int] | None = None) -> str:
     try:
         r = client.get(url)
+        if r.status_code in (401, 403, 429) and blocked is not None:
+            blocked.append(r.status_code)
         if r.status_code >= 400 or "html" not in r.headers.get("content-type", "html"):
             return ""
         # Unhide anything the page obfuscated before anyone scans it.
@@ -113,10 +147,11 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
     found: dict[str, Any] = {}
     pages: list[str] = []
+    blocked: list[int] = []
     site_domain = domain_of(url)
 
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=ACCEPT_HEADERS) as client:
-        home = _fetch(client, url)
+        home = _fetch(client, url, blocked)
         if not home:
             # Nothing served. A dead domain, a blocked bot, or — the reason this
             # is recorded rather than shrugged off — a website that was never
@@ -136,7 +171,7 @@ def enrich_from_website(website: str) -> dict[str, Any]:
         candidates += [url.rstrip("/") + path for path in CONTACT_PATHS]
 
         for candidate in list(dict.fromkeys(c for c in candidates if c and c != url))[:MAX_PAGES]:
-            page = _fetch(client, candidate)
+            page = _fetch(client, candidate, blocked)
             if not page:
                 continue
             pages.append(page)
@@ -147,7 +182,12 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
     blob = "\n".join(pages)
 
-    emails = find_emails(blob)
+    # Structured data first: when a site publishes its address there it is the
+    # business's own contact address, not a stray one picked out of the markup.
+    emails = emails_from_jsonld(blob)
+    for candidate in find_emails(blob):
+        if candidate not in emails:
+            emails.append(candidate)
     if emails:
         # Prefer an address on the business's own domain over a gmail.
         site_domain = domain_of(url)
@@ -180,7 +220,11 @@ def enrich_from_website(website: str) -> dict[str, Any]:
     found["domain"] = domain_of(url)
     found["website_status"] = "live"
     if not found.get("email"):
-        found["enrich_note"] = f"No email published on {len(pages)} page(s) checked"
+        found["enrich_note"] = (
+            f"Site refused the request (HTTP {blocked[0]}) — no address readable"
+            if blocked else
+            f"No email published on {len(pages)} page(s) checked"
+        )
     return found
 
 

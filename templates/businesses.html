@@ -13,6 +13,7 @@
     button.disabled = true;
     const totals = {};
     try {
+      let lastRemaining = Infinity;
       for (let pass = 0; pass < 200; pass++) {
         button.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> '
           + label + '…';
@@ -24,7 +25,10 @@
         });
         flash.innerHTML = '<div class="notice notice-info">' + describe(totals)
           + (data.remaining ? ' — ' + data.remaining + ' to go.' : '') + '</div>';
-        if (!data.remaining || !data.checked) break;
+        // A batch that checks nothing, or leaves as much outstanding as the
+        // one before it, is not making progress — stop rather than spin.
+        if (!data.remaining || !data.checked || data.remaining >= lastRemaining) break;
+        lastRemaining = data.remaining;
       }
       flash.innerHTML = '<div class="notice notice-ok">' + describe(totals) + ' Done.</div>';
       setTimeout(() => window.location.reload(), 1200);

@@ -383,3 +383,60 @@ def test_enrichment_reports_what_is_left(client, sample_run):
     result = client.post("/api/enrich/missing?limit=1").json()
     assert "remaining" in result
     assert result["checked"] <= 1
+
+
+def test_enrichment_always_terminates(client, monkeypatch):
+    """
+    The batch must make progress even when it finds nothing.
+
+    Selecting candidates on "has no email" cannot terminate: a visit that finds
+    nothing leaves the record unchanged, so the same businesses return in every
+    batch for ever. This is the regression test for that loop.
+    """
+    import db as db_module
+    import enrich
+
+    for i in range(8):
+        db_module.insert_business({"name": f"No Email Co {i}", "domain": f"ne{i}.com.au",
+                                   "website": f"https://ne{i}.com.au", "fit_score": 60})
+    # Every site refuses — the worst case, and the one that used to spin.
+    monkeypatch.setattr(enrich, "enrich_from_website",
+                        lambda url: {"enrich_error": "could not fetch site",
+                                     "website_status": "unreachable"})
+
+    seen = []
+    for _ in range(10):
+        result = client.post("/api/enrich/missing?limit=3").json()
+        seen.append((result["checked"], result["remaining"]))
+        if not result["remaining"]:
+            break
+
+    assert seen == [(3, 5), (3, 2), (2, 0)], seen
+    assert client.post("/api/enrich/missing").json()["checked"] == 0
+
+
+def test_a_failed_visit_is_still_recorded_as_attempted(client, monkeypatch):
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Blocked Co", "domain": "b.com.au",
+                               "website": "https://b.com.au", "fit_score": 60})
+    monkeypatch.setattr(enrich, "enrich_from_website",
+                        lambda url: {"enrich_error": "could not fetch site"})
+
+    client.post("/api/enrich/missing")
+    business = client.get("/api/businesses").json()["businesses"][0]
+    assert business["enriched_at"], "an attempted visit must be stamped"
+
+
+def test_highest_scoring_businesses_are_enriched_first(client, monkeypatch):
+    """The most useful addresses should arrive in the first batch."""
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Low", "domain": "low.com.au",
+                               "website": "https://low.com.au", "fit_score": 10})
+    db_module.insert_business({"name": "High", "domain": "high.com.au",
+                               "website": "https://high.com.au", "fit_score": 95})
+    monkeypatch.setattr(enrich, "enrich_from_website", lambda url: {})
+
+    result = client.post("/api/enrich/missing?limit=1").json()
+    assert result["businesses"][0]["name"] == "High"

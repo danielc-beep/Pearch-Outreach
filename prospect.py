@@ -27,6 +27,10 @@ log = logging.getLogger(__name__)
 # Cap how many we do inline; the rest can be enriched later from the UI.
 MAX_INLINE_ENRICH = 25
 
+# Enrichment is almost entirely waiting on other people's servers, so more
+# workers costs little and finishes far sooner.
+ENRICH_WORKERS = 16
+
 
 def normalise(record: dict[str, Any]) -> dict[str, Any]:
     """Coerce a raw source record into our column shape."""
@@ -85,8 +89,13 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
     # is merged even when the fetch failed and everything else came back empty.
     if found.get("website_status"):
         record["website_status"] = found["website_status"]
-    found.pop("enrich_error", None)
+    error = found.pop("enrich_error", None)
     note = found.pop("enrich_note", "")
+    if error:
+        # A site that could not be fetched has still been attempted; without
+        # this the record is picked again by every subsequent batch.
+        record["enriched_at"] = db.now()
+        record["_enrich_note"] = error
     contacts = found.pop("all_emails", [])
     if note:
         record["_enrich_note"] = note
@@ -123,7 +132,7 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
     if enrich:
         targets = [r for r in records if r.get("website") and not r.get("email")][:MAX_INLINE_ENRICH]
         if targets:
-            with ThreadPoolExecutor(max_workers=8) as pool:
+            with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
                 enriched = list(pool.map(enrich_record, targets))
             by_name = {id(t): e for t, e in zip(targets, enriched)}
             records = [by_name.get(id(r), r) for r in records]
@@ -181,23 +190,19 @@ def reenrich(business_id: int) -> dict[str, Any] | None:
     return db.get_business(business_id)
 
 
-def enrich_missing(limit: int = 15) -> dict[str, Any]:
+def enrich_missing(limit: int = 20, recheck: bool = False) -> dict[str, Any]:
     """
-    Re-run enrichment across every business that has a website but no email.
+    Visit the websites of businesses with no email on file, looking for one.
 
-    Exists because the scraper improves: a business checked before it could
-    read Cloudflare-obfuscated addresses deserves another look, and nobody
-    wants to click through fifty records to trigger that one at a time.
+    Batched, because each business costs several page fetches and a big batch
+    outlives a hosting proxy's patience. Highest-scoring first, so the most
+    useful addresses arrive in the first batch rather than the last.
     """
-    # Batched for the same reason as verify_websites: each business here costs
-    # several page fetches, so a big batch outlives the proxy's patience.
-    candidates, _ = db.list_businesses(has_email=False, limit=500)
-    candidates = [b for b in candidates if b.get("website")]
-    targets = candidates[:limit]
+    targets, outstanding = db.businesses_needing_enrichment(limit, recheck=recheck)
     if not targets:
         return {"checked": 0, "found": 0, "remaining": 0, "businesses": []}
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
         enriched = list(pool.map(lambda b: enrich_record(dict(b)), targets))
 
     found = 0
@@ -219,7 +224,7 @@ def enrich_missing(limit: int = 15) -> dict[str, Any]:
 
     log.info("enrich_missing checked %s, found %s emails", len(targets), found)
     return {"checked": len(targets), "found": found,
-            "remaining": max(0, len(candidates) - len(targets)), "businesses": updated}
+            "remaining": max(0, outstanding - len(targets)), "businesses": updated}
 
 
 def rescore_all() -> int:
@@ -258,7 +263,7 @@ def verify_websites(limit: int = 25, recheck: bool = False) -> dict[str, Any]:
     if not targets:
         return {"checked": 0, "live": 0, "unreachable": 0, "remaining": 0}
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
         statuses = list(pool.map(lambda b: enrich.website_is_live(b["website"]), targets))
 
     live = unreachable = 0
