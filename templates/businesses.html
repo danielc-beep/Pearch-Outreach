@@ -49,6 +49,26 @@
       (t) => 'Visited ' + (t.checked || 0) + ' website(s), found '
              + (t.found || 0) + ' email address(es).'));
 
+  // Working a list means changing status a lot, so do it without leaving it.
+  document.querySelectorAll('.js-row-status').forEach((select) => {
+    const original = select.value;
+    select.addEventListener('change', async () => {
+      const chosen = select.value;
+      select.disabled = true;
+      try {
+        await window.postJSON('/api/businesses/' + select.dataset.id, {status: chosen});
+        document.getElementById('flash').innerHTML =
+          '<div class="notice notice-ok">Status set to ' + chosen + '.</div>';
+      } catch (err) {
+        select.value = original;      // put it back — the change did not stick
+        document.getElementById('flash').innerHTML =
+          '<div class="notice notice-error">' + err.message + '</div>';
+      } finally {
+        select.disabled = false;
+      }
+    });
+  });
+
   const purgeBtn = document.getElementById('btn-purge-sample');
   if (purgeBtn) {
     purgeBtn.addEventListener('click', async () => {
@@ -179,7 +199,14 @@
               </td>
               <td class="small">{{ b.phone or '—' }}</td>
               <td>{{ score_widget(b.fit_score) }}</td>
-              <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
+              <td>
+                <select class="js-row-status" data-id="{{ b.id }}"
+                        style="font-size:12px;padding:5px 8px;border-radius:999px">
+                  {% for st in statuses %}
+                  <option value="{{ st }}" {{ 'selected' if b.status == st }}>{{ st }}</option>
+                  {% endfor %}
+                </select>
+              </td>
               <td class="small muted">{{ b.source }}</td>
               <td><a class="btn btn-sm" href="/businesses/{{ b.id }}">Open</a></td>
             </tr>

@@ -426,6 +426,23 @@ def send_message(message_id: int, base_url: str = "") -> dict[str, Any]:
     return {"sent": True, "provider_id": provider_id}
 
 
+def log_reply(business_id: int, note: str = "") -> dict[str, Any] | None:
+    """
+    Record that a prospect wrote back.
+
+    A reply is the signal that matters — it turns a name on a list into a
+    conversation — so it moves the business to `replied` whatever state it was
+    in, and never backwards from won or lost.
+    """
+    business = db.get_business(business_id)
+    if not business:
+        return None
+    if business["status"] not in ("won", "lost"):
+        db.update_business(business_id, {"status": "replied"})
+    db.log_activity(business_id, "replied", note or "They wrote back")
+    return db.get_business(business_id)
+
+
 def unsubscribe(email: str, reason: str = "unsubscribe link") -> int:
     """
     Suppress an address and mark every matching business do-not-contact.

@@ -428,6 +428,19 @@ def api_enrich_missing(limit: int = 20, recheck: bool = False) -> JSONResponse:
     return JSONResponse(prospect.enrich_missing(limit=min(limit, 40), recheck=recheck))
 
 
+class ReplyNote(BaseModel):
+    note: str = ""
+
+
+@app.post("/api/businesses/{business_id}/replied")
+def api_log_reply(business_id: int, payload: ReplyNote) -> JSONResponse:
+    """Record that a prospect replied, and move them to `replied`."""
+    result = outreach.log_reply(business_id, payload.note)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(result)
+
+
 @app.post("/api/businesses/{business_id}/enrich")
 def api_enrich(business_id: int) -> JSONResponse:
     result = prospect.reenrich(business_id)

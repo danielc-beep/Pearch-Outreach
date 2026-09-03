@@ -141,7 +141,7 @@
         <div class="card">
           <h3>Update</h3>
           <div class="field-block">
-            <label for="set-status">Status</label>
+            <label for="set-status">Status <span class="muted small">saves as you change it</span></label>
             <select id="set-status">
               {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if b.status == s }}>{{ s }}</option>{% endfor %}
             </select>
@@ -159,6 +159,9 @@
             <button class="btn" id="btn-enrich">Re-enrich</button>
           </div>
           <div class="row" style="margin-top:14px">
+            <button class="btn btn-sm btn-accent" id="btn-replied">They replied</button>
+          </div>
+          <div class="row" style="margin-top:10px">
             <button class="btn btn-sm btn-danger" id="btn-dnc">
               {{ 'Allow contact' if b.do_not_contact else 'Mark do-not-contact' }}
             </button>
@@ -223,10 +226,35 @@
   document.querySelectorAll('#btn-draft, #btn-draft-ai').forEach((btn) =>
     btn.addEventListener('click', () => draft(btn.dataset.ai, btn)));
 
+  // Status is the field people change most, so it commits on change rather
+  // than waiting for a Save click that sits below the fold.
+  document.getElementById('set-status').addEventListener('change', async (e) => {
+    const select = e.currentTarget;
+    const chosen = select.value;
+    select.disabled = true;
+    try {
+      await post('/api/businesses/' + BUSINESS_ID, {status: chosen});
+      flash('Status set to ' + chosen + '.', 'ok');
+      const pill = document.querySelector('.section-head .pill[class*="status-"]');
+      if (pill) { pill.textContent = chosen; pill.className = 'pill status-' + chosen; }
+    } catch (err) {
+      flash(err.message, 'error');
+    } finally {
+      select.disabled = false;
+    }
+  });
+
+  document.getElementById('btn-replied').addEventListener('click', async () => {
+    const note = prompt('Anything worth noting about their reply? (optional)') ?? '';
+    try {
+      await post('/api/businesses/' + BUSINESS_ID + '/replied', {note: note});
+      window.location.reload();
+    } catch (err) { flash(err.message, 'error'); }
+  });
+
   document.getElementById('btn-save').addEventListener('click', async (e) => {
     try {
       await post('/api/businesses/' + BUSINESS_ID, {
-        status: document.getElementById('set-status').value,
         email: document.getElementById('set-email').value.trim(),
         notes: document.getElementById('set-notes').value,
       });
