@@ -23,6 +23,43 @@
       {% endfor %}
     </div>
 
+    <!-- Work a whole masthead patch in one go -->
+    <div class="card" id="territory" style="max-width:760px;margin-bottom:26px">
+      <h3 style="margin-bottom:4px">Work a masthead's patch</h3>
+      <p class="help" style="margin:0 0 18px">Pick a title and the trades worth calling on.
+        It runs one search per trade across that paper's home town, enriches and scores
+        what it finds, and stamps every record with the masthead.</p>
+
+      <div class="field-block">
+        <label for="tr-masthead">Masthead</label>
+        <select id="tr-masthead">
+          {% for t in patches %}
+          <option value="{{ t.site }}" data-home="{{ home_location(t.site) }}">
+            {{ t.name|masthead_label }} — {{ home_location(t.site) }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="field-block">
+        <label>Trades <span class="muted small" id="tr-count"></span></label>
+        <div class="trade-grid" id="tr-trades">
+          {% for industry in territory_industries %}
+          <label class="trade">
+            <input type="checkbox" value="{{ industry }}" {{ 'checked' if loop.index <= 4 }} />
+            <span>{{ industry }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="row">
+        <button class="btn btn-primary" id="tr-go">Sweep the patch</button>
+        <span class="muted small" id="tr-note"></span>
+      </div>
+      <div id="tr-progress" class="territory-progress" hidden></div>
+    </div>
+
     <div class="card" style="max-width:760px">
       <form id="prospect-form">
         <input type="hidden" name="source" id="source-key" value="{{ active_source }}" />
@@ -135,6 +172,63 @@
           if (!chosenByHand) picker.value = m.site || '';
         } catch (err) { /* the picker still works by hand */ }
       }, 350);
+    });
+  })();
+
+  // ---- Territory sweep: one industry per request, looped ----
+  (function () {
+    const go = document.getElementById('tr-go');
+    if (!go) return;
+    const picker = document.getElementById('tr-masthead');
+    const boxes = () => [...document.querySelectorAll('#tr-trades input:checked')];
+    const countEl = document.getElementById('tr-count');
+    const noteEl = document.getElementById('tr-note');
+    const progressEl = document.getElementById('tr-progress');
+
+    function updateCount() {
+      const n = boxes().length;
+      countEl.textContent = n ? '· ' + n + ' selected' : '· none selected';
+      go.disabled = n === 0;
+    }
+    document.getElementById('tr-trades').addEventListener('change', updateCount);
+    updateCount();
+
+    go.addEventListener('click', async () => {
+      const trades = boxes().map((b) => b.value);
+      if (!trades.length) return;
+      const masthead = picker.value;
+      const source = document.getElementById('source-key').value;
+      go.disabled = true;
+      progressEl.hidden = false;
+      progressEl.innerHTML = '';
+      noteEl.textContent = '';
+
+      let found = 0, added = 0, lastRun = null;
+      for (let i = 0; i < trades.length; i++) {
+        const row = document.createElement('div');
+        row.className = 'territory-row';
+        row.innerHTML = '<span class="spinner"></span><span>' + trades[i] + '</span>';
+        progressEl.appendChild(row);
+        try {
+          const data = await window.postJSON('/api/territory/step', {
+            masthead: masthead, industry: trades[i], source: source,
+            limit: 20, enrich: document.getElementById('do-enrich').checked,
+          });
+          found += data.found; added += data.new; lastRun = data.run_id;
+          row.innerHTML = '<span class="tick">✓</span><span>' + trades[i] +
+            '</span><span class="right muted small">' + data.new + ' new of ' +
+            data.found + ' found' +
+            (data.below_rating ? ' · ' + data.below_rating + ' under 4★' : '') + '</span>';
+        } catch (err) {
+          row.innerHTML = '<span class="cross">✕</span><span>' + trades[i] +
+            '</span><span class="right small" style="color:var(--danger)">' +
+            err.message + '</span>';
+        }
+      }
+
+      noteEl.innerHTML = added + ' new businesses from ' + found + ' found. ' +
+        '<a href="/review?masthead=' + encodeURIComponent(masthead) + '">Review them →</a>';
+      go.disabled = false;
     });
   })();
 

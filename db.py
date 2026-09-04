@@ -159,6 +159,7 @@ def get_conn() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA busy_timeout = 5000")
         _local.conn = conn
     return conn
 
@@ -386,6 +387,8 @@ def list_businesses(
     has_email: bool | None = None,
     website_status: str = "",
     masthead: str = "",
+    needs_review: bool = False,
+    needs_draft: bool = False,
     min_score: int = 0,
     min_rating: float = 0.0,
     sort: str = "score",
@@ -414,6 +417,20 @@ def list_businesses(
         where.append("email IS NOT NULL AND email != ''")
     elif has_email is False:
         where.append("(email IS NULL OR email = '')")
+    if needs_review:
+        # The review queue: everyone still awaiting a decision. Contactable,
+        # not settled either way, and without a draft already approved or
+        # sent — approving is what takes a business out of the queue.
+        where.append("email IS NOT NULL AND email != ''")
+        where.append("do_not_contact = 0")
+        where.append("status NOT IN ('contacted','replied','won','lost','disqualified')")
+        where.append("id NOT IN (SELECT business_id FROM messages "
+                     "WHERE status IN ('approved','sent'))")
+    if needs_draft:
+        # In the queue and with nothing written yet — what a bulk draft run
+        # is for. Anything already drafted is left alone rather than getting
+        # a second, near-identical email written for it.
+        where.append("id NOT IN (SELECT business_id FROM messages)")
     if min_score:
         where.append("fit_score >= ?")
         args.append(min_score)

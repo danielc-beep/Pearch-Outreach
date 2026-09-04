@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Review queue — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Review queue</div>
+        <h2>Work the list, <em>one at a time</em></h2>
+        <p class="lede">Read the business, read its email, and decide. Approve sends it to
+          the outbox ready to go; not a fit takes it out for good.</p>
+      </div>
+      <div class="row">
+        {% if undrafted %}
+        <button class="btn btn-primary" id="draft-all">
+          Draft the {{ undrafted }} without one
+        </button>
+        {% endif %}
+        <a class="btn" href="/businesses">Open the database</a>
+      </div>
+    </div>
+
+    <form class="filters" method="get" action="/review">
+      <div class="f">
+        <label for="rq-region">Region</label>
+        <select id="rq-region" name="region">
+          <option value="">Any</option>
+          {% for r in regions %}<option value="{{ r }}" {{ 'selected' if f.region == r }}>{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="f">
+        <label for="rq-industry">Industry</label>
+        <select id="rq-industry" name="industry">
+          <option value="">Any</option>
+          {% for i in industries %}<option value="{{ i }}" {{ 'selected' if f.industry == i }}>{{ i }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="f">
+        <label for="rq-masthead">Masthead</label>
+        <select id="rq-masthead" name="masthead">
+          <option value="">Any</option>
+          {% for group in masthead_groups %}
+          <optgroup label="{{ group.state }}">
+            {% for t in group.titles %}
+            <option value="{{ t.site }}" {{ 'selected' if f.masthead == t.site }}>{{ t.name|masthead_label }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="f">
+        <label for="rq-score">Min fit</label>
+        <input id="rq-score" type="number" name="min_score" min="0" max="100" step="5"
+               value="{{ f.min_score or '' }}" style="width:88px" />
+      </div>
+      <button class="btn btn-primary" type="submit">Apply</button>
+      {% if has_filters %}<a class="btn" href="/review">Clear</a>{% endif %}
+    </form>
+
+    <div id="flash"></div>
+
+    <!-- Progress -->
+    <div class="queue-progress" id="queue-progress" hidden>
+      <div class="queue-bar"><i id="queue-bar-fill"></i></div>
+      <div class="row small muted" style="margin-top:8px">
+        <span id="queue-count">—</span>
+        <span class="right" id="queue-keys">
+          <kbd>A</kbd> approve · <kbd>S</kbd> skip · <kbd>N</kbd> not a fit · <kbd>E</kbd> edit
+        </span>
+      </div>
+    </div>
+
+    <!-- The one card -->
+    <div id="queue-card"></div>
+
+    <!-- Nothing left -->
+    <div class="card" id="queue-done" hidden>
+      <h3 id="done-title">Queue empty</h3>
+      <p class="muted" id="done-note" style="margin:0 0 16px">
+        Nothing is waiting for a decision under these filters.
+      </p>
+      <div class="row">
+        <a class="btn btn-primary" href="/outbox">See what's ready to send</a>
+        <a class="btn" href="/prospect">Find more businesses</a>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const params = new URLSearchParams(window.location.search);
+  const cardEl = document.getElementById('queue-card');
+  const doneEl = document.getElementById('queue-done');
+  const progressEl = document.getElementById('queue-progress');
+  const countEl = document.getElementById('queue-count');
+  const fillEl = document.getElementById('queue-bar-fill');
+  const flashEl = document.getElementById('flash');
+
+  let ids = [];
+  let at = 0;
+  let decided = 0;
+  let current = null;
+  let busy = false;
+  const cache = new Map();     // the next card is fetched before it is needed
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function flash(message, kind) {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + escapeHtml(message) + '</div>';
+    window.setTimeout(() => { flashEl.innerHTML = ''; }, 4000);
+  }
+
+  async function fetchCard(id) {
+    if (cache.has(id)) return cache.get(id);
+    const r = await fetch('/api/review/card/' + id);
+    if (!r.ok) return null;
+    const card = await r.json();
+    cache.set(id, card);
+    return card;
+  }
+
+  function renderReasons(reasons) {
+    if (!reasons || !reasons.length) return '';
+    return '<ul class="reasons">' + reasons.map(
+      (x) => '<li>' + escapeHtml(x) + '</li>').join('') + '</ul>';
+  }
+
+  function renderDraft(draft) {
+    if (!draft) {
+      return '<div class="queue-draft is-empty">' +
+        '<p class="muted" style="margin:0 0 12px">No draft written yet.</p>' +
+        '<button class="btn btn-sm btn-primary" id="q-draft">Draft it now</button></div>';
+    }
+    return '<div class="queue-draft">' +
+      '<div class="queue-subject">' + escapeHtml(draft.subject) + '</div>' +
+      '<div class="draft-body" id="q-body-read">' + escapeHtml(draft.body) + '</div>' +
+      '<div id="q-edit" hidden>' +
+        '<input class="q-subject-input" id="q-subject-input" value="' + escapeHtml(draft.subject) + '" />' +
+        '<textarea id="q-body-input" style="min-height:220px">' + escapeHtml(draft.body) + '</textarea>' +
+        '<div class="row" style="margin-top:10px">' +
+          '<button class="btn btn-sm btn-primary" id="q-save">Save</button>' +
+          '<button class="btn btn-sm" id="q-cancel">Cancel</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="row" style="margin-top:12px"><button class="btn btn-sm" id="q-edit-btn">Edit</button>' +
+      '<span class="muted small right">to ' + escapeHtml(draft.to_email) + '</span></div>' +
+    '</div>';
+  }
+
+  function render(card) {
+    const b = card.business;
+    const stars = b.rating ? (b.rating + '★ from ' + (b.review_count || 0) + ' reviews') : 'No rating';
+    cardEl.innerHTML =
+      '<div class="card queue-card">' +
+        '<div class="queue-head">' +
+          '<div>' +
+            '<div class="eyebrow" style="margin-bottom:8px">' + escapeHtml(b.industry || 'Business') +
+              ' · ' + escapeHtml(b.suburb || b.region || '') + '</div>' +
+            '<h2 style="margin-bottom:6px">' + escapeHtml(b.name) + '</h2>' +
+            '<div class="muted small">' +
+              (b.website ? '<a href="' + escapeHtml(b.website) + '" target="_blank" rel="noopener noreferrer">' +
+                escapeHtml(b.domain || b.website) + '</a> · ' : '') +
+              escapeHtml(stars) + '</div>' +
+          '</div>' +
+          '<div class="queue-score">' +
+            '<div class="num">' + (b.fit_score || 0) + '</div>' +
+            '<div class="s">fit</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="queue-grid">' +
+          '<div>' +
+            '<h3>The email</h3>' + renderDraft(card.draft) +
+          '</div>' +
+          '<div>' +
+            '<h3>Why it scored</h3>' + renderReasons(card.reasons) +
+            '<h3 style="margin-top:18px">Contact</h3>' +
+            '<div class="mono small" style="word-break:break-word">' + escapeHtml(b.email || '—') + '</div>' +
+            '<div class="muted small">' + escapeHtml(b.phone || '') + '</div>' +
+            '<h3 style="margin-top:18px">Pitched from</h3>' +
+            '<div class="small">' + escapeHtml(card.masthead) + '</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="queue-actions">' +
+          '<button class="btn btn-primary" id="q-approve">Approve <kbd>A</kbd></button>' +
+          '<button class="btn" id="q-skip">Skip <kbd>S</kbd></button>' +
+          '<button class="btn btn-danger right" id="q-reject">Not a fit <kbd>N</kbd></button>' +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('q-approve').onclick = () => decide('approve');
+    document.getElementById('q-skip').onclick = () => decide('skip');
+    document.getElementById('q-reject').onclick = () => decide('reject');
+
+    const draftBtn = document.getElementById('q-draft');
+    if (draftBtn) draftBtn.onclick = draftNow;
+    const editBtn = document.getElementById('q-edit-btn');
+    if (editBtn) editBtn.onclick = openEditor;
+  }
+
+  function updateProgress() {
+    const total = ids.length;
+    progressEl.hidden = total === 0;
+    countEl.textContent = decided + ' decided · ' + Math.max(0, total - at) + ' left of ' + total;
+    fillEl.style.width = total ? Math.round((at / total) * 100) + '%' : '0%';
+  }
+
+  async function show() {
+    updateProgress();
+    if (at >= ids.length) {
+      cardEl.innerHTML = '';
+      doneEl.hidden = false;
+      document.getElementById('done-title').textContent =
+        decided ? 'Done — ' + decided + ' decided' : 'Queue empty';
+      progressEl.hidden = decided === 0;
+      return;
+    }
+    doneEl.hidden = true;
+    const card = await fetchCard(ids[at]);
+    if (!card) { at++; return show(); }
+    current = card;
+    render(card);
+    // Fetch the next one now, so moving on is instant.
+    if (ids[at + 1]) fetchCard(ids[at + 1]);
+  }
+
+  async function decide(decision) {
+    if (busy || !current) return;
+    busy = true;
+    const id = current.business.id;
+    const name = current.business.name;
+    try {
+      if (decision !== 'skip') {
+        await window.postJSON('/api/review/decide/' + id, {decision: decision});
+        decided++;
+        flash(name + (decision === 'approve' ? ' approved' : ' marked not a fit'),
+              decision === 'approve' ? 'ok' : 'info');
+      }
+      cache.delete(id);
+      at++;
+      await show();
+    } catch (err) {
+      flash(err.message, 'error');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function draftNow() {
+    if (busy || !current) return;
+    busy = true;
+    const btn = document.getElementById('q-draft');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Writing';
+    try {
+      await window.postJSON('/api/businesses/' + current.business.id + '/draft', {use_ai: true});
+      cache.delete(current.business.id);
+      const fresh = await fetchCard(current.business.id);
+      current = fresh;
+      render(fresh);
+    } catch (err) {
+      flash(err.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Draft it now';
+    } finally {
+      busy = false;
+    }
+  }
+
+  function openEditor() {
+    document.getElementById('q-body-read').hidden = true;
+    document.querySelector('.queue-subject').hidden = true;
+    document.getElementById('q-edit-btn').hidden = true;
+    document.getElementById('q-edit').hidden = false;
+    document.getElementById('q-subject-input').focus();
+
+    document.getElementById('q-cancel').onclick = () => render(current);
+    document.getElementById('q-save').onclick = async () => {
+      const subject = document.getElementById('q-subject-input').value.trim();
+      const body = document.getElementById('q-body-input').value.trim();
+      if (!subject || !body) { flash('A subject and a body are both required.', 'error'); return; }
+      try {
+        await window.postJSON('/api/messages/' + current.draft.id, {subject: subject, body: body});
+        cache.delete(current.business.id);
+        current = await fetchCard(current.business.id);
+        render(current);
+        flash('Draft saved.', 'ok');
+      } catch (err) {
+        flash(err.message, 'error');
+      }
+    };
+  }
+
+  // Keyboard is the point of a queue. Ignored while typing in the editor.
+  document.addEventListener('keydown', (e) => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select' || e.metaKey || e.ctrlKey) return;
+    const key = e.key.toLowerCase();
+    if (key === 'a') { e.preventDefault(); decide('approve'); }
+    else if (key === 's') { e.preventDefault(); decide('skip'); }
+    else if (key === 'n') { e.preventDefault(); decide('reject'); }
+    else if (key === 'e') { e.preventDefault(); if (current && current.draft) openEditor(); }
+  });
+
+  // Bulk drafting. Batched with a remaining count, so this loops rather than
+  // asking the server to write forty emails inside one request.
+  const draftAllBtn = document.getElementById('draft-all');
+  if (draftAllBtn) {
+    const label = draftAllBtn.textContent.trim();
+    draftAllBtn.addEventListener('click', async () => {
+      draftAllBtn.disabled = true;
+      let written = 0, problems = [];
+      const filters = {};
+      params.forEach((v, k) => { filters[k] = v; });
+      try {
+        for (let round = 0; round < 200; round++) {
+          draftAllBtn.innerHTML = '<span class="spinner"></span> Drafting — ' + written + ' written';
+          const data = await window.postJSON('/api/drafts/batch',
+                                             {limit: 8, filters: filters});
+          written += data.drafted;
+          problems = problems.concat(data.problems || []);
+          // Newly drafted cards must be re-fetched, not served from the cache.
+          (data.businesses || []).forEach((b) => cache.delete(b.id));
+          if (!data.remaining && !data.drafted) break;
+        }
+        flash(written + ' draft' + (written === 1 ? '' : 's') + ' written' +
+              (problems.length ? ' · ' + problems.length + ' skipped' : ''), 'ok');
+        draftAllBtn.hidden = true;
+        // Show the current business again, now that it has an email.
+        if (current) { current = await fetchCard(current.business.id); render(current); }
+      } catch (err) {
+        flash(err.message, 'error');
+        draftAllBtn.disabled = false;
+        draftAllBtn.textContent = label;
+      }
+    });
+  }
+
+  (async function start() {
+    const r = await fetch('/api/review/queue?' + params.toString());
+    const data = await r.json();
+    ids = data.ids || [];
+    await show();
+  })();
+})();
+</script>
+{% endblock %}

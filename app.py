@@ -30,6 +30,7 @@ import mastheads
 import demo
 import outreach
 import prospect
+import review
 import sources
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE,
@@ -157,6 +158,110 @@ def home(request: Request) -> HTMLResponse:
     )
 
 
+REVIEW_FILTERS = ("q", "status", "region", "state", "industry", "source",
+                  "masthead", "min_score", "min_rating")
+
+
+def _review_filters(params: dict[str, str]) -> dict[str, Any]:
+    """The subset of the database filters the review queue accepts."""
+    out: dict[str, Any] = {}
+    for key in REVIEW_FILTERS:
+        value = (params.get(key) or "").strip()
+        if not value:
+            continue
+        if key == "min_score":
+            out[key] = _int_param(value)
+        elif key == "min_rating":
+            out[key] = _float_param(value)
+        else:
+            out[key] = value
+    return out
+
+
+@app.get("/review", response_class=HTMLResponse)
+def review_page(request: Request) -> HTMLResponse:
+    """One business at a time, with a decision at the end of it."""
+    filters = _review_filters(dict(request.query_params))
+    return page(
+        request, "review.html",
+        nav="review",
+        total=len(review.queue_ids(**filters)),
+        undrafted=db.list_businesses(needs_review=True, needs_draft=True, limit=1, **filters)[1],
+        f={k: (request.query_params.get(k) or "") for k in REVIEW_FILTERS},
+        regions=db.distinct_values("region"),
+        industries=db.industry_options(),
+        has_filters=bool(filters),
+    )
+
+
+class TerritoryStep(BaseModel):
+    masthead: str
+    industry: str
+    source: str = "google_places"
+    limit: int | str = 20
+    enrich: bool = True
+
+
+@app.post("/api/territory/step")
+def api_territory_step(step: TerritoryStep) -> JSONResponse:
+    """One industry of a masthead's patch. The caller loops over the rest."""
+    try:
+        return JSONResponse(prospect.territory_step(
+            step.masthead, step.industry, source_key=step.source,
+            limit=max(1, min(_int_param(step.limit, 20), 60)), enrich=step.enrich))
+    except (KeyError, ValueError, RuntimeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except Exception as e:
+        log.exception("territory step failed")
+        raise HTTPException(status_code=502, detail=f"Prospecting failed: {e}") from e
+
+
+@app.get("/api/review/queue")
+def api_review_queue(request: Request) -> JSONResponse:
+    ids = review.queue_ids(**_review_filters(dict(request.query_params)))
+    return JSONResponse({"ids": ids, "total": len(ids)})
+
+
+class DraftBatch(BaseModel):
+    limit: int = 8
+    use_ai: bool = True
+    filters: dict[str, str] = {}
+
+
+@app.post("/api/drafts/batch")
+def api_draft_batch(body: DraftBatch) -> JSONResponse:
+    """
+    Write drafts for a batch of businesses awaiting one.
+
+    Batched with a remaining count; the caller loops until it reaches zero.
+    A single request that drafted forty emails would outlive the proxy.
+    """
+    filters = _review_filters(body.filters)
+    return JSONResponse(outreach.draft_batch(
+        limit=max(1, min(body.limit, 20)), use_ai=body.use_ai, **filters))
+
+
+@app.get("/api/review/card/{business_id}")
+def api_review_card(business_id: int) -> JSONResponse:
+    card = review.card(business_id)
+    if not card:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(card)
+
+
+class Decision(BaseModel):
+    decision: str
+    note: str = ""
+
+
+@app.post("/api/review/decide/{business_id}")
+def api_review_decide(business_id: int, body: Decision) -> JSONResponse:
+    try:
+        return JSONResponse(review.decide(business_id, body.decision, note=body.note))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @app.get("/businesses", response_class=HTMLResponse)
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
@@ -264,6 +369,10 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
         active_source=active,
         run_result=bool(run_row),
         results_html=Markup(results_html),
+        patches=mastheads.with_a_patch(),
+        home_location=mastheads.home_location,
+        territory_industries=prospect.TERRITORY_INDUSTRIES,
+        live_prospecting=any(s.available and s.key != "csv" and s.key != "sample" for s in infos),
     )
 
 

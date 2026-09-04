@@ -115,6 +115,36 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
 UNFILTERED_SOURCES = ("csv",)
 
 
+# The trades worth sweeping a masthead's patch for, in the order they are
+# offered. Drawn from the ICP, trimmed to the ones a local paper can sell to.
+TERRITORY_INDUSTRIES = [
+    "mortgage broker", "real estate agent", "accountant", "solicitor",
+    "dentist", "financial planner", "builder", "electrician", "plumber",
+    "physiotherapist", "veterinarian", "car dealer",
+]
+
+
+def territory_step(masthead_site: str, industry: str, *, source_key: str = "google_places",
+                   limit: int = 20, enrich: bool = True) -> dict[str, Any]:
+    """
+    One industry of a masthead's patch.
+
+    A territory is a handful of searches, and doing them inside one request
+    would outlive a hosting proxy several times over. So the unit here is a
+    single industry and the caller loops — which also means the progress a
+    person sees is real rather than a spinner.
+    """
+    location = mastheads.home_location(masthead_site)
+    if not location:
+        raise ValueError("That masthead has no local patch to sweep.")
+    result = run(source_key, {"industry": industry, "location": location,
+                              "limit": limit, "masthead": masthead_site},
+                 enrich=enrich)
+    result["industry"] = industry
+    result["location"] = location
+    return result
+
+
 def meets_rating_floor(record: dict[str, Any], source_key: str = "") -> bool:
     """
     Whether this business clears the Google rating floor.

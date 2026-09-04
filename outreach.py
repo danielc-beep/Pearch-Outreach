@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import anthropic
@@ -30,6 +31,10 @@ from config import (ANTHROPIC_API_KEY, DAILY_SEND_CAP, DRAFT_EFFORT, DRAFT_MODEL
                     RESEND_API_KEY, SEND_ENABLED, SENDER_IDENTITY, UNSUBSCRIBE_URL)
 
 log = logging.getLogger(__name__)
+
+# Modest on purpose: each worker is a model call, and the point is to
+# overlap the waiting, not to open forty conversations at once.
+DRAFT_WORKERS = 4
 
 DEFAULT_CAMPAIGN = {
     "name": "AI visibility — first touch",
@@ -318,12 +323,17 @@ Rules:
     return drafted.subject.strip(), drafted.body.strip()
 
 
-def draft_message(business_id: int, campaign_id: int | None = None,
-                  contact_id: int | None = None, use_ai: bool = True) -> dict[str, Any]:
+def compose(business_id: int, campaign_id: int | None = None,
+            contact_id: int | None = None, use_ai: bool = True) -> dict[str, Any]:
     """
-    Write a draft email for a business and store it. Returns the message row.
+    Everything a draft needs, without touching the database.
 
-    Raises ValueError when there is nobody to write to — a draft with no
+    Split out from draft_message so a batch can do the slow part — a Claude
+    call per business — in parallel and still write serially. SQLite takes
+    one writer at a time, so parallel writes are the one thing worth not
+    doing here.
+
+    Raises ValueError when there is nobody to write to; a draft with no
     recipient is worse than no draft.
     """
     business = db.get_business(business_id)
@@ -355,7 +365,7 @@ def draft_message(business_id: int, campaign_id: int | None = None,
         if generated:
             subject, body = generated
 
-    message_id = db.insert_message({
+    return {
         "business_id": business_id,
         "contact_id": (contact or {}).get("id"),
         "campaign_id": campaign["id"],
@@ -363,9 +373,66 @@ def draft_message(business_id: int, campaign_id: int | None = None,
         "subject": subject,
         "body": body,
         "status": "draft",
-    })
-    db.log_activity(business_id, "drafted", f"Draft written for {to_email}")
+    }
+
+
+def store_draft(payload: dict[str, Any]) -> dict[str, Any]:
+    """Write a composed draft. The only half of drafting that touches the db."""
+    message_id = db.insert_message(payload)
+    db.log_activity(int(payload["business_id"]), "drafted",
+                    f"Draft written for {payload['to_email']}")
     return db.get_message(message_id) or {}
+
+
+def draft_message(business_id: int, campaign_id: int | None = None,
+                  contact_id: int | None = None, use_ai: bool = True) -> dict[str, Any]:
+    """Write a draft email for one business and store it. Returns the message row."""
+    return store_draft(compose(business_id, campaign_id, contact_id, use_ai))
+
+
+def draft_batch(limit: int = 8, use_ai: bool = True,
+                **filters: Any) -> dict[str, Any]:
+    """
+    Draft for a batch of businesses that are waiting for one.
+
+    Batched with a `remaining` count so the caller can loop, the same shape
+    enrichment uses — a hosting proxy will cut off a single request that sits
+    there writing forty emails, and each one is a model call.
+
+    A business that cannot be drafted for (no address, suppressed, marked
+    do-not-contact) is reported and skipped rather than failing the batch.
+    """
+    targets, outstanding = db.list_businesses(needs_review=True, needs_draft=True,
+                                              sort="score", limit=limit, **filters)
+    if not targets:
+        return {"drafted": 0, "skipped": 0, "remaining": 0, "problems": [], "businesses": []}
+
+    def build(business: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | str]:
+        try:
+            return business, compose(int(business["id"]), use_ai=use_ai)
+        except ValueError as e:
+            return business, str(e)
+
+    with ThreadPoolExecutor(max_workers=DRAFT_WORKERS) as pool:
+        composed = list(pool.map(build, targets))
+
+    drafted, problems, written = 0, [], []
+    for business, result in composed:
+        if isinstance(result, str):
+            problems.append(f"{business['name']}: {result}")
+            continue
+        store_draft(result)
+        drafted += 1
+        written.append({"id": business["id"], "name": business["name"]})
+
+    return {
+        "drafted": drafted,
+        "skipped": len(problems),
+        # What is left after this batch, so the caller knows to come back.
+        "remaining": max(0, outstanding - len(targets)),
+        "problems": problems[:10],
+        "businesses": written,
+    }
 
 
 # ---------- Campaigns ----------

@@ -392,6 +392,11 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .is-hidden { display: none !important; }
+/* The hidden attribute is only `display: none` in the UA stylesheet, so any
+   author rule that sets display beats it — .btn is inline-flex, which is how
+   a hidden button stayed on screen. This makes the attribute mean what it
+   says wherever it is used. */
+[hidden] { display: none !important; }
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .right { margin-left: auto; }
 .muted { color: var(--text-muted); }
@@ -407,3 +412,53 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
 @media (max-width: 720px) { .hero-script .script { font-size: 26px; } }
 .hide-sm { display: inline; }
 @media (max-width: 720px) { .hide-sm { display: none; } }
+
+
+/* ---------- Review queue ----------
+   One business on screen at a time, so the card can afford to be big and
+   the actions can afford to be unmissable. */
+.queue-progress { margin: 6px 0 18px; }
+.queue-bar { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; }
+.queue-bar i { display: block; height: 100%; width: 0; background: var(--cyan); border-radius: 999px; transition: width 0.25s ease; }
+kbd {
+  font-family: inherit; font-size: 11px; font-weight: 700; padding: 1px 6px;
+  border-radius: 5px; border: 1px solid var(--border); background: rgba(255,255,255,0.10);
+  color: var(--text); margin-left: 4px;
+}
+.btn-primary kbd { border-color: rgba(0,0,0,0.25); background: rgba(0,0,0,0.14); color: #04121C; }
+
+.queue-card { padding: 26px 28px; }
+.queue-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 24px; }
+.queue-score { text-align: right; flex-shrink: 0; }
+.queue-score .num { font-size: 42px; font-weight: 700; letter-spacing: -0.035em; line-height: 1; color: var(--white); }
+.queue-score .s { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-muted); margin-top: 4px; }
+.queue-grid { display: grid; grid-template-columns: minmax(0,1.7fr) minmax(0,1fr); gap: 28px; align-items: start; }
+@media (max-width: 900px) { .queue-grid { grid-template-columns: 1fr; } }
+.queue-subject { font-weight: 700; font-size: 15px; color: var(--white); margin-bottom: 10px; }
+.queue-draft.is-empty { padding: 22px; border: 1px dashed var(--border); border-radius: 12px; text-align: center; }
+.q-subject-input { width: 100%; margin-bottom: 10px; }
+/* Stuck to the bottom of the viewport, not the bottom of the card. A tall
+   record would otherwise push the three decisions below the fold, and a
+   queue whose actions you have to scroll for is a list again. */
+.queue-actions {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  position: sticky; bottom: 0; z-index: 5;
+  margin: 26px -28px -26px; padding: 16px 28px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: #1A2650;
+}
+
+/* ---------- Territory sweep ---------- */
+.trade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 14px; }
+@media (max-width: 620px) { .trade-grid { grid-template-columns: 1fr 1fr; } }
+.trade { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.trade input { width: auto; }
+.territory-progress { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
+.territory-row {
+  display: flex; align-items: center; gap: 10px; font-size: 13.5px;
+  padding: 7px 0; border-bottom: 1px dashed var(--border);
+}
+.territory-row:last-child { border-bottom: 0; }
+.territory-row .tick { color: var(--success); font-weight: 700; }
+.territory-row .cross { color: var(--danger); font-weight: 700; }

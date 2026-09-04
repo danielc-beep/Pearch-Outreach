@@ -218,6 +218,38 @@ def match(location: str | None, region: str | None = None) -> str:
     return best_site
 
 
+# Where a masthead's first match keyword is not the place you would type into
+# a search. Everything else derives its home town from matches[0], which is
+# the main town in all but these.
+HOME_OVERRIDES = {
+    "illawarramercury.com.au": "Wollongong NSW",
+    "bordermail.com.au": "Albury NSW",          # the state field reads NSW/VIC
+    "dailyadvertiser.com.au": "Wagga Wagga NSW",
+    "greatlakesadvocate.com.au": "Forster NSW",
+}
+
+
+def home_location(site: str | None) -> str:
+    """
+    The place to search when working this masthead's patch.
+
+    Empty for the national and rural titles: they are chosen for the kind of
+    business rather than the town it sits in, so there is no patch to sweep.
+    """
+    title = BY_SITE.get((site or "").strip())
+    if not title or not title["matches"]:
+        return ""
+    if title["site"] in HOME_OVERRIDES:
+        return HOME_OVERRIDES[title["site"]]
+    state = title["state"] if title["state"] not in ("National", "NSW/VIC") else ""
+    return " ".join(x for x in (title["matches"][0].title(), state) if x)
+
+
+def with_a_patch() -> list[dict[str, Any]]:
+    """The mastheads a territory run can sweep — those with a home town."""
+    return [t for t in TITLES if home_location(t["site"])]
+
+
 def options() -> list[dict[str, Any]]:
     """Every masthead, grouped by state, for a picker."""
     groups: dict[str, list[dict[str, Any]]] = {}
