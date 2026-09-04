@@ -35,20 +35,66 @@ DEFAULT_CAMPAIGN = {
     "subject": "{business_name} and Google's AI answers",
     "body": """Hi {first_name},
 
-I had a look at how {business_name} shows up when someone in {suburb} asks
-Google or ChatGPT for a {industry} — the sort of question that used to be a
-search and is now an answer.
+Congratulations on {reviews} —
+that is why we are getting in touch. You are clearly doing good work for
+people in {suburb}, and we would like to put it in front of more of them.
 
-Right now those answers cite a handful of sources, and yours isn't one of
-them. That's fixable, and it's what we do: we get businesses cited inside AI
-answers by publishing credible editorial across the Australian Community
-Media mastheads that AI already trusts.
+Here is the gap. When someone asks Google or ChatGPT for a {industry} in
+{suburb}, the answer cites a handful of sources, and yours isn't one of them.
+That's what we fix: we get businesses cited inside AI answers by publishing
+credible editorial across the Australian Community Media mastheads those
+answers already trust.
 
 Worth a 15-minute call to walk you through what we found for {business_name}?
+
+Places in our content are limited, and if this isn't right for you that is
+completely fine — either way, congratulations on the work you have put in. We
+think it is something that genuinely helps our partners, and it also helps ACM
+produce the trusted content that keeps our communities connected and informed.
 
 {sender_name}
 """,
 }
+
+
+# ---------- Google reviews ----------
+
+# What we are willing to call a high rating in an email. Deliberately well
+# above the ICP's min_rating of 3.5, which is a floor for whether a business
+# is worth prospecting at all — not a standard worth congratulating anyone on.
+PRAISEWORTHY_RATING = 4.3
+PRAISEWORTHY_REVIEWS = 5
+
+
+def review_standing(business: dict[str, Any]) -> dict[str, Any]:
+    """
+    Whether this business's Google reviews can honestly carry the opening.
+
+    Every email opens by congratulating them on their rating, so the one thing
+    that must never happen is congratulating a business that hasn't earned it,
+    or naming a number we don't have. This returns what is true, and the rest
+    of the module writes around it.
+    """
+    rating = business.get("rating")
+    count = int(business.get("review_count") or 0)
+
+    if not rating:
+        return {"praiseworthy": False, "why": "no rating on file",
+                "phrase": "the reputation you have built locally"}
+
+    rating = float(rating)
+    if rating < PRAISEWORTHY_RATING:
+        return {"praiseworthy": False, "why": f"{rating} is below {PRAISEWORTHY_RATING}",
+                "phrase": "the reputation you have built locally"}
+    if count < PRAISEWORTHY_REVIEWS:
+        # A 5.0 from two reviews is not a track record, and saying so out loud
+        # to someone who knows their own review count reads as a form letter.
+        return {"praiseworthy": False, "why": f"only {count} reviews",
+                "phrase": "the reputation you have built locally"}
+
+    stars = f"{rating:g}"
+    return {"praiseworthy": True, "why": "",
+            "phrase": f"your {stars}-star rating from {count} Google reviews"}
 
 
 # ---------- Merge fields ----------
@@ -64,6 +110,7 @@ def merge_fields(business: dict[str, Any], contact: dict[str, Any] | None = None
         "state": business.get("state") or "",
         "industry": (business.get("industry") or "business").lower(),
         "website": business.get("website") or "",
+        "reviews": review_standing(business)["phrase"],
         "sender_name": FROM_NAME,
     }
 
@@ -95,6 +142,8 @@ def _prospect_brief(business: dict[str, Any]) -> str:
     rating = ""
     if business.get("rating"):
         rating = f"{business['rating']} stars from {business.get('review_count') or 0} Google reviews"
+        if not review_standing(business)["praiseworthy"]:
+            rating += " (NOT high enough to congratulate — do not praise it)"
 
     facts = {
         "Business": business.get("name"),
@@ -121,6 +170,24 @@ def _claude_draft(business: dict[str, Any], fields: dict[str, str],
     if not ANTHROPIC_API_KEY:
         return None
 
+    standing = review_standing(business)
+    if standing["praiseworthy"]:
+        rating_rule = (
+            "- Name the star rating and the review count in the first sentence or two.\n"
+            "  It is the reason for the email, so it cannot be a throwaway line."
+        )
+    else:
+        # No rating, a mediocre one, or too few reviews to mean anything.
+        # Praising it anyway would be a lie the recipient can check in one
+        # click, so the opening falls back to something else that is true.
+        rating_rule = (
+            "- EXCEPTION for this business: their Google reviews will not carry that\n"
+            "  opening (" + standing["why"] + "). Do NOT congratulate them on their\n"
+            "  rating and do NOT mention a star rating or review count at all. Open\n"
+            "  instead on their trade and their suburb, and say we are getting in\n"
+            "  touch because of the work they do locally."
+        )
+
     prompt = f"""You write short B2B outreach emails for the AEO team at
 Australian Community Media. ACM gets businesses cited inside AI answers
 (Google AI Overviews, ChatGPT) by publishing credible editorial across its
@@ -141,14 +208,22 @@ Subject: {render_template(campaign['subject'], fields)}
 Rewrite it for this specific business.
 
 Rules:
-- Under 120 words. Australian English. Plain and direct.
-- Open with something concrete and true about them, drawn from the facts
-  above. Their suburb, their trade, their review count, what their site says
-  they do.
+- Under 160 words. Australian English. Plain and direct.
+- OPEN by congratulating them on their Google review rating, and say plainly
+  that their rating is why we are getting in touch — we want to highlight
+  work that is already good. Use the real numbers from the facts above.
+{rating_rule}
 - Never invent a fact, a number, a result, or a claim about their current AI
   visibility. If you would need a fact we have not given you, write around it.
 - No "I hope this email finds you well", no hype, no em-dash-heavy prose.
 - One ask: a 15-minute call.
+- CLOSE, before the sign-off, with a short paragraph in your own words that
+  makes these four points, in this order and in this spirit: places in our
+  content are limited; if this isn't right for them that is completely fine;
+  either way we congratulate them on their hard work; and taking part helps
+  our partners while also helping ACM produce the trusted content that keeps
+  our communities connected and informed. Keep it warm and unpushy — it is a
+  genuine no-pressure note, not a scarcity tactic.
 - Sign off as {FROM_NAME}."""
 
     try:
