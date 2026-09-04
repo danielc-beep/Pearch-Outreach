@@ -61,8 +61,12 @@ def _credentials_ok(header: str) -> bool:
         return False
     username, _, password = decoded.partition(":")
     username, password = username.strip(), password.strip()
-    # Check both halves so a wrong username costs the same time as a wrong password.
-    return (secrets.compare_digest(username, APP_USERNAME)
+    # The username is matched case-insensitively: it is not the secret, and a
+    # colleague typing "acm" should not be locked out of a login they were
+    # given as "ACM". The password is matched exactly.
+    # Both halves are always checked, so a wrong username costs the same time
+    # as a wrong password.
+    return (secrets.compare_digest(username.lower(), APP_USERNAME.lower())
             & secrets.compare_digest(password, APP_PASSWORD))
 
 

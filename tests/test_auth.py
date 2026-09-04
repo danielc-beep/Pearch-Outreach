@@ -60,13 +60,13 @@ def test_with_a_password_the_app_challenges(monkeypatch):
 def test_with_a_password_correct_credentials_get_in(monkeypatch):
     c = _client(monkeypatch, "s3cret")
     response = c.get("/", headers={"host": "pearch-outreach.onrender.com",
-                                   **_basic("pearch", "s3cret")})
+                                   **_basic("ACM", "s3cret")})
     assert response.status_code == 200
 
 
 def test_wrong_password_is_rejected(monkeypatch):
     c = _client(monkeypatch, "s3cret")
-    for creds in (_basic("pearch", "wrong"), _basic("nope", "s3cret")):
+    for creds in (_basic("ACM", "wrong"), _basic("nope", "s3cret")):
         response = c.get("/", headers={"host": "pearch-outreach.onrender.com", **creds})
         assert response.status_code == 401
 
@@ -79,12 +79,43 @@ def test_a_password_still_leaves_unsubscribe_open(monkeypatch):
 def test_a_password_pasted_with_stray_whitespace_still_works(monkeypatch):
     """Hosting dashboards use textareas; a trailing newline must not lock you out."""
     c = _client(monkeypatch, "  s3cret\n")
-    response = c.get("/", headers={"host": "x.onrender.com", **_basic("pearch", "s3cret")})
+    response = c.get("/", headers={"host": "x.onrender.com", **_basic("ACM", "s3cret")})
     assert response.status_code == 200
 
 
 def test_credentials_typed_with_stray_whitespace_still_work(monkeypatch):
     """A password autofilled or pasted with a trailing space must still sign in."""
     c = _client(monkeypatch, "s3cret")
-    response = c.get("/", headers={"host": "x.onrender.com", **_basic(" pearch ", "s3cret ")})
+    response = c.get("/", headers={"host": "x.onrender.com", **_basic(" ACM ", "s3cret ")})
     assert response.status_code == 200
+
+
+def test_the_default_username_is_acm(monkeypatch):
+    from config import APP_USERNAME
+    assert APP_USERNAME == "ACM"
+
+
+def test_the_username_is_matched_case_insensitively(monkeypatch):
+    """It is half a shared login the team types, not the secret."""
+    c = _client(monkeypatch, "s3cret")
+    for typed in ("ACM", "acm", "Acm"):
+        response = c.get("/", headers={"host": "x.onrender.com",
+                                       **_basic(typed, "s3cret")})
+        assert response.status_code == 200, typed
+
+
+def test_the_password_is_still_matched_exactly(monkeypatch):
+    c = _client(monkeypatch, "ACM2026")
+    ok = c.get("/", headers={"host": "x.onrender.com", **_basic("ACM", "ACM2026")})
+    assert ok.status_code == 200
+    for wrong in ("acm2026", "ACM2026 x", "Acm2026"):
+        response = c.get("/", headers={"host": "x.onrender.com", **_basic("ACM", wrong)})
+        assert response.status_code == 401, wrong
+
+
+def test_no_password_ships_in_the_code():
+    """The repository is public; a default password would publish it."""
+    import config, inspect
+    source = inspect.getsource(config)
+    assert 'os.getenv("PEARCH_PASSWORD", "")' in source
+    assert "ACM2026" not in source

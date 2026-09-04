@@ -57,7 +57,7 @@ required; each key just switches on more of the app.
 
 One shared password (HTTP Basic) protects the whole app, which is the right
 amount of ceremony for a few colleagues sharing a link. Set `PEARCH_PASSWORD`
-and everyone signs in as `pearch` with that password.
+and everyone signs in as `ACM` with that password.
 
 With no password set, the app serves `localhost` freely — but **refuses to
 serve any other host**, showing a "locked" page instead. A deployment that

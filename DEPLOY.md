@@ -68,7 +68,7 @@ Still on the create screen (or afterwards under **Settings → Disks**):
 | --- | --- | --- |
 | `PEARCH_DB_PATH` | `/var/data/pearch_outreach.db` | Puts the database on the disk so it survives deploys |
 | `PEARCH_PASSWORD` | *the password you chose* | **Required.** The shared sign-in password |
-| `PEARCH_USERNAME` | `pearch` | The username everyone signs in with |
+| `PEARCH_USERNAME` | `ACM` | The username everyone signs in with |
 | `PYTHON_VERSION` | `3.11` | Pins the runtime |
 
 Leave the rest for now — the app works without them.
@@ -76,7 +76,7 @@ Leave the rest for now — the app works without them.
 ### 5. Deploy
 
 Click **Create Web Service**. First build takes 2–3 minutes. When it goes
-live, open the URL: the browser asks for a username and password — `pearch`
+live, open the URL: the browser asks for a username and password — `ACM`
 and the password from step 4.
 
 You'll land on the dashboard with an empty database. Type an industry and a
@@ -112,7 +112,7 @@ If you've already deployed via Path A, you don't need to start over: change
 Send colleagues three things:
 
 1. the Render URL
-2. the username (`pearch`)
+2. the username (`ACM`)
 3. the password
 
 Everyone shares one login, so treat the password like a door key — anyone
