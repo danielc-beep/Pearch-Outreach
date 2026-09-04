@@ -1,6 +1,6 @@
 """The site chrome: the ACM lockup and the light field on every page."""
 
-PAGES = ("/", "/businesses", "/prospect", "/campaigns", "/outbox", "/suppressions")
+PAGES = ("/", "/businesses", "/prospect", "/crm", "/outbox", "/suppressions")
 
 
 def test_the_acm_mark_is_the_logo_on_every_page(client):

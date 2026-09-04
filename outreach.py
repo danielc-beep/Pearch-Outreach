@@ -456,11 +456,31 @@ def draft_batch(limit: int = 8, use_ai: bool = True,
 # ---------- Campaigns ----------
 
 def default_campaign() -> dict[str, Any]:
-    """The first campaign, created on demand so a fresh install has one."""
+    """
+    The campaign every draft starts from, kept in step with the code.
+
+    The row exists because messages carry a campaign_id, but DEFAULT_CAMPAIGN
+    above is the source of truth for the words. That is not how it worked
+    before, and the difference mattered: the wording was rewritten in the code
+    and every draft carried on using the copy stored on the first run, because
+    nothing ever wrote the new text back. There is no template editor now, so
+    there is no edit of anyone's to overwrite — the stored row simply follows
+    the repository.
+    """
     conn = db.get_conn()
     row = conn.execute("SELECT * FROM campaigns ORDER BY id LIMIT 1").fetchone()
     if row:
-        return dict(row)
+        stale = (row["subject"] != DEFAULT_CAMPAIGN["subject"]
+                 or row["body"] != DEFAULT_CAMPAIGN["body"])
+        if not stale:
+            return dict(row)
+        with db.tx() as c:
+            c.execute("UPDATE campaigns SET name = ?, subject = ?, body = ? WHERE id = ?",
+                      (DEFAULT_CAMPAIGN["name"], DEFAULT_CAMPAIGN["subject"],
+                       DEFAULT_CAMPAIGN["body"], row["id"]))
+        log.info("campaign %s refreshed from the code template", row["id"])
+        return dict(conn.execute("SELECT * FROM campaigns WHERE id = ?",
+                                 (row["id"],)).fetchone())
     with db.tx() as c:
         cur = c.execute(
             "INSERT INTO campaigns (created_at, name, subject, body, status) "

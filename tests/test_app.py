@@ -1,6 +1,6 @@
 def test_every_page_renders(client, sample_run):
     business_id = client.get("/api/businesses").json()["businesses"][0]["id"]
-    for path in ("/", "/businesses", "/prospect", "/campaigns", "/outbox",
+    for path in ("/", "/businesses", "/prospect", "/crm", "/outbox",
                  "/suppressions", "/unsubscribe", "/health",
                  f"/businesses/{business_id}", f"/prospect?run={sample_run['run_id']}"):
         response = client.get(path)

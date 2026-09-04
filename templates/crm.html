@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Pipeline</div>
+        <h2>Where everything is <em>sitting</em></h2>
+        <p class="lede">Every business in the database, by the stage it has reached.
+          Click a stage to open it and move things along.</p>
+      </div>
+      <a class="btn" href="/businesses">Open the database</a>
+    </div>
+
+    {% if chart.total %}
+    <div class="crm-top">
+      <figure class="crm-figure">
+        <svg viewBox="0 0 {{ chart.size }} {{ chart.size }}" class="crm-donut"
+             role="img" aria-label="Businesses by pipeline stage">
+          <title>Businesses by pipeline stage</title>
+          {% for s in chart.stages %}
+            {% if s.path == 'ring' %}
+            <circle cx="{{ chart.centre }}" cy="{{ chart.centre }}"
+                    r="{{ (chart.outer + chart.inner) / 2 }}" fill="none"
+                    stroke="{{ s.colour }}" stroke-width="{{ chart.outer - chart.inner }}"
+                    class="crm-seg" data-stage="{{ s.key }}" />
+            {% elif s.path %}
+            <a href="/crm?stage={{ s.key }}" aria-label="{{ s.label }}: {{ s.count }} businesses">
+              <path d="{{ s.path }}" fill="{{ s.colour }}" class="crm-seg"
+                    data-stage="{{ s.key }}" data-label="{{ s.label }}"
+                    data-count="{{ s.count }}" data-pct="{{ '%.1f'|format(s.pct) }}" />
+            </a>
+            {% endif %}
+          {% endfor %}
+          <text x="{{ chart.centre }}" y="{{ chart.centre - 4 }}" class="crm-total">{{ chart.total }}</text>
+          <text x="{{ chart.centre }}" y="{{ chart.centre + 18 }}" class="crm-total-label">businesses</text>
+        </svg>
+        <div class="crm-tip" id="crm-tip" hidden></div>
+      </figure>
+
+      <ol class="crm-legend">
+        {% for s in chart.stages %}
+        <li class="crm-legend-row {{ 'is-empty' if not s.count }} {{ 'is-picked' if picked and picked.key == s.key }}">
+          <a href="/crm?stage={{ s.key }}" class="crm-legend-link" data-stage="{{ s.key }}">
+            <span class="crm-swatch" style="background:{{ s.colour }}"></span>
+            <span class="crm-legend-name">{{ s.label }}</span>
+            <span class="crm-legend-count">{{ s.count }}</span>
+            <span class="crm-legend-pct">{{ '%.0f'|format(s.pct) }}%</span>
+          </a>
+          <p class="crm-legend-blurb">{{ s.blurb }}</p>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% else %}
+    <div class="card">
+      <h3>Nothing in the pipeline yet</h3>
+      <p class="muted" style="margin:0 0 16px">Sweep a masthead's patch and it fills
+        in a couple of minutes. Everything found starts at New.</p>
+      <a class="btn btn-primary" href="/prospect">Find businesses</a>
+    </div>
+    {% endif %}
+  </section>
+
+  {% if picked %}
+  <section class="section" id="stage" style="margin-top:8px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow"><span class="crm-swatch" style="background:{{ picked.colour }}"></span>
+          {{ picked.label }}</div>
+        <h2>{{ total_at_stage }} at {{ picked.label|lower }}</h2>
+        <p class="lede">{{ picked.blurb }}</p>
+      </div>
+      <a class="btn" href="/crm">Back to the whole pipeline</a>
+    </div>
+
+    <div id="flash"></div>
+
+    {% if businesses %}
+    <p class="muted small" style="margin:0 0 14px">
+      {% if total_at_stage > businesses|length %}Showing the {{ businesses|length }}
+      highest-scoring of {{ total_at_stage }}.{% else %}Sorted by fit.{% endif %}
+    </p>
+    <div class="address-list">
+      {% for b in businesses %}
+      <div class="address-row crm-row" data-id="{{ b.id }}">
+        <div class="address-who">
+          <div class="address-name"><a href="/businesses/{{ b.id }}">{{ b.name }}</a></div>
+          <div class="muted small">
+            {{ b.industry or b.category or '—' }} · {{ b.suburb or b.region or '—' }}
+            {% if b.rating %} · {{ b.rating }}★{% endif %}
+            · fit {{ b.fit_score }}
+            {% if b.masthead %} · {{ masthead_name(b.masthead)|masthead_label }}{% endif %}
+          </div>
+        </div>
+        <div class="crm-move">
+          {% if picked.next %}
+          <button class="btn btn-sm btn-primary js-next" data-to="{{ picked.next }}"
+                  data-to-label="{{ picked.next_label }}">Move to {{ picked.next_label }}</button>
+          {% endif %}
+          <select class="js-stage" aria-label="Stage for {{ b.name }}">
+            {% for s in stages %}
+            <option value="{{ s.key }}" {{ 'selected' if s.key == picked.key }}>{{ s.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+      <h3>Nothing at this stage</h3>
+      <p class="muted" style="margin:0">Which is either good news or a gap, depending
+        on which stage it is.</p>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // ---- The donut's hover layer ----
+  const tip = document.getElementById('crm-tip');
+  if (tip) {
+    document.querySelectorAll('.crm-seg[data-label]').forEach((seg) => {
+      seg.addEventListener('mousemove', (e) => {
+        const box = seg.closest('.crm-figure').getBoundingClientRect();
+        tip.textContent = seg.dataset.label + ' · ' + seg.dataset.count +
+                          ' (' + seg.dataset.pct + '%)';
+        tip.style.left = (e.clientX - box.left) + 'px';
+        tip.style.top = (e.clientY - box.top) + 'px';
+        tip.hidden = false;
+      });
+      seg.addEventListener('mouseleave', () => { tip.hidden = true; });
+    });
+  }
+
+  // Hovering a legend row lifts its segment, and the other way about, so the
+  // two halves read as one thing rather than a chart with a list beside it.
+  function link(stage, on) {
+    document.querySelectorAll('[data-stage="' + stage + '"]').forEach((el) => {
+      el.classList.toggle('is-lit', on);
+    });
+  }
+  document.querySelectorAll('[data-stage]').forEach((el) => {
+    el.addEventListener('mouseenter', () => link(el.dataset.stage, true));
+    el.addEventListener('mouseleave', () => link(el.dataset.stage, false));
+  });
+
+  // ---- Moving a business along ----
+  const flashEl = document.getElementById('flash');
+  if (!flashEl) return;
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function flash(message, kind) {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + esc(message) + '</div>';
+    window.setTimeout(() => { flashEl.innerHTML = ''; }, 3500);
+  }
+
+  async function moveTo(row, stage, label) {
+    const name = row.querySelector('.address-name').textContent.trim();
+    await window.postJSON('/api/crm/' + row.dataset.id + '/stage', {stage: stage});
+    row.classList.add('is-done');
+    flash(name + ' moved to ' + label + '.', 'ok');
+    // The count in the heading is now wrong, and a stale number on a page
+    // about where things are is worse than a reload.
+    window.setTimeout(() => {
+      row.remove();
+      if (!document.querySelector('.crm-row')) window.location.reload();
+    }, 400);
+  }
+
+  document.querySelectorAll('.crm-row').forEach((row) => {
+    const next = row.querySelector('.js-next');
+    const select = row.querySelector('.js-stage');
+    if (next) {
+      next.addEventListener('click', async () => {
+        next.disabled = true;
+        try { await moveTo(row, next.dataset.to, next.dataset.toLabel); }
+        catch (err) { flash(err.message, 'error'); next.disabled = false; }
+      });
+    }
+    select.addEventListener('change', async () => {
+      const label = select.options[select.selectedIndex].text;
+      try { await moveTo(row, select.value, label); }
+      catch (err) { flash(err.message, 'error'); }
+    });
+  });
+})();
+</script>
+{% endblock %}

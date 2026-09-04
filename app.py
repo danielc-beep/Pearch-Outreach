@@ -33,6 +33,7 @@ import prospect
 import review
 import worklist
 import backup
+import crm
 import sources
 import auth
 from auth import PasswordMiddleware
@@ -443,34 +444,42 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
     )
 
 
-@app.get("/campaigns", response_class=HTMLResponse)
-def campaigns_page(request: Request, id: int | None = None) -> HTMLResponse:
-    all_campaigns = outreach.list_campaigns()
-    current = outreach.get_campaign(id) if id else outreach.default_campaign()
-    sample, _ = db.list_businesses(sort="score", limit=1)
-    preview_business = sample[0] if sample else None
-    fields = outreach.merge_fields(preview_business or {"name": "Acme Pty Ltd"})
+@app.get("/crm", response_class=HTMLResponse)
+def crm_page(request: Request, stage: str = "", masthead: str = "") -> HTMLResponse:
+    """
+    The whole book of work in one shape, and a way into any part of it.
+
+    Picking a stage is a link rather than a script, so the drill-through
+    survives a reload, can be shared, and works before the JavaScript does.
+    """
+    picked = crm.get(stage) if stage else None
+    businesses: list[dict[str, Any]] = []
+    total_at_stage = 0
+    if picked:
+        businesses, total_at_stage = db.list_businesses(
+            status=picked["key"], masthead=masthead, sort="score", limit=100)
     return page(
-        request, "campaigns.html",
-        nav="campaigns",
-        campaigns=all_campaigns,
-        current=current,
-        preview_business=preview_business,
-        merge_fields=sorted(fields),
-        preview={
-            "subject": outreach.render_template(current["subject"], fields),
-            "body": outreach.render_template(current["body"], fields),
-            "footer": outreach._footer("someone@example.com.au", str(request.base_url)),
-        },
+        request, "crm.html",
+        nav="crm",
+        chart=crm.overview(),
+        stages=crm.STAGES,
+        picked=picked,
+        businesses=businesses,
+        total_at_stage=total_at_stage,
+        f={"masthead": masthead},
     )
 
 
-@app.post("/campaigns")
-def save_campaign(name: str = Form(...), subject: str = Form(...), body: str = Form(...),
-                  campaign_id: int = Form(0), save_as_new: str = Form("")) -> RedirectResponse:
-    saved = outreach.save_campaign(name, subject, body,
-                                   None if save_as_new else (campaign_id or None))
-    return RedirectResponse(f"/campaigns?id={saved['id']}", status_code=303)
+class StageMove(BaseModel):
+    stage: str
+
+
+@app.post("/api/crm/{business_id}/stage")
+def api_move_stage(business_id: int, move: StageMove) -> JSONResponse:
+    try:
+        return JSONResponse(crm.move(business_id, move.stage))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/outbox", response_class=HTMLResponse)
