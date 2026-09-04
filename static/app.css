@@ -469,6 +469,24 @@ kbd {
 .trade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 14px; }
 @media (max-width: 620px) { .trade-grid { grid-template-columns: 1fr 1fr; } }
 .trade { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
+.trade-group + .trade-group { margin-top: 14px; }
+.trade-group-head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 5px; margin-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.trade-group-name {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--cyan-soft);
+}
+/* A button that behaves like a link: this is a control, not navigation, so it
+   has to be a button for the keyboard and a link for the eye. */
+.linkish {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 11.5px; color: var(--cyan-bright);
+  text-decoration: underline; text-underline-offset: 2px;
+}
+.linkish:hover { color: var(--cyan-soft); }
 .trade input { width: auto; }
 .territory-progress { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
 .territory-row {

@@ -437,7 +437,8 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
         results_html=Markup(results_html),
         patches=mastheads.with_a_patch(),
         home_location=mastheads.home_location,
-        territory_industries=prospect.TERRITORY_INDUSTRIES,
+        territory_groups=[{"name": name, "trades": trades}
+                          for name, trades in prospect.TERRITORY_GROUPS],
         live_prospecting=any(s.available and s.key != "csv" and s.key != "sample" for s in infos),
     )
 

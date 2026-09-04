@@ -116,13 +116,42 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
 UNFILTERED_SOURCES = ("csv",)
 
 
-# The trades worth sweeping a masthead's patch for, in the order they are
-# offered. Drawn from the ICP, trimmed to the ones a local paper can sell to.
-TERRITORY_INDUSTRIES = [
-    "mortgage broker", "real estate agent", "accountant", "solicitor",
-    "dentist", "financial planner", "builder", "electrician", "plumber",
-    "physiotherapist", "veterinarian", "car dealer",
+# The trades worth sweeping a masthead's patch for, grouped so that forty of
+# them stay readable. Drawn from the ICP and from what a regional paper
+# actually sells to: local services people choose deliberately, compare before
+# choosing, and leave Google reviews about — which is the same list as the
+# businesses an AI Overview has reason to name.
+TERRITORY_GROUPS: list[tuple[str, list[str]]] = [
+    ("Property and finance", [
+        "mortgage broker", "real estate agent", "accountant", "solicitor",
+        "financial planner", "conveyancer", "insurance broker",
+    ]),
+    ("Health", [
+        "dentist", "physiotherapist", "chiropractor", "optometrist",
+        "podiatrist", "psychologist", "orthodontist", "medical centre",
+        "veterinarian",
+    ]),
+    ("Care and education", [
+        "aged care home", "disability support provider", "childcare centre",
+        "driving school",
+    ]),
+    ("Building and trades", [
+        "builder", "electrician", "plumber", "carpenter", "roofing contractor",
+        "concreter", "painter and decorator", "air conditioning installer",
+        "solar installer",
+    ]),
+    ("Home and outdoors", [
+        "landscaper", "fencing contractor", "cabinet maker",
+    ]),
+    ("Automotive", [
+        "car dealer", "mechanic", "panel beater", "caravan dealer",
+    ]),
+    ("Other local business", [
+        "pest control", "removalist", "funeral director", "rural supplies store",
+    ]),
 ]
+
+TERRITORY_INDUSTRIES = [trade for _, trades in TERRITORY_GROUPS for trade in trades]
 
 
 def territory_step(masthead_site: str, industry: str, *, source_key: str = "google_places",

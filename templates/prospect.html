@@ -42,15 +42,29 @@
       </div>
 
       <div class="field-block">
-        <label>Trades <span class="muted small" id="tr-count"></span></label>
-        <div class="trade-grid" id="tr-trades">
-          {% for industry in territory_industries %}
-          <label class="trade">
-            <input type="checkbox" value="{{ industry }}" {{ 'checked' if loop.index <= 4 }} />
-            <span>{{ industry }}</span>
-          </label>
+        <label>Trades <span class="muted small" id="tr-count"></span>
+          <button type="button" class="linkish" id="tr-none">clear</button></label>
+        <div id="tr-trades">
+          {% for group in territory_groups %}
+          <div class="trade-group">
+            <div class="trade-group-head">
+              <span class="trade-group-name">{{ group.name }}</span>
+              <button type="button" class="linkish js-group-all" data-group="{{ loop.index }}">all</button>
+            </div>
+            <div class="trade-grid">
+              {% for industry in group.trades %}
+              <label class="trade">
+                <input type="checkbox" value="{{ industry }}" data-group="{{ loop.index0 }}"
+                       {{ 'checked' if loop.index <= 4 and group.name == 'Property and finance' }} />
+                <span>{{ industry }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
           {% endfor %}
         </div>
+        <p class="help" style="margin:10px 0 0">One Google search per trade, so
+          forty ticked is forty searches — pick the ones this paper actually sells to.</p>
       </div>
 
       <div class="row">
@@ -191,6 +205,29 @@
       go.disabled = n === 0;
     }
     document.getElementById('tr-trades').addEventListener('change', updateCount);
+
+    // Ticking a whole group at once, because forty boxes one at a time is a
+    // chore nobody finishes. "all" becomes "none" once the group is full.
+    document.querySelectorAll('.js-group-all').forEach((btn) => {
+      const grid = btn.closest('.trade-group').querySelector('.trade-grid');
+      const inputs = () => [...grid.querySelectorAll('input')];
+      const sync = () => {
+        btn.textContent = inputs().every((i) => i.checked) ? 'none' : 'all';
+      };
+      btn.addEventListener('click', () => {
+        const turnOn = inputs().some((i) => !i.checked);
+        inputs().forEach((i) => { i.checked = turnOn; });
+        sync(); updateCount();
+      });
+      grid.addEventListener('change', sync);
+      sync();
+    });
+
+    document.getElementById('tr-none').addEventListener('click', () => {
+      document.querySelectorAll('#tr-trades input').forEach((i) => { i.checked = false; });
+      document.querySelectorAll('.js-group-all').forEach((b) => { b.textContent = 'all'; });
+      updateCount();
+    });
     updateCount();
 
     go.addEventListener('click', async () => {

@@ -113,12 +113,40 @@ DAILY_SEND_CAP = int(os.getenv("PEARCH_DAILY_SEND_CAP", "50"))
 # Drives scoring.py. Tune these to change what "qualified" means without
 # touching the scoring logic.
 ICP = {
-    # Industries we sell into best, highest-value first.
+    # Industries we sell into best.
+    #
+    # These are matched as substrings against whatever the source calls the
+    # business ("Electrician", "Panel beater"), so they have to be the stems
+    # that actually appear in a category, not the tidy family name. That is a
+    # trap worth naming: "building" does not match "Builder", "accounting"
+    # does not match "Accountant", and "dental" does not match "Dentist" —
+    # so a list of family names silently scored ten of our twelve sweep
+    # trades at zero on industry fit. Every trade in
+    # prospect.TERRITORY_INDUSTRIES has to match something here, and a test
+    # holds that.
     "industries": [
-        "real estate", "home loans", "mortgage broker", "legal", "law firm",
-        "accounting", "financial planning", "dental", "medical", "aged care",
-        "trades", "building", "construction", "automotive", "hospitality",
-        "tourism", "education", "retail", "agriculture", "mining services",
+        # Property and finance
+        "real estate", "property manage", "mortgage", "home loan",
+        "financial plann", "insurance", "accountant", "accounting",
+        "bookkeep", "conveyanc", "solicitor", "lawyer", "legal", "law firm",
+        # Health
+        "dentist", "dental", "orthodont", "physio", "chiroprac", "optometr",
+        "optical", "podiat", "psycholog", "medical", "doctor", "audiolog",
+        "veterinar",
+        # Care and education
+        "aged care", "nursing home", "retirement living", "disability", "ndis",
+        "childcare", "child care", "early learning", "driving school",
+        "education", "tutor",
+        # Building and trades
+        "builder", "building", "construction", "electric", "plumb", "carpent",
+        "roof", "concret", "paint", "air conditioning", "solar", "landscap",
+        "fencing", "cabinet", "pest control", "removal", "trades",
+        # Automotive
+        "automotive", "car dealer", "mechanic", "auto repair", "panel beat",
+        "smash repair", "tyre", "caravan",
+        # Other local business
+        "funeral", "rural supplies", "farm supplies", "agricultur",
+        "mining services", "hospitality", "tourism", "retail",
     ],
     # ACM heartland — regional Australia is where our mastheads are.
     "regions": [
