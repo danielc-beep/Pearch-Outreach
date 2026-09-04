@@ -626,6 +626,19 @@ def preflight(message: dict[str, Any]) -> list[str]:
     business = db.get_business(int(message["business_id"])) if message.get("business_id") else None
     if business and business.get("do_not_contact"):
         problems.append(f"{business['name']} is marked do-not-contact.")
+    if business and MIN_PROSPECT_RATING > 0:
+        # The last gate on the rating floor, and the one that matters: every
+        # other check happens before a person changes their mind. The email
+        # opens by congratulating them on their Google rating, so sending it
+        # to a business rated below the floor — or to one with no rating at
+        # all — is a letter praising a number that does not support it.
+        rating = business.get("rating")
+        if rating is None:
+            problems.append(f"{business['name']} has no Google rating, so it cannot "
+                            f"clear the {MIN_PROSPECT_RATING:.0f}-star floor.")
+        elif float(rating) < MIN_PROSPECT_RATING:
+            problems.append(f"{business['name']} is rated {float(rating):.1f}, under "
+                            f"the {MIN_PROSPECT_RATING:.0f}-star floor.")
     if db.sends_today() >= DAILY_SEND_CAP:
         problems.append(f"Daily send cap of {DAILY_SEND_CAP} reached.")
     return problems

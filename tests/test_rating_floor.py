@@ -89,3 +89,69 @@ def test_a_blank_rating_box_is_not_a_filter(client):
     # An untouched number box submits "", which must mean "no filter".
     assert client.get("/businesses?min_rating=").status_code == 200
     assert db.list_businesses(min_rating=0.0, limit=99)[1] == 4
+
+
+# ---------- The floor at the two gates that come after prospecting ----------
+# Filtering at discovery is not the same as enforcing the rule. A CSV import
+# is exempt by design, and rows that predate the floor are still in the
+# database, so both later gates check it for themselves.
+
+def _seed_contactable():
+    """A spread that is otherwise ready to be reviewed and emailed."""
+    ids = {}
+    for name, rating in (("Five Star Plumbing", 4.8), ("Solid Sparkies", 4.0),
+                         ("Just Under Co", 3.9), ("No Rating Listed", None)):
+        business_id, _ = db.upsert_business({
+            "name": name, "industry": "Trades", "suburb": "Newcastle",
+            "rating": rating, "review_count": 40, "source": "csv",
+            "email": f"hello@{name.split()[0].lower()}.com.au",
+            "website": f"https://{name.split()[0].lower()}.com.au",
+        })
+        ids[name] = business_id
+    return ids
+
+
+def test_the_review_queue_leaves_out_anything_under_the_floor(client):
+    import review
+    _seed_contactable()
+    queued = {db.get_business(i)["name"] for i in review.queue_ids()}
+    assert queued == {"Five Star Plumbing", "Solid Sparkies"}
+
+
+def test_a_bulk_draft_run_will_not_write_to_them(client):
+    import outreach
+    _seed_contactable()
+    result = outreach.draft_batch(limit=10, use_ai=False)
+    written = {b["name"] for b in result["businesses"]}
+    assert "Just Under Co" not in written
+    assert "No Rating Listed" not in written
+    assert "Five Star Plumbing" in written
+
+
+def test_a_csv_import_still_lands_but_cannot_be_emailed(client):
+    """
+    The exemption at import is deliberate — a list someone chose should not be
+    silently thrown away — so the send gate is what holds the line.
+    """
+    import outreach
+    ids = _seed_contactable()
+    assert db.get_business(ids["Just Under Co"])          # it is in the database
+    message = outreach.draft_message(ids["Just Under Co"], use_ai=False)
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert any("rated 3.9" in p and "4-star floor" in p for p in problems), problems
+
+
+def test_an_unrated_business_cannot_be_emailed_either(client):
+    import outreach
+    ids = _seed_contactable()
+    message = outreach.draft_message(ids["No Rating Listed"], use_ai=False)
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert any("no Google rating" in p for p in problems), problems
+
+
+def test_a_business_on_the_floor_exactly_is_clear_of_it(client):
+    import outreach
+    ids = _seed_contactable()
+    message = outreach.draft_message(ids["Solid Sparkies"], use_ai=False)
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert not any("floor" in p for p in problems), problems

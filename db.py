@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Iterator
 
-from config import DB_PATH
+from config import DB_PATH, MIN_PROSPECT_RATING
 
 _local = threading.local()
 
@@ -636,6 +636,15 @@ def list_businesses(
         # The review queue: everyone still awaiting a decision. Contactable,
         # not settled either way, and without a draft already approved or
         # sent — approving is what takes a business out of the queue.
+        #
+        # And at or above the rating floor. Discovery already filters on it,
+        # but a CSV import does not, and rows that predate the floor are still
+        # in the database — so the queue enforces it too rather than assuming
+        # everything upstream did. An unrated business fails it: the email
+        # opens by congratulating them on a number we would not have.
+        if MIN_PROSPECT_RATING > 0:
+            where.append("rating IS NOT NULL AND rating >= ?")
+            args.append(MIN_PROSPECT_RATING)
         where.append("email IS NOT NULL AND email != ''")
         where.append("do_not_contact = 0")
         where.append("status NOT IN ('contacted','replied','won','lost','disqualified')")
