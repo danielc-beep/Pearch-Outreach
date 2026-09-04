@@ -31,9 +31,11 @@ def test_the_named_alignments():
         assert mastheads.name_for(mastheads.match(location)) == expected, location
 
 
-def test_every_title_on_the_rate_card_is_here():
-    assert len(mastheads.TITLES) == 79
-    assert len({t["site"] for t in mastheads.TITLES}) == 79
+def test_every_title_we_pitch_from_is_here():
+    # 79 on the 2026 rate card, less the Bunbury Mail, which we do not pitch.
+    assert len(mastheads.TITLES) == 78
+    assert len({t["site"] for t in mastheads.TITLES}) == 78
+    assert "bunburymail.com.au" not in mastheads.BY_SITE
     for title in mastheads.TITLES:
         assert title["name"].strip()
         assert title["site"].endswith((".com.au", ".net.au"))
@@ -67,7 +69,7 @@ def test_matching_is_case_and_order_insensitive():
 def test_the_picker_groups_by_state():
     groups = mastheads.options()
     assert [g["state"] for g in groups][:2] == ["NSW", "ACT"]
-    assert sum(len(g["titles"]) for g in groups) == 79
+    assert sum(len(g["titles"]) for g in groups) == 78
 
 
 # ---------- Prospecting stamps it ----------

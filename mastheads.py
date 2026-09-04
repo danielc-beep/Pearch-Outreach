@@ -159,8 +159,6 @@ TITLES: list[dict[str, Any]] = [
     {"site": "therural.com.au", "name": "The Rural", "state": "NSW", "matches": []},
     {"site": "katherinetimes.com.au", "name": "the Katherine Times", "state": "NT",
      "matches": ["katherine", "northern territory", "nt"]},
-    {"site": "bunburymail.com.au", "name": "the Bunbury Mail", "state": "WA",
-     "matches": ["bunbury", "busselton", "south west wa"]},
     {"site": "hepburnadvocate.com.au", "name": "the Hepburn Advocate", "state": "VIC",
      "matches": ["hepburn", "daylesford", "clunes"]},
 
