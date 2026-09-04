@@ -36,8 +36,8 @@ import backup
 import sources
 import auth
 from auth import PasswordMiddleware
-from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, DB_PATH,
-                    DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
+from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, APP_USERNAME,
+                    DB_PATH, DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
 
@@ -468,8 +468,12 @@ def _https(request: Request) -> bool:
 def login_page(request: Request, next: str = "") -> HTMLResponse:
     if auth.token_ok(request.cookies.get(auth.COOKIE, "")):
         return RedirectResponse(auth.safe_next(next), status_code=303)
+    # The username field arrives filled in. It is a shared login on one link,
+    # the password is the secret, and the half that is not secret should never
+    # be the half that goes wrong.
     return templates.TemplateResponse(
-        request, "login.html", {"next_token": next, "error": "", "username": ""})
+        request, "login.html",
+        {"next_token": next, "error": "", "username": APP_USERNAME})
 
 
 @app.post("/login")
@@ -580,6 +584,9 @@ def health() -> dict[str, Any]:
     """
     return {
         "status": "ok",
+        # Which build is actually running, so "did my deploy land?" has an
+        # answer that does not depend on reading the dashboard correctly.
+        "commit": os.getenv("RENDER_GIT_COMMIT", "")[:7],
         "businesses": db.stats()["total"],
         "sources": {s.key: s.available for s in sources.all_sources()},
         "configured": {

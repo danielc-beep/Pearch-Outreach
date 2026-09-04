@@ -25,8 +25,11 @@ services:
         value: "3.12"
       - key: PEARCH_DB_PATH
         value: /var/data/pearch_outreach.db
+      # Optional: an extra name that also signs in. "Daniel" is built into the
+      # app and always works, so leaving this unset is fine — and a stale value
+      # here can no longer stop the built-in name from working.
       - key: PEARCH_USERNAME
-        value: pearch
+        value: Daniel
       - key: PEARCH_SEND_ENABLED
         value: "0"
       - key: PEARCH_DEMO_SEED

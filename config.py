@@ -30,8 +30,19 @@ APP_TAGLINE = "Find the Australian businesses worth talking to — then talk to 
 # The username is not a secret — it is half of a shared login the whole team
 # types, and it ships in the code. The password is the secret, and it has no
 # default on purpose: this repository is public, so a default would publish it.
-APP_USERNAME = os.getenv("PEARCH_USERNAME", "Daniel").strip()
+#
+# APP_USERNAME always works, whatever the environment says. PEARCH_USERNAME can
+# add a second accepted name but can no longer replace this one, because a value
+# set in a hosting dashboard months ago and long forgotten should never be the
+# thing that locks the team out of their own database. Two names cost nothing:
+# the password is what actually has to be right.
+APP_USERNAME = "Daniel"
 APP_PASSWORD = os.getenv("PEARCH_PASSWORD", "").strip()
+
+_also_named = os.getenv("PEARCH_USERNAME", "").strip()
+APP_USERNAMES: tuple[str, ...] = (
+    (APP_USERNAME,) if not _also_named or _also_named.lower() == APP_USERNAME.lower()
+    else (APP_USERNAME, _also_named))
 
 # Paths that stay public even when a password is set: the health check Render
 # polls, and the unsubscribe page recipients click from an email.

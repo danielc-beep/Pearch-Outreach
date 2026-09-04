@@ -30,6 +30,7 @@ def restore_app(monkeypatch):
     yield
     import importlib
     monkeypatch.delenv("PEARCH_PASSWORD", raising=False)
+    monkeypatch.delenv("PEARCH_USERNAME", raising=False)
     import auth, config, app as app_module
     auth._attempts.clear()
     importlib.reload(config)
@@ -121,6 +122,43 @@ def test_the_default_username_is_daniel(monkeypatch):
     monkeypatch.delenv("PEARCH_USERNAME", raising=False)
     importlib.reload(config)
     assert config.APP_USERNAME == "Daniel"
+
+
+def test_a_stale_username_in_the_environment_cannot_lock_you_out(monkeypatch):
+    """
+    The deployment was carrying PEARCH_USERNAME=pearch from the first day it
+    went up, so the name the owner had been given did not work and the only
+    symptom was a password that looked wrong.
+    """
+    monkeypatch.setenv("PEARCH_USERNAME", "pearch")
+    c = _client(monkeypatch, "s3cret")
+    assert _sign_in(c, username="Daniel").status_code == 303
+
+
+def test_a_configured_username_still_works_alongside_it(monkeypatch):
+    monkeypatch.setenv("PEARCH_USERNAME", "pearch")
+    c = _client(monkeypatch, "s3cret")
+    assert _sign_in(c, username="pearch").status_code == 303
+    assert _sign_in(c, username="PEARCH").status_code == 303
+
+
+def test_an_unrelated_name_is_still_refused(monkeypatch):
+    monkeypatch.setenv("PEARCH_USERNAME", "pearch")
+    c = _client(monkeypatch, "s3cret")
+    assert _sign_in(c, username="admin").status_code == 401
+
+
+def test_a_non_ascii_username_is_refused_not_a_crash(monkeypatch):
+    """secrets.compare_digest rejects non-ASCII strings by raising."""
+    c = _client(monkeypatch, "s3cret")
+    assert _sign_in(c, username="Dani\u00e9l").status_code == 401
+
+
+def test_the_username_field_arrives_filled_in(monkeypatch):
+    """The half that is not secret should never be the half that goes wrong."""
+    monkeypatch.setenv("PEARCH_USERNAME", "pearch")
+    c = _client(monkeypatch, "s3cret")
+    assert 'value="Daniel"' in c.get("/login").text
 
 
 def test_no_password_ships_in_the_code():

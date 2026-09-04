@@ -23,7 +23,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import secrets
 import time
 from collections import defaultdict
 
@@ -31,7 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
-from config import APP_PASSWORD, APP_USERNAME, LOCAL_HOSTS, PUBLIC_PATHS
+from config import APP_PASSWORD, APP_USERNAMES, LOCAL_HOSTS, PUBLIC_PATHS
 
 COOKIE = "acm_session"
 SESSION_HOURS = 12          # an absolute ceiling, even if the browser stays open
@@ -123,17 +122,27 @@ def token_ok(token: str, now: float | None = None) -> bool:
         return False
 
 
+def _same(typed: str, expected: str) -> bool:
+    """A comparison that takes the same time whether or not it matches."""
+    return hmac.compare_digest(typed.encode("utf-8", "surrogatepass"),
+                               expected.encode("utf-8", "surrogatepass"))
+
+
 def credentials_ok(username: str, password: str) -> bool:
     """
-    The username is matched case-insensitively — it is not the secret, and
-    someone given "Daniel" who types "daniel" should not be turned away. The
-    password is matched exactly. Both halves are always checked, so a wrong
-    username costs the same time as a wrong password.
+    The username is matched case-insensitively against every accepted name —
+    it is not the secret, and someone given "Daniel" who types "daniel" should
+    not be turned away. The password is matched exactly. Both halves are always
+    checked, and every name is, so a wrong username costs the same time as a
+    wrong password.
     """
     if not APP_PASSWORD:
         return False
-    return (secrets.compare_digest((username or "").strip().lower(), APP_USERNAME.lower())
-            & secrets.compare_digest((password or "").strip(), APP_PASSWORD))
+    typed = (username or "").strip().lower()
+    named = False
+    for accepted in APP_USERNAMES:
+        named |= _same(typed, accepted.lower())
+    return named & _same((password or "").strip(), APP_PASSWORD)
 
 
 # ---------- Throttling ----------
