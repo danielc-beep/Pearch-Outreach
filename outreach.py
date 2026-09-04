@@ -39,11 +39,11 @@ Congratulations on {reviews} —
 that is why we are getting in touch. You are clearly doing good work for
 people in {suburb}, and we would like to put it in front of more of them.
 
-Here is the gap. When someone asks Google or ChatGPT for a {industry} in
-{suburb}, the answer cites a handful of sources, and yours isn't one of them.
-That's what we fix: we get businesses cited inside AI answers by publishing
-credible editorial across the Australian Community Media mastheads those
-answers already trust.
+Here is the gap. When someone in {suburb} searches Google for a {industry},
+the AI answer at the top cites a handful of sources, and yours isn't one of
+them. That's what we fix: we get businesses cited inside Google's AI answers
+by publishing credible editorial across the Australian Community Media
+mastheads that Google already trusts.
 
 Worth a 15-minute call to walk you through what we found for {business_name}?
 
@@ -190,9 +190,10 @@ def _claude_draft(business: dict[str, Any], fields: dict[str, str],
         )
 
     prompt = f"""You write short B2B outreach emails for the AEO team at
-Australian Community Media. ACM gets businesses cited inside AI answers
-(Google AI Overviews, ChatGPT) by publishing credible editorial across its
-network of more than 140 mastheads — the sources those answers already trust.
+Australian Community Media. ACM gets businesses cited inside Google's AI
+answers — AI Overviews and the AI Mode results at the top of a search — by
+publishing credible editorial across its network of more than 140 mastheads,
+the sources Google already trusts.
 
 Here is everything we know about the prospect. It all comes from their own
 website and their Google listing:
@@ -216,6 +217,11 @@ Rules:
 {rating_rule}
 - Never invent a fact, a number, a result, or a claim about their current AI
   visibility. If you would need a fact we have not given you, write around it.
+- GOOGLE ONLY. Name Google, and nothing else. Do not mention ChatGPT,
+  Perplexity, Copilot, Gemini, Claude, "AI assistants", "chatbots", or
+  "LLMs", even in passing or as an example — today we can only put a business
+  into Google's answers, so promising anywhere else would be a claim we
+  cannot keep.
 - No "I hope this email finds you well", no hype, no em-dash-heavy prose.
 - One ask: a 15-minute call.
 - CLOSE, before the sign-off, with a short paragraph in your own words that

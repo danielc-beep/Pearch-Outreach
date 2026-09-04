@@ -114,3 +114,34 @@ def test_the_merged_template_invents_nothing_when_there_is_no_rating():
     assert "Congratulations on the reputation you have built locally" in merged
     # The closing courtesy is unconditional.
     assert "Places in our content are limited" in merged
+
+
+# ---------- What we can actually deliver ----------
+
+OTHER_ENGINES = ("ChatGPT", "Perplexity", "Copilot", "Gemini", "chatbot",
+                 "AI assistant", "LLM")
+
+
+def test_the_template_promises_google_and_nothing_else():
+    body = outreach.DEFAULT_CAMPAIGN["body"] + outreach.DEFAULT_CAMPAIGN["subject"]
+    assert "Google" in body
+    for engine in OTHER_ENGINES:
+        assert engine.lower() not in body.lower(), engine
+
+
+def test_claude_is_told_google_only():
+    prompt = _capture_prompt(WELL_REVIEWED)
+    assert "GOOGLE ONLY" in prompt
+    # The named ones appear exactly once each, inside the prohibition itself.
+    rule = prompt.split("GOOGLE ONLY", 1)[1]
+    for engine in ("ChatGPT", "Perplexity", "Copilot", "Gemini"):
+        assert prompt.count(engine) == 1, engine
+        assert engine in rule, engine
+
+
+def test_the_pitch_itself_names_only_google():
+    # Everything before the rules — how ACM is described to the model.
+    pitch = _capture_prompt(WELL_REVIEWED).split("Rules:", 1)[0]
+    for engine in OTHER_ENGINES:
+        assert engine.lower() not in pitch.lower(), engine
+    assert "Google" in pitch
