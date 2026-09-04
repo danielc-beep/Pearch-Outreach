@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in — {{ app_name }}</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#16224A" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,wght@1,400;1,500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+</head>
+<body class="login-body">
+  <div class="sky" aria-hidden="true"></div>
+  <canvas id="fairy-lights" aria-hidden="true"></canvas>
+
+  <main class="login-wrap">
+    <div class="login-card">
+      <div class="logo login-logo">{% include "_acm_logo.svg" %}<span class="mark">Outreach</span></div>
+      <p class="login-tagline"><span class="script">the trusted voice of regional Australia</span></p>
+
+      <h1 class="login-title">Sign in</h1>
+      <p class="login-note">{{ app_name }} is shared across the team. One login, one password.</p>
+
+      {% if error %}
+      <div class="notice notice-error" role="alert">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" action="/login" autocomplete="on">
+        <input type="hidden" name="next" value="{{ next_token }}" />
+        <div class="field-block">
+          <label for="li-user">Username</label>
+          <input id="li-user" name="username" type="text" autocomplete="username"
+                 value="{{ username or '' }}" required autofocus />
+        </div>
+        <div class="field-block">
+          <label for="li-pass">Password</label>
+          <input id="li-pass" name="password" type="password"
+                 autocomplete="current-password" required />
+        </div>
+        <button class="btn btn-primary login-go" type="submit">Sign in</button>
+      </form>
+    </div>
+
+    <p class="login-foot">Australian Community Media</p>
+  </main>
+
+  <script src="/static/fairy-lights.js" defer></script>
+</body>
+</html>

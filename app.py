@@ -34,6 +34,7 @@ import review
 import worklist
 import backup
 import sources
+import auth
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, DB_PATH,
                     DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
@@ -453,6 +454,57 @@ def outbox(request: Request, status: str = "") -> HTMLResponse:
         daily_cap=DAILY_SEND_CAP,
         approved_count=len(db.list_messages(status="approved", limit=5000)),
     )
+
+
+# ---------- Signing in ----------
+
+def _https(request: Request) -> bool:
+    """Whether to mark the cookie Secure. Localhost is http, so it must not be."""
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    return proto == "https"
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "") -> HTMLResponse:
+    if auth.token_ok(request.cookies.get(auth.COOKIE, "")):
+        return RedirectResponse(auth.safe_next(next), status_code=303)
+    return templates.TemplateResponse(
+        request, "login.html", {"next_token": next, "error": "", "username": ""})
+
+
+@app.post("/login")
+def login_submit(request: Request, username: str = Form(""), password: str = Form(""),
+                 next: str = Form("")):
+    ip = auth.client_ip(request)
+    wait = auth.locked_out(ip)
+    if wait:
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"next_token": next, "username": username,
+             "error": f"Too many attempts. Try again in {max(1, wait // 60)} minute"
+                      f"{'s' if wait // 60 != 1 else ''}."},
+            status_code=429)
+
+    if not auth.credentials_ok(username, password):
+        auth.record_failure(ip)
+        log.warning("failed sign-in for %r from %s", username[:40], ip)
+        # One message for both halves: saying which was wrong tells someone
+        # guessing that they have found a real username.
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"next_token": next, "username": username,
+             "error": "That username and password do not match."},
+            status_code=401)
+
+    auth.clear_failures(ip)
+    response = RedirectResponse(auth.safe_next(next), status_code=303)
+    return auth.set_session(response, secure=_https(request))
+
+
+@app.get("/logout")
+@app.post("/logout")
+def logout():
+    return auth.clear_session(RedirectResponse("/login", status_code=303))
 
 
 @app.get("/backups", response_class=HTMLResponse)

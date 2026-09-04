@@ -1,26 +1,50 @@
 """
-Shared-password access control.
+Shared-password access control, behind a sign-in page.
 
-The whole app sits behind one HTTP Basic password, which is the right amount
-of ceremony for a handful of colleagues sharing one link. Two rules matter:
+The whole app sits behind one shared login, which is the right amount of
+ceremony for a handful of colleagues sharing one link. Three rules matter:
 
 1. If PEARCH_PASSWORD is set, every page needs it — except the health check
    and the unsubscribe page, which have to stay reachable.
 2. If it is NOT set, only localhost is served. Any other host gets a 503
    telling the operator to set a password. A deployment that forgets the
    password fails loudly rather than quietly publishing the contact database.
+3. Signing in is a page, not the browser's own dialog. The dialog cannot be
+   branded, says nothing useful when the password is wrong, and offers no way
+   to sign out short of closing the browser.
+
+The session is a cookie carrying an expiry and an HMAC of it, keyed on the
+password itself — so changing the password signs everybody out, and a
+restart does not. It has no Max-Age, so closing the browser ends it and the
+next visit asks again.
 """
 from __future__ import annotations
 
 import base64
-import binascii
+import hashlib
+import hmac
 import secrets
+import time
+from collections import defaultdict
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, Response
+from starlette.responses import HTMLResponse, RedirectResponse, Response
 
 from config import APP_PASSWORD, APP_USERNAME, LOCAL_HOSTS, PUBLIC_PATHS
+
+COOKIE = "acm_session"
+SESSION_HOURS = 12          # an absolute ceiling, even if the browser stays open
+LOGIN_PATH = "/login"
+
+# A shared password on a public URL invites guessing, and a form is easier to
+# script against than a browser dialog. This is not a real rate limiter — one
+# process, memory only — but it turns an overnight dictionary run into
+# something that would take months.
+MAX_ATTEMPTS = 8
+LOCKOUT_SECONDS = 300
+_attempts: dict[str, list[float]] = defaultdict(list)
+
 
 UNPROTECTED_HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Set a password first</title>
@@ -42,7 +66,7 @@ link with signs in with that one password.</p>
 
 
 def _is_public(path: str) -> bool:
-    return path.startswith(PUBLIC_PATHS)
+    return path.startswith(PUBLIC_PATHS) or path == LOGIN_PATH
 
 
 def _is_local(request: Request) -> bool:
@@ -50,24 +74,132 @@ def _is_local(request: Request) -> bool:
     return host in LOCAL_HOSTS
 
 
-def _credentials_ok(header: str) -> bool:
-    """Constant-time check of an `Authorization: Basic ...` header."""
-    scheme, _, encoded = (header or "").partition(" ")
-    if scheme.lower() != "basic" or not encoded:
+# ---------- The session cookie ----------
+
+def _key() -> bytes:
+    """
+    The signing key, derived from the password.
+
+    Deriving it means a password change invalidates every existing session,
+    which is what anyone changing a shared password expects. It also means
+    there is no second secret to set and forget.
+    """
+    return hashlib.sha256(("acm-outreach-session:" + APP_PASSWORD).encode()).digest()
+
+
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _unb64(text: str) -> bytes:
+    return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def make_token(now: float | None = None) -> str:
+    """A token good until SESSION_HOURS from now."""
+    expires = int((now if now is not None else time.time()) + SESSION_HOURS * 3600)
+    body = str(expires).encode()
+    return _b64(body) + "." + _b64(hmac.new(_key(), body, hashlib.sha256).digest())
+
+
+def token_ok(token: str, now: float | None = None) -> bool:
+    """Whether a token is ours and still current."""
+    if not token or not APP_PASSWORD:
+        return False
+    body_part, _, signature_part = token.partition(".")
+    if not body_part or not signature_part:
         return False
     try:
-        decoded = base64.b64decode(encoded).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError, ValueError):
+        body = _unb64(body_part)
+        signature = _unb64(signature_part)
+    except (ValueError, TypeError):
         return False
-    username, _, password = decoded.partition(":")
-    username, password = username.strip(), password.strip()
-    # The username is matched case-insensitively: it is not the secret, and a
-    # colleague typing "acm" should not be locked out of a login they were
-    # given as "ACM". The password is matched exactly.
-    # Both halves are always checked, so a wrong username costs the same time
-    # as a wrong password.
-    return (secrets.compare_digest(username.lower(), APP_USERNAME.lower())
-            & secrets.compare_digest(password, APP_PASSWORD))
+
+    if not hmac.compare_digest(signature, hmac.new(_key(), body, hashlib.sha256).digest()):
+        return False
+    try:
+        return int(body) > (now if now is not None else time.time())
+    except ValueError:
+        return False
+
+
+def credentials_ok(username: str, password: str) -> bool:
+    """
+    The username is matched case-insensitively — it is not the secret, and
+    someone given "Daniel" who types "daniel" should not be turned away. The
+    password is matched exactly. Both halves are always checked, so a wrong
+    username costs the same time as a wrong password.
+    """
+    if not APP_PASSWORD:
+        return False
+    return (secrets.compare_digest((username or "").strip().lower(), APP_USERNAME.lower())
+            & secrets.compare_digest((password or "").strip(), APP_PASSWORD))
+
+
+# ---------- Throttling ----------
+
+def _prune(ip: str, now: float) -> list[float]:
+    recent = [t for t in _attempts[ip] if now - t < LOCKOUT_SECONDS]
+    _attempts[ip] = recent
+    return recent
+
+
+def locked_out(ip: str, now: float | None = None) -> int:
+    """Seconds still to wait, or 0 if this address may try again."""
+    now = now if now is not None else time.time()
+    recent = _prune(ip, now)
+    if len(recent) < MAX_ATTEMPTS:
+        return 0
+    return max(1, int(LOCKOUT_SECONDS - (now - min(recent))))
+
+
+def record_failure(ip: str, now: float | None = None) -> None:
+    now = now if now is not None else time.time()
+    _prune(ip, now)
+    _attempts[ip].append(now)
+
+
+def clear_failures(ip: str) -> None:
+    _attempts.pop(ip, None)
+
+
+def client_ip(request: Request) -> str:
+    """The caller's address, trusting Render's proxy header when it is there."""
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    return forwarded or (request.client.host if request.client else "unknown")
+
+
+def set_session(response: Response, secure: bool) -> Response:
+    """
+    Attach a fresh session.
+
+    No Max-Age, so it is a session cookie: closing the browser ends it and
+    the next visit asks for the password again.
+    """
+    response.set_cookie(COOKIE, make_token(), httponly=True, samesite="lax",
+                        secure=secure, path="/")
+    return response
+
+
+def clear_session(response: Response) -> Response:
+    response.delete_cookie(COOKIE, path="/")
+    return response
+
+
+def safe_next(encoded: str) -> str:
+    """
+    Where to go after signing in.
+
+    Only a path on this site. An open redirect on a login page is how a
+    convincing phishing link gets built out of a real domain.
+    """
+    try:
+        target = _unb64(encoded or "").decode()
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return "/"
+    if not target.startswith("/") or target.startswith("//") or target.startswith(LOGIN_PATH):
+        return "/"
+    return target
 
 
 class PasswordMiddleware(BaseHTTPMiddleware):
@@ -79,11 +211,12 @@ class PasswordMiddleware(BaseHTTPMiddleware):
                 return await call_next(request)
             return HTMLResponse(UNPROTECTED_HTML, status_code=503)
 
-        if _is_public(path) or _credentials_ok(request.headers.get("authorization", "")):
+        if _is_public(path) or token_ok(request.cookies.get(COOKIE, "")):
             return await call_next(request)
 
-        return Response(
-            "Sign in to ACM Outreach Database.",
-            status_code=401,
-            headers={"WWW-Authenticate": 'Basic realm="ACM Outreach Database", charset="UTF-8"'},
-        )
+        # An API call gets a status it can act on; a person gets the page.
+        if path.startswith("/api/"):
+            return Response("Not signed in.", status_code=401)
+
+        target = path + ("?" + request.url.query if request.url.query else "")
+        return RedirectResponse(f"{LOGIN_PATH}?next={_b64(target.encode())}", status_code=303)

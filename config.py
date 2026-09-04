@@ -30,7 +30,7 @@ APP_TAGLINE = "Find the Australian businesses worth talking to — then talk to 
 # The username is not a secret — it is half of a shared login the whole team
 # types, and it ships in the code. The password is the secret, and it has no
 # default on purpose: this repository is public, so a default would publish it.
-APP_USERNAME = os.getenv("PEARCH_USERNAME", "ACM").strip()
+APP_USERNAME = os.getenv("PEARCH_USERNAME", "Daniel").strip()
 APP_PASSWORD = os.getenv("PEARCH_PASSWORD", "").strip()
 
 # Paths that stay public even when a password is set: the health check Render
