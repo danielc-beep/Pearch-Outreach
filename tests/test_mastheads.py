@@ -197,3 +197,75 @@ def test_an_invented_masthead_is_refused(client):
     bad = client.post(f"/api/businesses/{business_id}",
                       json={"masthead": "thedailyplanet.com.au"})
     assert bad.status_code == 400
+
+
+# ---------- Aligning what is already stored ----------
+
+def _unaligned(name, suburb, region, state="NSW"):
+    db.upsert_business({"name": name, "suburb": suburb, "region": region, "state": state,
+                        "rating": 4.5, "review_count": 20, "source": "google_places",
+                        "domain": name.lower().replace(" ", "") + ".com.au"})
+
+
+def test_matching_a_stored_business_on_suburb_and_region():
+    assert mastheads.match_business(
+        {"suburb": "Shell Cove", "region": "Illawarra", "state": "NSW"}
+    ) == "illawarramercury.com.au"
+
+
+def test_a_match_in_the_wrong_state_is_discarded():
+    """Richmond is in NSW and Victoria; neither guess is worth making."""
+    assert mastheads.match_business(
+        {"suburb": "Richmond", "region": "Hawkesbury", "state": "NSW"}
+    ) == "hawkesburygazette.com.au"
+    assert mastheads.match_business(
+        {"suburb": "Richmond", "region": "Melbourne", "state": "VIC"}
+    ) == ""
+
+
+def test_the_street_address_is_not_used():
+    """A business on Hunter Street in Sydney is not a Newcastle prospect."""
+    assert mastheads.match_business(
+        {"suburb": "Sydney", "region": "Sydney", "state": "NSW",
+         "address": "10 Hunter Street, Sydney NSW"}
+    ) == ""
+
+
+def test_the_backfill_aligns_everything_it_can(client):
+    _unaligned("Grima Accounting", "Shell Cove", "Illawarra")
+    _unaligned("Carter Gray", "Albion Park", "Illawarra")
+    _unaligned("Exceed Engineering", "Launceston", "Launceston", "TAS")
+    _unaligned("Nowhere Co", "Parramatta", "Sydney")
+
+    assert db.count_without_masthead() == 4
+    result = prospect.align_mastheads()
+    assert result["aligned"] == 3
+    assert result["unmatched"] == 1
+    assert db.list_businesses(masthead="illawarramercury.com.au", limit=99)[1] == 2
+    assert db.list_businesses(masthead="examiner.com.au", limit=99)[1] == 1
+
+
+def test_what_cannot_be_matched_stays_findable(client):
+    _unaligned("Nowhere Co", "Parramatta", "Sydney")
+    prospect.align_mastheads()
+    # Not silently assigned to something wrong — and reachable by filter.
+    assert db.list_businesses(masthead="none", limit=99)[1] == 1
+    assert db.count_without_masthead() == 1
+
+
+def test_the_backfill_leaves_an_existing_masthead_alone(client):
+    _unaligned("Bendigo Co", "Bendigo", "Bendigo", "VIC")
+    business_id = db.list_businesses(limit=1)[0][0]["id"]
+    db.update_business(business_id, {"masthead": "examiner.com.au"})
+    prospect.align_mastheads()
+    assert db.get_business(business_id)["masthead"] == "examiner.com.au"
+
+
+def test_the_align_route_and_the_notice(client):
+    _unaligned("Grima Accounting", "Shell Cove", "Illawarra")
+    page = client.get("/businesses").text
+    assert "not aligned to a masthead" in page
+    assert 'value="none"' in page                     # the filter option
+    result = client.post("/api/mastheads/align").json()
+    assert result["aligned"] == 1
+    assert "not aligned to a masthead" not in client.get("/businesses").text

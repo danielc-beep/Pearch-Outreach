@@ -11,6 +11,7 @@ returns fewer fields. It never raises at the callers' level.
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 import httpx
@@ -31,7 +32,16 @@ ACCEPT_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-AU,en;q=0.9",
 }
-TIMEOUT = httpx.Timeout(7.0, connect=4.0)
+# Generous, because these are small-business sites on shared hosting reached
+# from a server that is not in Australia. Seven seconds looked fine locally
+# and marked live sites dead in production. The batch is kept bounded by a
+# per-business budget instead — see PAGE_BUDGET.
+TIMEOUT = httpx.Timeout(20.0, connect=8.0)
+
+# The most time one business may take, however many pages it has. Without it
+# a single slow site holds a worker for a minute and the batch outlives the
+# request that asked for it.
+PAGE_BUDGET = 14.0
 
 # Pages most likely to carry a real email address, best first.
 CONTACT_PATHS = ("/contact", "/contact-us", "/contactus", "/get-in-touch",
@@ -149,6 +159,7 @@ def enrich_from_website(website: str) -> dict[str, Any]:
     pages: list[str] = []
     blocked: list[int] = []
     site_domain = domain_of(url)
+    deadline = time.monotonic() + PAGE_BUDGET
 
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=ACCEPT_HEADERS) as client:
         home = _fetch(client, url, blocked)
@@ -171,6 +182,10 @@ def enrich_from_website(website: str) -> dict[str, Any]:
         candidates += [url.rstrip("/") + path for path in CONTACT_PATHS]
 
         for candidate in list(dict.fromkeys(c for c in candidates if c and c != url))[:MAX_PAGES]:
+            # The homepage is worth waiting for; the fifth contact page is not.
+            # Without this one slow site holds a worker for the whole batch.
+            if time.monotonic() > deadline:
+                break
             page = _fetch(client, candidate, blocked)
             if not page:
                 continue
@@ -230,21 +245,42 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
 def website_is_live(website: str) -> str:
     """
-    Does this website serve anything? "live", "unreachable", or "" for no URL.
+    Does this domain exist and answer? "live", "unreachable", or "" for no URL.
 
-    Only the homepage, so it is cheap enough to run across a whole database.
-    A fabricated domain has no DNS record and fails here, which is the point.
+    The question is whether the business is real, not whether its homepage is
+    happy — so ANY HTTP response counts as live, including a 403 or a 404. A
+    Cloudflare challenge, a WAF that dislikes us, a homepage that has moved:
+    all of them mean DNS resolved and a server replied, which is exactly what
+    a fabricated domain cannot do. Only a transport failure — no DNS record,
+    connection refused, nothing back before the timeout — is unreachable.
+
+    Judging on the status code instead is what marked real, working
+    businesses as dead: plenty of Australian small-business sites sit behind
+    Cloudflare and answer a datacentre IP with 403.
     """
     url = normalise_url(website)
     if not url:
         return ""
-    try:
-        with httpx.Client(timeout=TIMEOUT, follow_redirects=True,
-                          headers=ACCEPT_HEADERS) as client:
-            response = client.get(url)
-        return "live" if response.status_code < 400 else "unreachable"
-    except httpx.HTTPError:
-        return "unreachable"
+
+    # Try the URL we hold, then flip www on or off. A record can easily carry
+    # the variant that happens not to be served.
+    candidates = [url]
+    host = domain_of(url)
+    if host.startswith("www."):
+        candidates.append(url.replace("www.", "", 1))
+    else:
+        candidates.append(url.replace("://", "://www.", 1))
+
+    with httpx.Client(timeout=TIMEOUT, follow_redirects=True,
+                      headers=ACCEPT_HEADERS) as client:
+        for candidate in candidates:
+            for attempt in range(2):        # one retry: a single timeout is not proof
+                try:
+                    client.get(candidate)
+                    return "live"
+                except httpx.HTTPError:
+                    continue
+    return "unreachable"
 
 
 def lookup_abn(name_or_abn: str) -> dict[str, Any]:

@@ -313,6 +313,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         export_query=f"?{query_string}" if query_string else "",
         sample_count=db.count_sample_businesses(),
         min_prospect_rating=MIN_PROSPECT_RATING,
+        unaligned_count=db.count_without_masthead(),
         below_rating_count=db.count_below_rating(MIN_PROSPECT_RATING),
         unreachable_count=db.list_businesses(website_status="unreachable", limit=1)[1],
     )
@@ -523,6 +524,20 @@ class BusinessPatch(BaseModel):
     do_not_contact: int | None = None
 
 
+@app.post("/api/mastheads/align")
+def api_align_mastheads(limit: int = 500) -> JSONResponse:
+    """
+    Give every stored business its masthead.
+
+    Prospecting stamps one now; anything found before that has none, and a
+    masthead filter that omits most of the database is worse than no filter.
+    """
+    result = prospect.align_mastheads(limit=max(1, min(limit, 2000)))
+    log.info("aligned %s businesses to a masthead, %s unmatched",
+             result["aligned"], result["unmatched"])
+    return JSONResponse(result)
+
+
 @app.post("/api/businesses/purge-low-rated")
 def api_purge_low_rated() -> JSONResponse:
     """
@@ -593,14 +608,14 @@ def api_delete_business(business_id: int) -> JSONResponse:
 
 
 @app.post("/api/enrich/missing")
-def api_enrich_missing(limit: int = 20, recheck: bool = False) -> JSONResponse:
+def api_enrich_missing(limit: int = 12, recheck: bool = False) -> JSONResponse:
     """
     Re-check a batch of businesses that have a website but still no email.
 
     Each one costs several page fetches, so this is batched and reports
     `remaining` for the caller to loop on.
     """
-    return JSONResponse(prospect.enrich_missing(limit=min(limit, 40), recheck=recheck))
+    return JSONResponse(prospect.enrich_missing(limit=min(limit, 25), recheck=recheck))
 
 
 class ReplyNote(BaseModel):

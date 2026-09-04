@@ -250,6 +250,27 @@ def with_a_patch() -> list[dict[str, Any]]:
     return [t for t in TITLES if home_location(t["site"])]
 
 
+def match_business(business: dict[str, Any]) -> str:
+    """
+    The masthead covering a stored business, as a site key.
+
+    Suburb and region only. The street address is deliberately not used: a
+    business on Hunter Street in Sydney is not a Newcastle Herald prospect,
+    and town names turn up inside street names often enough to matter.
+
+    A match in the wrong state is discarded — Richmond is in both NSW and
+    Victoria, and there is no version of that guess worth making.
+    """
+    site = match(business.get("suburb"), business.get("region"))
+    if not site:
+        return ""
+    state = (business.get("state") or "").strip().upper()
+    title_state = BY_SITE[site]["state"]
+    if state and title_state not in ("National", "NSW/VIC") and title_state != state:
+        return ""
+    return site
+
+
 def options() -> list[dict[str, Any]]:
     """Every masthead, grouped by state, for a picker."""
     groups: dict[str, list[dict[str, Any]]] = {}

@@ -372,6 +372,31 @@ def delete_below_rating(minimum: float) -> int:
     return count
 
 
+def businesses_without_masthead(limit: int = 500) -> list[dict[str, Any]]:
+    """Records not yet aligned to a masthead — what a backfill has to work on."""
+    rows = get_conn().execute(
+        "SELECT * FROM businesses WHERE masthead IS NULL OR masthead = '' "
+        "ORDER BY id LIMIT ?", (limit,)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def count_without_masthead() -> int:
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM businesses WHERE masthead IS NULL OR masthead = ''"
+    ).fetchone()
+    return int(row["n"])
+
+
+def masthead_counts() -> list[dict[str, Any]]:
+    """How many prospects sit under each masthead, most first."""
+    rows = get_conn().execute(
+        "SELECT COALESCE(masthead, '') AS masthead, COUNT(*) AS n FROM businesses "
+        "GROUP BY COALESCE(masthead, '') ORDER BY n DESC"
+    ).fetchall()
+    return [{"masthead": r["masthead"], "n": int(r["n"])} for r in rows]
+
+
 def delete_business(business_id: int) -> None:
     with tx() as conn:
         conn.execute("DELETE FROM businesses WHERE id = ?", (business_id,))
@@ -406,10 +431,14 @@ def list_businesses(
         args += [f"%{q}%"] * 6
     for column, value in (("status", status), ("region", region), ("state", state),
                           ("source", source), ("website_status", website_status),
-                          ("masthead", masthead)):
+                          ("masthead", masthead if masthead != "none" else None)):
         if value:
             where.append(f"{column} = ?")
             args.append(value)
+    if masthead == "none":
+        # The filter's "Not aligned yet" option, so the records a backfill
+        # could not place are findable rather than invisible.
+        where.append("(masthead IS NULL OR masthead = '')")
     if industry:
         where.append("(industry LIKE ? OR category LIKE ?)")
         args += [f"%{industry}%"] * 2

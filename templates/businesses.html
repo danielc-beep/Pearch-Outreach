@@ -15,7 +15,7 @@
     try {
       let lastRemaining = Infinity;
       for (let pass = 0; pass < 200; pass++) {
-        button.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span> '
+        button.innerHTML = '<span class="spinner"></span> '
           + label + '…';
         const data = await window.postJSON(url);
         Object.keys(data).forEach((k) => {
@@ -90,6 +90,30 @@
       }
     });
   }
+  const alignBtn = document.getElementById('btn-align');
+  if (alignBtn) {
+    alignBtn.addEventListener('click', async () => {
+      alignBtn.disabled = true;
+      alignBtn.innerHTML = '<span class="spinner"></span> Aligning';
+      try {
+        const data = await window.postJSON('/api/mastheads/align');
+        const top = (data.by_masthead || []).slice(0, 3)
+          .map((m) => m.masthead + ' ' + m.n).join(' · ');
+        document.getElementById('flash').innerHTML =
+          '<div class="notice notice-ok">' + data.aligned + ' aligned' +
+          (top ? ' — ' + top : '') +
+          (data.unmatched ? ' · ' + data.unmatched + ' had no matching masthead' : '') +
+          '</div>';
+        setTimeout(() => window.location.reload(), 1800);
+      } catch (err) {
+        document.getElementById('flash').innerHTML =
+          '<div class="notice notice-error">' + err.message + '</div>';
+        alignBtn.disabled = false;
+        alignBtn.textContent = 'Align them';
+      }
+    });
+  }
+
   wirePurge('btn-purge-sample', '/api/sample/purge',
             'Permanently delete every fictional business? Real prospects are untouched.');
   wirePurge('btn-purge-low', '/api/businesses/purge-low-rated',
@@ -157,6 +181,7 @@
         <label for="f-masthead">Masthead</label>
         <select id="f-masthead" name="masthead">
           <option value="">Any</option>
+          <option value="none" {{ 'selected' if f.masthead == 'none' }}>Not aligned yet</option>
           {% for group in masthead_groups %}
           <optgroup label="{{ group.state }}">
             {% for t in group.titles %}
@@ -187,6 +212,17 @@
       <strong>{{ unreachable_count }} website{{ '' if unreachable_count == 1 else 's' }} didn't respond.</strong>
       A business whose site doesn't resolve is either stale or was never real.
       <a href="/businesses?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
+    </div>
+    {% endif %}
+
+    {% if unaligned_count %}
+    <div class="notice notice-info">
+      <strong>{{ unaligned_count }} business{{ '' if unaligned_count == 1 else 'es' }}
+      not aligned to a masthead.</strong>
+      Found before masthead alignment existed, so they are missing from every
+      per-masthead filter — and their emails would go out from ACM rather than the
+      local paper.
+      <button class="btn btn-sm" id="btn-align" style="margin-left:8px">Align them</button>
     </div>
     {% endif %}
 

@@ -10,7 +10,8 @@ mapping, and the same fit score.
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import db
@@ -246,6 +247,45 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
     }
 
 
+def align_mastheads(limit: int = 500) -> dict[str, Any]:
+    """
+    Give every stored business its masthead.
+
+    Prospecting stamps one now, but anything found before that existed has
+    none — and a masthead filter that quietly omits most of the database is
+    worse than no filter. Matched on suburb and region, so a business gets
+    the paper that actually covers its town.
+
+    What cannot be matched is counted rather than guessed at. A wrong
+    masthead is a wrong claim in an email, so leaving it to the network is
+    the safer of the two failures.
+    """
+    targets = db.businesses_without_masthead(limit)
+    if not targets:
+        return {"aligned": 0, "unmatched": 0, "remaining": 0, "by_masthead": []}
+
+    aligned = 0
+    counts: dict[str, int] = {}
+    for business in targets:
+        site = mastheads.match_business(business)
+        if not site:
+            continue
+        db.update_business(int(business["id"]), {"masthead": site})
+        counts[site] = counts.get(site, 0) + 1
+        aligned += 1
+
+    return {
+        "aligned": aligned,
+        "unmatched": len(targets) - aligned,
+        # What is left for the next batch — the unmatched ones stay unmatched,
+        # so only a full batch means there is more to do.
+        "remaining": max(0, db.count_without_masthead() - (len(targets) - aligned)),
+        "by_masthead": sorted(
+            ({"masthead": mastheads.name_for(k), "n": v} for k, v in counts.items()),
+            key=lambda x: x["n"], reverse=True),
+    }
+
+
 def reenrich(business_id: int) -> dict[str, Any] | None:
     """Re-run enrichment + scoring for a single stored business."""
     business = db.get_business(business_id)
@@ -263,41 +303,86 @@ def reenrich(business_id: int) -> dict[str, Any] | None:
     return db.get_business(business_id)
 
 
-def enrich_missing(limit: int = 20, recheck: bool = False) -> dict[str, Any]:
+# The longest a single batch may run before it returns what it has. A request
+# that never comes back is worse than a short one: the browser gives up, the
+# proxy answers with an HTML error page, and nothing at all has been recorded.
+BATCH_BUDGET = 45.0
+
+
+def enrich_missing(limit: int = 12, recheck: bool = False) -> dict[str, Any]:
     """
     Visit the websites of businesses with no email on file, looking for one.
 
-    Batched, because each business costs several page fetches and a big batch
-    outlives a hosting proxy's patience. Highest-scoring first, so the most
-    useful addresses arrive in the first batch rather than the last.
+    Two rules make this survive contact with real websites.
+
+    Each result is written the moment it arrives, not after the whole batch
+    finishes. Every business therefore ends up settled one way or the other —
+    an address, or a note saying why not — even if the request is cut off
+    halfway through. Writing at the end meant a batch that ran long recorded
+    nothing at all, which is how businesses came back unenriched after a run
+    that had plainly visited them.
+
+    And the batch has a wall-clock budget. Whatever has not finished by then
+    is left for the next batch rather than holding the request open past the
+    point a proxy will wait.
+
+    Highest-scoring first, so the most useful addresses arrive in the first
+    batch rather than the last.
     """
     targets, outstanding = db.businesses_needing_enrichment(limit, recheck=recheck)
     if not targets:
-        return {"checked": 0, "found": 0, "remaining": 0, "businesses": []}
-
-    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
-        enriched = list(pool.map(lambda b: enrich_record(dict(b)), targets))
+        return {"checked": 0, "found": 0, "remaining": 0, "timed_out": 0, "businesses": []}
 
     found = 0
     updated: list[dict[str, Any]] = []
-    for record in enriched:
-        business_id = int(record["id"])
-        extra_emails = record.pop("_extra_emails", [])
-        note = record.pop("_enrich_note", "")
-        apply_score(record)
-        db.update_business(business_id, record)
-        for email in extra_emails:
-            db.add_contact(business_id, {"email": email, "source": "website"})
-        if record.get("email"):
-            found += 1
-            db.log_activity(business_id, "enriched", f"Found {record['email']} on the website")
-        elif note:
-            db.log_activity(business_id, "enriched", note)
-        updated.append(db.get_business(business_id) or {})
+    started = time.monotonic()
 
-    log.info("enrich_missing checked %s, found %s emails", len(targets), found)
-    return {"checked": len(targets), "found": found,
-            "remaining": max(0, outstanding - len(targets)), "businesses": updated}
+    pool = ThreadPoolExecutor(max_workers=ENRICH_WORKERS)
+    try:
+        futures = {pool.submit(enrich_record, dict(b)): b for b in targets}
+        for future in as_completed(futures, timeout=BATCH_BUDGET):
+            try:
+                record = future.result()
+            except Exception as e:                      # one site must not fail the batch
+                business = futures[future]
+                log.warning("enrichment failed for %s: %s", business.get("name"), e)
+                db.update_business(int(business["id"]), {"enriched_at": db.now()})
+                continue
+
+            business_id = int(record["id"])
+            extra_emails = record.pop("_extra_emails", [])
+            note = record.pop("_enrich_note", "")
+            apply_score(record)
+            db.update_business(business_id, record)
+            for email in extra_emails:
+                db.add_contact(business_id, {"email": email, "source": "website"})
+            if record.get("email"):
+                found += 1
+                db.log_activity(business_id, "enriched", f"Found {record['email']} on the website")
+            elif note:
+                db.log_activity(business_id, "enriched", note)
+            updated.append(db.get_business(business_id) or {})
+    except TimeoutError:
+        log.warning("enrichment batch hit its %ss budget with %s of %s done",
+                    BATCH_BUDGET, len(updated), len(targets))
+    finally:
+        # Do not block on the stragglers; they are still selectable next batch.
+        pool.shutdown(wait=False, cancel_futures=True)
+
+    unfinished = len(targets) - len(updated)
+    log.info("enrich_missing checked %s of %s in %.1fs, found %s emails",
+             len(updated), len(targets), time.monotonic() - started, found)
+    return {
+        "checked": len(updated),
+        "found": found,
+        # `outstanding` counted everything still needing enrichment before this
+        # batch, so the unfinished ones are already inside it — adding them
+        # again would make remaining grow, and the caller's progress guard
+        # would read that as a stall and stop looping.
+        "remaining": max(0, outstanding - len(updated)),
+        "timed_out": unfinished,
+        "businesses": updated,
+    }
 
 
 def rescore_all() -> int:
