@@ -478,3 +478,48 @@ kbd {
 .territory-row:last-child { border-bottom: 0; }
 .territory-row .tick { color: var(--success); font-weight: 700; }
 .territory-row .cross { color: var(--danger); font-weight: 700; }
+
+/* ---------- The work board ----------
+   One row per job waiting. The count leads because it is what decides
+   whether the row is worth clicking. */
+.board { display: flex; flex-direction: column; gap: 10px; }
+.board-item {
+  display: flex; align-items: center; gap: 20px;
+  background: rgba(31,46,92,0.90); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 20px; color: inherit;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.board-item:hover { border-color: var(--border-lit); transform: translateX(2px); }
+.board-n {
+  font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+  color: var(--white); min-width: 58px; flex-shrink: 0;
+}
+.board-text { min-width: 0; flex: 1; }
+.board-label { font-weight: 600; color: var(--white); font-size: 15px; }
+.board-detail { color: var(--text-muted); font-size: 13.5px; margin-top: 3px; }
+.board-go { color: var(--cyan-bright); font-weight: 600; font-size: 13.5px; white-space: nowrap; flex-shrink: 0; }
+.board-item.is-hot { border-color: rgba(63,214,147,0.45); }
+.board-item.is-hot .board-n { color: var(--success); }
+.board-item.is-warn .board-n { color: var(--warning); }
+@media (max-width: 640px) {
+  .board-item { flex-wrap: wrap; gap: 6px 16px; }
+  .board-go { width: 100%; }
+}
+
+/* ---------- Finding addresses by hand ---------- */
+.address-list { display: flex; flex-direction: column; gap: 8px; }
+.address-row {
+  display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(0,1.3fr);
+  align-items: center; gap: 18px;
+  background: rgba(31,46,92,0.90); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 16px;
+  transition: opacity 0.35s, transform 0.35s;
+}
+.address-row.is-done { opacity: 0; transform: translateX(14px); }
+.address-name { font-weight: 600; color: var(--white); }
+.address-links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.address-entry { display: flex; align-items: center; gap: 8px; }
+.address-entry input { flex: 1; min-width: 0; }
+@media (max-width: 900px) {
+  .address-row { grid-template-columns: 1fr; gap: 10px; }
+}

@@ -52,8 +52,40 @@
 </section>
 
 <div class="wrap">
-  <!-- Live counters -->
+  <!-- What to do next -->
   <section class="section" style="margin-top:8px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Today</div>
+        <h2>What's <em>waiting</em></h2>
+      </div>
+      {% if board %}<a class="btn" href="/prospect">Find more businesses</a>{% endif %}
+    </div>
+
+    {% if board %}
+    <div class="board">
+      {% for item in board %}
+      <a class="board-item {{ 'is-' ~ item.tone if item.tone }}" href="{{ item.href }}">
+        <div class="board-n">{{ item.count }}</div>
+        <div class="board-text">
+          <div class="board-label">{{ item.label }}</div>
+          <div class="board-detail">{{ item.detail }}</div>
+        </div>
+        <span class="board-go">{{ item.action }} →</span>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+      <h3>{{ next_step.title }}</h3>
+      <p class="muted" style="margin:0 0 16px">{{ next_step.detail }}</p>
+      <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- Live counters -->
+  <section class="section">
     <div class="grid grid-4">
       <div class="card stat">
         <div class="num">{{ stats.total }}</div>

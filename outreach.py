@@ -506,6 +506,35 @@ def _footer(to_email: str, base_url: str, masthead: dict[str, Any] | None = None
     )
 
 
+def preview(message_id: int, base_url: str = "") -> dict[str, Any] | None:
+    """
+    Exactly what would leave the building, assembled the way send does it.
+
+    Reviewing the body alone means trusting the assembly — the footer, the
+    unsubscribe link, the from-address, which masthead is named. This builds
+    the real thing without sending it, so what is signed off is what goes.
+    """
+    message = db.get_message(message_id)
+    if not message:
+        return None
+    business = (db.get_business(int(message["business_id"]))
+                if message.get("business_id") else None) or {}
+    title = masthead_for(business)
+    footer = _footer(message["to_email"], base_url, title)
+    return {
+        "from": f"{FROM_NAME} <{FROM_EMAIL}>",
+        "reply_to": REPLY_TO_EMAIL,
+        "to": message["to_email"],
+        "subject": message["subject"],
+        "body": message["body"] + footer,
+        "html": _html_body(message["body"], footer),
+        "masthead": title["name"],
+        "problems": preflight(message),
+        "warnings": warnings(message),
+        "status": message["status"],
+    }
+
+
 def _html_body(body: str, footer: str) -> str:
     def paragraphs(text: str) -> str:
         blocks = [b.strip() for b in text.split("\n\n") if b.strip()]
@@ -520,6 +549,59 @@ def _html_body(body: str, footer: str) -> str:
         f'font-size:12px;color:#7A819E;">{paragraphs(footer.strip())}</div>'
         "</div>"
     )
+
+
+# Addresses that reach a desk rather than a person. Not a reason to refuse —
+# for a small business info@ is often the only address there is — but worth
+# saying out loud before a batch of forty goes to a batch of forty inboxes
+# nobody reads.
+ROLE_PREFIXES = ("info", "admin", "office", "accounts", "enquiries", "enquiry",
+                 "contact", "sales", "support", "reception", "hello", "mail",
+                 "noreply", "no-reply", "donotreply", "postmaster", "webmaster")
+
+# Addresses that are not a person or a desk at all.
+UNSENDABLE_PREFIXES = ("noreply", "no-reply", "donotreply", "postmaster",
+                       "abuse", "webmaster")
+
+DUPLICATE_WINDOW_DAYS = 30
+
+
+def _local_parts(email: str) -> set[str]:
+    """
+    The forms of an address's local part worth matching a prefix against.
+
+    Both the whole thing and its first token, because "no-reply" splits to
+    "no" — which is on no list, and is how no-reply@ passed the check that
+    exists to stop it.
+    """
+    local = (email or "").strip().lower().partition("@")[0]
+    if not local:
+        return set()
+    return {local, re.split(r"[.\-+_]", local)[0]}
+
+
+def warnings(message: dict[str, Any]) -> list[str]:
+    """
+    Things worth knowing before sending, none of which stop it.
+
+    Kept separate from preflight on purpose. A blocker that is only a bad
+    smell gets worked around, and then the real blockers get worked around
+    too — so these are shown and not enforced.
+    """
+    notes: list[str] = []
+    to_email = (message.get("to_email") or "").strip().lower()
+    local, _, domain = to_email.partition("@")
+    if _local_parts(to_email) & set(ROLE_PREFIXES):
+        notes.append(f"{to_email} is a shared address, not a person.")
+
+    seen = db.recent_send_to_domain(domain, DUPLICATE_WINDOW_DAYS,
+                                   ignore_message_id=message.get("id"))
+    if seen:
+        when = (seen.get("sent_at") or "")[:10]
+        notes.append(
+            f"Already emailed {seen['to_email']} at this business on {when} "
+            f"({seen['business_name']}). A second pitch to the same firm reads as spam.")
+    return notes
 
 
 def preflight(message: dict[str, Any]) -> list[str]:
@@ -538,6 +620,9 @@ def preflight(message: dict[str, Any]) -> list[str]:
         problems.append("No recipient address.")
     elif db.is_suppressed(to_email):
         problems.append(f"{to_email} is on the suppression list.")
+    elif _local_parts(to_email) & set(UNSENDABLE_PREFIXES):
+        # An address that exists to refuse mail. Nothing good comes of it.
+        problems.append(f"{to_email} is an unattended address.")
     business = db.get_business(int(message["business_id"])) if message.get("business_id") else None
     if business and business.get("do_not_contact"):
         problems.append(f"{business['name']} is marked do-not-contact.")
@@ -637,6 +722,48 @@ def send_message(message_id: int, base_url: str = "") -> dict[str, Any]:
     db.update_business(business_id, {"last_contacted_at": sent_at, "status": "contacted"})
     db.log_activity(business_id, "sent", f"Emailed {message['to_email']}")
     return {"sent": True, "provider_id": provider_id}
+
+
+def send_approved(limit: int = 10, base_url: str = "") -> dict[str, Any]:
+    """
+    Send a batch of approved messages, oldest first.
+
+    Serially, and never past the daily cap. Sending is the one operation
+    here that cannot be undone, so it does the least surprising thing: a
+    message that fails preflight is reported and skipped, and the batch
+    stops the moment the cap is reached rather than racing past it.
+    """
+    room = max(0, DAILY_SEND_CAP - db.sends_today())
+    if room == 0:
+        return {"sent": 0, "failed": 0, "remaining": 0, "capped": True, "problems": [],
+                "note": f"Daily cap of {DAILY_SEND_CAP} already reached."}
+
+    approved = db.list_messages(status="approved", limit=1000)
+    approved.sort(key=lambda m: int(m["id"]))
+    batch = approved[:min(limit, room)]
+
+    sent = failed = 0
+    problems: list[str] = []
+    for message in batch:
+        result = send_message(int(message["id"]), base_url=base_url)
+        if result.get("sent"):
+            sent += 1
+        else:
+            failed += 1
+            problems.append(f"{message.get('business_name') or message['to_email']}: "
+                            + "; ".join(result.get("problems") or ["send failed"]))
+        if db.sends_today() >= DAILY_SEND_CAP:
+            break
+
+    return {
+        "sent": sent,
+        "failed": failed,
+        "remaining": max(0, len(approved) - sent - failed),
+        "capped": db.sends_today() >= DAILY_SEND_CAP,
+        "problems": problems[:10],
+        "sends_today": db.sends_today(),
+        "daily_cap": DAILY_SEND_CAP,
+    }
 
 
 def log_reply(business_id: int, note: str = "") -> dict[str, Any] | None:

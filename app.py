@@ -31,6 +31,7 @@ import demo
 import outreach
 import prospect
 import review
+import worklist
 import sources
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE,
@@ -155,6 +156,8 @@ def home(request: Request) -> HTMLResponse:
         sources=infos,
         live_source=live,
         default_source=preferred_source(infos),
+        board=worklist.board(),
+        next_step=worklist.next_step(bool(stats["total"])),
     )
 
 
@@ -335,6 +338,30 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
     )
 
 
+@app.get("/addresses", response_class=HTMLResponse)
+def addresses_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
+    """
+    The businesses the scraper could not find an address for.
+
+    They are real, they scored, and they are unusable until someone has an
+    address to write to — so this is the one screen where a person can be
+    faster than the automation.
+    """
+    rows, total = db.list_businesses(
+        has_email=False, masthead=masthead, industry=industry,
+        sort="score", limit=60,
+    )
+    # A business with no website has nowhere to look, so it is not work.
+    rows = [b for b in rows if b.get("website")]
+    return page(
+        request, "addresses.html",
+        nav="addresses",
+        businesses=rows, total=total,
+        f={"masthead": masthead, "industry": industry},
+        industries=db.industry_options(),
+    )
+
+
 @app.get("/prospect", response_class=HTMLResponse)
 def prospect_page(request: Request, source: str = "", run: int | None = None) -> HTMLResponse:
     infos = sources.all_sources()
@@ -418,6 +445,7 @@ def outbox(request: Request, status: str = "") -> HTMLResponse:
               ("sent", "Sent"), ("failed", "Failed")],
         sends_today=db.sends_today(),
         daily_cap=DAILY_SEND_CAP,
+        approved_count=len(db.list_messages(status="approved", limit=5000)),
     )
 
 
@@ -662,6 +690,17 @@ class MessageEdit(BaseModel):
     body: str
 
 
+class SendBatch(BaseModel):
+    limit: int = 10
+
+
+@app.post("/api/messages/send-approved")
+def api_send_approved(request: Request, body: SendBatch) -> JSONResponse:
+    """Send the approved queue, never past the daily cap."""
+    return JSONResponse(outreach.send_approved(
+        limit=max(1, min(body.limit, 25)), base_url=str(request.base_url)))
+
+
 @app.post("/api/messages/{message_id}")
 def api_edit_message(message_id: int, edit: MessageEdit) -> JSONResponse:
     """Save changes to a draft."""
@@ -682,6 +721,15 @@ def api_approve(message_id: int) -> JSONResponse:
 @app.post("/api/messages/{message_id}/send")
 def api_send(message_id: int, request: Request) -> JSONResponse:
     return JSONResponse(outreach.send_message(message_id, str(request.base_url)))
+
+
+@app.get("/api/messages/{message_id}/preview")
+def api_message_preview(request: Request, message_id: int) -> JSONResponse:
+    """Exactly what would leave the building, assembled but not sent."""
+    result = outreach.preview(message_id, base_url=str(request.base_url))
+    if not result:
+        raise HTTPException(status_code=404, detail="No such message")
+    return JSONResponse(result)
 
 
 @app.get("/api/export.csv")

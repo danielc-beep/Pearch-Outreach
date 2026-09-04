@@ -28,7 +28,36 @@
       Sending is live. {{ sends_today }} of {{ daily_cap }} sends used today.
     </div>
     {% endif %}
+    {% if approved_count %}
+    <div class="notice notice-info row">
+      <span><strong>{{ approved_count }} approved and ready.</strong>
+        Preview one before the first batch — that is the only place you see the footer,
+        the unsubscribe link and which masthead it goes out from.</span>
+      <button class="btn btn-sm btn-primary right" id="btn-send-approved"
+              {{ 'disabled' if not send_enabled }}>
+        Send {{ approved_count if approved_count < daily_cap - sends_today else daily_cap - sends_today }}
+      </button>
+    </div>
+    {% endif %}
+
     <div id="flash"></div>
+
+    <!-- Exactly what would leave the building -->
+    <div class="card" id="preview" hidden style="margin-bottom:20px">
+      <div class="section-head" style="margin-bottom:14px">
+        <h3 style="margin:0">Preview</h3>
+        <button class="btn btn-sm right" id="preview-close">Close</button>
+      </div>
+      <dl class="kv" style="margin-bottom:14px">
+        <dt>From</dt><dd class="mono small" id="pv-from"></dd>
+        <dt>Reply to</dt><dd class="mono small" id="pv-reply"></dd>
+        <dt>To</dt><dd class="mono small" id="pv-to"></dd>
+        <dt>Subject</dt><dd id="pv-subject"></dd>
+        <dt>Masthead</dt><dd id="pv-masthead"></dd>
+      </dl>
+      <div id="pv-flags"></div>
+      <div class="draft-body" id="pv-body"></div>
+    </div>
 
     <div class="table-wrap">
       {% if messages %}
@@ -46,6 +75,7 @@
               <td class="row">
                 {% if m.status == 'draft' %}<button class="btn btn-sm js-approve" data-id="{{ m.id }}">Approve</button>{% endif %}
                 {% if m.status == 'approved' %}<button class="btn btn-sm btn-accent js-send" data-id="{{ m.id }}">Send</button>{% endif %}
+                <button class="btn btn-sm js-preview" data-id="{{ m.id }}">Preview</button>
                 <a class="btn btn-sm" href="/businesses/{{ m.business_id }}">Open</a>
               </td>
             </tr>
@@ -67,6 +97,66 @@
     document.getElementById('flash').innerHTML = '<div class="notice notice-' + kind + '">' + msg + '</div>';
   };
   const act = (url) => window.postJSON(url);
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Preview: the assembled email, not just the body someone signed off on.
+  document.querySelectorAll('.js-preview').forEach((b) => b.addEventListener('click', async () => {
+    const panel = document.getElementById('preview');
+    try {
+      const r = await fetch('/api/messages/' + b.dataset.id + '/preview');
+      if (!r.ok) throw new Error('Could not build the preview.');
+      const p = await r.json();
+      document.getElementById('pv-from').textContent = p.from;
+      document.getElementById('pv-reply').textContent = p.reply_to;
+      document.getElementById('pv-to').textContent = p.to;
+      document.getElementById('pv-subject').textContent = p.subject;
+      document.getElementById('pv-masthead').textContent = p.masthead;
+      document.getElementById('pv-body').textContent = p.body;
+      document.getElementById('pv-flags').innerHTML =
+        (p.problems || []).map((x) =>
+          '<div class="notice notice-error">' + esc(x) + '</div>').join('') +
+        (p.warnings || []).map((x) =>
+          '<div class="notice notice-warn">' + esc(x) + '</div>').join('');
+      panel.hidden = false;
+      panel.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    } catch (err) {
+      flash(esc(err.message), 'error');
+    }
+  }));
+  document.getElementById('preview-close').addEventListener('click', () => {
+    document.getElementById('preview').hidden = true;
+  });
+
+  // Sending the approved queue. Batched and looped, and it stops itself at
+  // the daily cap rather than being trusted not to reach it.
+  const sendAll = document.getElementById('btn-send-approved');
+  if (sendAll) {
+    sendAll.addEventListener('click', async () => {
+      if (!confirm('Send the approved emails? This cannot be undone.')) return;
+      const label = sendAll.textContent.trim();
+      sendAll.disabled = true;
+      let sent = 0, failed = 0, problems = [];
+      try {
+        for (let round = 0; round < 50; round++) {
+          sendAll.innerHTML = '<span class="spinner"></span> Sending — ' + sent;
+          const data = await window.postJSON('/api/messages/send-approved', {limit: 10});
+          sent += data.sent; failed += data.failed;
+          problems = problems.concat(data.problems || []);
+          if (data.capped || !data.remaining || (!data.sent && !data.failed)) break;
+        }
+        flash(sent + ' sent' + (failed ? ', ' + failed + ' could not be' : '') +
+              (problems.length ? '<br><span class="small">' +
+               problems.map(esc).join('<br>') + '</span>' : ''),
+              failed ? 'warn' : 'ok');
+        setTimeout(() => window.location.reload(), problems.length ? 6000 : 1800);
+      } catch (err) {
+        flash(esc(err.message), 'error');
+        sendAll.disabled = false;
+        sendAll.textContent = label;
+      }
+    });
+  }
   document.querySelectorAll('.js-approve').forEach((b) => b.addEventListener('click', async () => {
     try { await act('/api/messages/' + b.dataset.id + '/approve'); location.reload(); }
     catch (e) { flash(e.message, 'error'); }

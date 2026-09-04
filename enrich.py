@@ -189,11 +189,20 @@ def enrich_from_website(website: str) -> dict[str, Any]:
             page = _fetch(client, candidate, blocked)
             if not page:
                 continue
+            # Keep the first contact page that actually served, whether or not
+            # an address is found on it. Where the scraper fails, a person can
+            # open that page and read the address off it in ten seconds —
+            # throwing the URL away made them go and find it themselves.
+            if "contact_url" not in found and "contact" in candidate.lower():
+                found["contact_url"] = candidate
             pages.append(page)
             # Stop as soon as we have an address on the business's own domain —
             # anything else is worth another page or two to try to better.
             if any(e.endswith("@" + site_domain) for e in find_emails(page)):
                 break
+
+    if "contact_url" not in found and len(pages) > 1:
+        found["contact_url"] = url          # at least the homepage served
 
     blob = "\n".join(pages)
 

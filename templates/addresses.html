@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Find addresses — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Addresses</div>
+        <h2>The ones the scraper <em>couldn't crack</em></h2>
+        <p class="lede">Each of these is a real business that scored well and has no address
+          on file. Open its contact page, copy what's there, paste it here. Ten seconds each,
+          and a dead record becomes a prospect.</p>
+      </div>
+      <a class="btn" href="/businesses?has_email=0">See them all</a>
+    </div>
+
+    <form class="filters" method="get" action="/addresses">
+      <div class="f">
+        <label for="ad-masthead">Masthead</label>
+        <select id="ad-masthead" name="masthead">
+          <option value="">Any</option>
+          {% for group in masthead_groups %}
+          <optgroup label="{{ group.state }}">
+            {% for t in group.titles %}
+            <option value="{{ t.site }}" {{ 'selected' if f.masthead == t.site }}>{{ t.name|masthead_label }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="f">
+        <label for="ad-industry">Industry</label>
+        <select id="ad-industry" name="industry">
+          <option value="">Any</option>
+          {% for i in industries %}<option value="{{ i }}" {{ 'selected' if f.industry == i }}>{{ i }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">Apply</button>
+      {% if f.masthead or f.industry %}<a class="btn" href="/addresses">Clear</a>{% endif %}
+    </form>
+
+    <div id="flash"></div>
+
+    {% if businesses %}
+    <p class="muted small" style="margin:0 0 14px">
+      {{ total }} without an address{% if total > businesses|length %},
+      showing the {{ businesses|length }} highest-scoring{% endif %}. Sorted by fit.
+    </p>
+
+    <div class="address-list">
+      {% for b in businesses %}
+      <div class="address-row" data-id="{{ b.id }}">
+        <div class="address-who">
+          <div class="address-name">{{ b.name }}</div>
+          <div class="muted small">
+            {{ b.industry or '—' }} · {{ b.suburb or b.region or '' }}
+            {% if b.rating %} · {{ b.rating }}★{% endif %}
+            · fit {{ b.fit_score }}
+          </div>
+        </div>
+        <div class="address-links">
+          {% if b.contact_url %}
+          <a class="btn btn-sm btn-accent" href="{{ b.contact_url }}" target="_blank" rel="noopener noreferrer">Contact page ↗</a>
+          {% elif b.website %}
+          <a class="btn btn-sm" href="{{ b.website }}" target="_blank" rel="noopener noreferrer">Website ↗</a>
+          {% else %}
+          <span class="muted small">No website on file</span>
+          {% endif %}
+          {% if b.phone %}<span class="muted small mono">{{ b.phone }}</span>{% endif %}
+        </div>
+        <div class="address-entry">
+          <input type="email" class="js-email" placeholder="paste the address" aria-label="Email for {{ b.name }}" />
+          <button class="btn btn-sm btn-primary js-save">Save</button>
+          <button class="btn btn-sm btn-danger js-none" title="No address to be found">None</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+      <h3>Nothing waiting</h3>
+      <p class="muted" style="margin:0 0 16px">
+        Every business that scored well has an address on file. Either the enrichment found
+        them all, or there is nothing in the database yet.
+      </p>
+      <a class="btn btn-primary" href="/prospect">Find more businesses</a>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const flashEl = document.getElementById('flash');
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function flash(message, kind) {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + esc(message) + '</div>';
+    window.setTimeout(() => { flashEl.innerHTML = ''; }, 3500);
+  }
+
+  // A saved row leaves rather than sitting there looking undone.
+  function retire(row, message) {
+    row.classList.add('is-done');
+    flash(message, 'ok');
+    window.setTimeout(() => row.remove(), 600);
+  }
+
+  document.querySelectorAll('.address-row').forEach((row) => {
+    const id = row.dataset.id;
+    const input = row.querySelector('.js-email');
+    const save = row.querySelector('.js-save');
+    const none = row.querySelector('.js-none');
+    const name = row.querySelector('.address-name').textContent.trim();
+
+    async function submit() {
+      const email = input.value.trim();
+      if (!email) { input.focus(); return; }
+      save.disabled = true;
+      try {
+        await window.postJSON('/api/businesses/' + id, {email: email});
+        retire(row, name + ' — ' + email + ' saved.');
+      } catch (err) {
+        flash(err.message, 'error');
+        save.disabled = false;
+      }
+    }
+
+    save.addEventListener('click', submit);
+    // Enter submits the row you are in, so a run of these is all keyboard.
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); submit(); }
+    });
+
+    none.addEventListener('click', async () => {
+      none.disabled = true;
+      try {
+        await window.postJSON('/api/businesses/' + id, {status: 'disqualified'});
+        retire(row, name + ' ruled out — no address to be found.');
+      } catch (err) {
+        flash(err.message, 'error');
+        none.disabled = false;
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

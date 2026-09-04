@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS businesses (
     notes             TEXT,
     website_status    TEXT,
     masthead          TEXT,
+    contact_url       TEXT,
     do_not_contact    INTEGER NOT NULL DEFAULT 0,
     last_contacted_at TEXT,
     enriched_at       TEXT
@@ -143,6 +144,7 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("prospecting_runs", "ALTER TABLE prospecting_runs ADD COLUMN result_ids TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN masthead TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN contact_url TEXT"),
 ]
 
 
@@ -207,7 +209,7 @@ BUSINESS_FIELDS = (
     "industry", "category", "size_band", "rating", "review_count",
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
-    "notes", "website_status", "masthead",
+    "notes", "website_status", "masthead", "contact_url",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -680,6 +682,31 @@ def list_messages(business_id: int | None = None, status: str = "",
         [*args, limit],
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def recent_send_to_domain(domain: str, within_days: int = 30,
+                          ignore_message_id: int | None = None) -> dict[str, Any] | None:
+    """
+    The last email sent to anyone at this domain, if it was recent.
+
+    A sweep of five trades across one town turns up two partners at the same
+    firm often enough to matter, and info@ getting the same pitch twice in a
+    week is how a prospect becomes a complaint.
+    """
+    if not domain:
+        return None
+    clause = "AND m.id != ?" if ignore_message_id else ""
+    args: list[Any] = [f"%@{domain}", f"-{int(within_days)} days"]
+    if ignore_message_id:
+        args.append(ignore_message_id)
+    row = get_conn().execute(
+        "SELECT m.*, b.name AS business_name FROM messages m "
+        "JOIN businesses b ON b.id = m.business_id "
+        "WHERE m.status = 'sent' AND m.to_email LIKE ? "
+        f"AND m.sent_at >= datetime('now', ?) {clause} "
+        "ORDER BY m.sent_at DESC LIMIT 1", args
+    ).fetchone()
+    return dict(row) if row else None
 
 
 def sends_today() -> int:
