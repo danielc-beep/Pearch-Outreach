@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Align to a masthead — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Alignment</div>
+        <h2>Whose patch are these on?</h2>
+        <p class="lede">Nothing moves without a masthead. The email opens by saying which
+          paper is putting the content together, and the local title carries weight ACM
+          on its own does not — so a business with no masthead cannot be reviewed,
+          drafted or sent until it has one.</p>
+      </div>
+      {% if suggested %}
+      <button class="btn btn-primary" id="btn-accept-all">Accept {{ suggested }} suggestion{{ '' if suggested == 1 else 's' }}</button>
+      {% endif %}
+    </div>
+
+    <form class="filters" method="get" action="/align">
+      <div class="f">
+        <label for="al-state">State</label>
+        <select id="al-state" name="state">
+          <option value="">Any</option>
+          {% for s in states %}<option value="{{ s }}" {{ 'selected' if f.state == s }}>{{ s }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="f">
+        <label for="al-industry">Industry</label>
+        <select id="al-industry" name="industry">
+          <option value="">Any</option>
+          {% for i in industries %}<option value="{{ i }}" {{ 'selected' if f.industry == i }}>{{ i }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="btn btn-primary" type="submit">Apply</button>
+      {% if f.industry or f.state %}<a class="btn" href="/align">Clear</a>{% endif %}
+    </form>
+
+    <div id="flash"></div>
+
+    {% if businesses %}
+    <p class="muted small" style="margin:0 0 14px">
+      {{ total }} waiting on a masthead{% if total > businesses|length %},
+      showing the {{ businesses|length }} highest-scoring{% endif %}.
+      {% if suggested %}{{ suggested }} of these matched a title on their own suburb — check
+      the guess before you take it.{% endif %}
+    </p>
+
+    <div class="address-list">
+      {% for b in businesses %}
+      <div class="address-row align-row" data-id="{{ b.id }}">
+        <div class="address-who">
+          <div class="address-name">
+            <a href="/businesses/{{ b.id }}">{{ b.name }}</a>
+          </div>
+          <div class="muted small">
+            {{ b.industry or b.category or '—' }} ·
+            {{ b.suburb or b.region or 'no town on file' }}{% if b.state %}, {{ b.state }}{% endif %}
+            {% if b.rating %} · {{ b.rating }}★{% endif %}
+            · fit {{ b.fit_score }}
+          </div>
+        </div>
+        <div class="align-pick">
+          <select class="js-masthead" aria-label="Masthead for {{ b.name }}">
+            <option value="">Choose a masthead…</option>
+            {% for group in masthead_groups %}
+            <optgroup label="{{ group.state }}">
+              {% for t in group.titles %}
+              <option value="{{ t.site }}" {{ 'selected' if b.suggested == t.site }}>{{ t.name|masthead_label }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <button class="btn btn-sm btn-primary js-save">Save</button>
+        </div>
+        <div class="align-why muted small">
+          {% if b.suggested %}
+          Suggested from {{ b.suggested_from }}
+          {% else %}
+          No match — pick one
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+      <h3>Everything is on somebody's patch</h3>
+      <p class="muted" style="margin:0 0 16px">
+        Every business in the database is aligned to a masthead, so every email that
+        goes out will come from the paper that covers the town.
+      </p>
+      <a class="btn btn-primary" href="/review">Work the review queue</a>
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const flashEl = document.getElementById('flash');
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  function flash(message, kind) {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + esc(message) + '</div>';
+    window.setTimeout(() => { flashEl.innerHTML = ''; }, 3500);
+  }
+
+  function retire(row, message) {
+    row.classList.add('is-done');
+    flash(message, 'ok');
+    window.setTimeout(() => row.remove(), 600);
+  }
+
+  async function saveRow(row, quiet) {
+    const select = row.querySelector('.js-masthead');
+    const site = select.value;
+    if (!site) { if (!quiet) select.focus(); return false; }
+    const name = row.querySelector('.address-name').textContent.trim();
+    const title = select.options[select.selectedIndex].text;
+    await window.postJSON('/api/businesses/' + row.dataset.id, {masthead: site});
+    if (!quiet) retire(row, name + ' aligned to ' + title + '.');
+    return true;
+  }
+
+  document.querySelectorAll('.address-row').forEach((row) => {
+    const save = row.querySelector('.js-save');
+    save.addEventListener('click', async () => {
+      save.disabled = true;
+      try { await saveRow(row, false); } catch (err) { flash(err.message, 'error'); }
+      save.disabled = false;
+    });
+  });
+
+  // Taking every suggestion at once, which is the point of suggesting them.
+  // Rows with no suggestion are left alone rather than guessed at: a wrong
+  // masthead is a wrong claim in an email.
+  const acceptAll = document.getElementById('btn-accept-all');
+  if (acceptAll) {
+    acceptAll.addEventListener('click', async () => {
+      acceptAll.disabled = true;
+      const rows = Array.from(document.querySelectorAll('.address-row'));
+      let done = 0;
+      for (const row of rows) {
+        try { if (await saveRow(row, true)) { done += 1; row.remove(); } }
+        catch (err) { flash(err.message, 'error'); break; }
+      }
+      flash(done + ' aligned. ' + document.querySelectorAll('.address-row').length +
+            ' still need a masthead chosen by hand.', 'ok');
+      acceptAll.disabled = false;
+      if (!document.querySelector('.address-row')) window.location.reload();
+    });
+  }
+})();
+</script>
+{% endblock %}

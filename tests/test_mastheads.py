@@ -269,3 +269,118 @@ def test_the_align_route_and_the_notice(client):
     result = client.post("/api/mastheads/align").json()
     assert result["aligned"] == 1
     assert "not aligned to a masthead" not in client.get("/businesses").text
+
+
+# ---------- Alignment is a gate, not a tidy-up ----------
+# The email says which paper is putting the content together, and that claim
+# is the whole reason it lands. A business with no masthead has nothing true
+# to put in that sentence, so it waits on the alignment queue.
+
+def _seed_for_alignment():
+    """Two aligned, two not — otherwise ready to be worked."""
+    import db
+    ids = {}
+    for name, suburb, site in (("Aligned Plumbing", "Newcastle", "newcastleherald.com.au"),
+                               ("Aligned Sparkies", "Wollongong", "illawarramercury.com.au"),
+                               ("Adrift Dentistry", "Newcastle", ""),
+                               ("Nowhere Motors", "Somewhereville", "")):
+        slug = name.split()[0].lower()
+        business_id, _ = db.upsert_business({
+            "name": name, "industry": "Trades", "suburb": suburb, "state": "NSW",
+            "rating": 4.6, "review_count": 30, "source": "csv", "masthead": site,
+            "email": f"hello@{slug}.com.au", "website": f"https://{slug}.com.au"})
+        ids[name] = business_id
+    return ids
+
+
+def test_the_review_queue_leaves_out_the_unaligned(client):
+    import db, review
+    _seed_for_alignment()
+    queued = {db.get_business(i)["name"] for i in review.queue_ids()}
+    assert queued == {"Aligned Plumbing", "Aligned Sparkies"}
+
+
+def test_a_bulk_draft_run_skips_the_unaligned(client):
+    import outreach
+    _seed_for_alignment()
+    written = {b["name"] for b in outreach.draft_batch(limit=10, use_ai=False)["businesses"]}
+    assert "Adrift Dentistry" not in written and "Nowhere Motors" not in written
+    assert "Aligned Plumbing" in written
+
+
+def test_an_unaligned_business_cannot_be_sent(client):
+    import db, outreach
+    ids = _seed_for_alignment()
+    message = outreach.draft_message(ids["Adrift Dentistry"], use_ai=False)
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert any("not aligned to a masthead" in p for p in problems), problems
+
+
+def test_aligning_it_clears_the_blocker(client):
+    import db, outreach
+    ids = _seed_for_alignment()
+    message = outreach.draft_message(ids["Adrift Dentistry"], use_ai=False)
+    db.update_business(ids["Adrift Dentistry"], {"masthead": "newcastleherald.com.au"})
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert not any("masthead" in p for p in problems), problems
+
+
+# ---------- The alignment queue ----------
+
+def test_the_board_sends_you_to_the_queue_not_a_filtered_list(client):
+    import worklist
+    _seed_for_alignment()
+    row = next(i for i in worklist.board() if i["key"] == "unaligned")
+    assert row["href"] == "/align"
+    assert row["count"] == 2
+
+
+def test_alignment_comes_before_review_on_the_board(client):
+    """It unblocks the review queue, so it has to be read first."""
+    import worklist
+    _seed_for_alignment()
+    keys = [i["key"] for i in worklist.board()]
+    assert keys.index("unaligned") < keys.index("review")
+
+
+def test_the_queue_lists_only_the_unaligned(client):
+    _seed_for_alignment()
+    body = client.get("/align").text
+    assert "Adrift Dentistry" in body and "Nowhere Motors" in body
+    assert "Aligned Plumbing" not in body
+
+
+def test_the_queue_suggests_a_masthead_from_the_town(client):
+    """Newcastle should arrive with the Herald already chosen."""
+    _seed_for_alignment()
+    body = client.get("/align").text
+    assert 'value="newcastleherald.com.au" selected' in body
+    assert "Suggested from Newcastle" in body
+
+
+def test_a_town_that_matches_nothing_is_left_for_a_person(client):
+    """A wrong masthead is a wrong claim in an email — better to ask."""
+    _seed_for_alignment()
+    body = client.get("/align").text
+    assert "No match — pick one" in body
+
+
+def test_saving_from_the_queue_aligns_the_business(client):
+    import db
+    ids = _seed_for_alignment()
+    response = client.post(f"/api/businesses/{ids['Adrift Dentistry']}",
+                           json={"masthead": "newcastleherald.com.au"})
+    assert response.status_code == 200
+    assert db.get_business(ids["Adrift Dentistry"])["masthead"] == "newcastleherald.com.au"
+
+
+def test_an_invented_masthead_is_refused(client):
+    ids = _seed_for_alignment()
+    response = client.post(f"/api/businesses/{ids['Adrift Dentistry']}",
+                           json={"masthead": "not-a-real-paper.com.au"})
+    assert response.status_code == 400
+
+
+def test_the_empty_queue_says_so_rather_than_showing_nothing(client):
+    body = client.get("/align").text
+    assert "Everything is on somebody" in body

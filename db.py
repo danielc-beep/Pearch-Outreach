@@ -645,6 +645,11 @@ def list_businesses(
         if MIN_PROSPECT_RATING > 0:
             where.append("rating IS NOT NULL AND rating >= ?")
             args.append(MIN_PROSPECT_RATING)
+        # And aligned to a masthead. The email says which paper is putting the
+        # content together, and that is the whole reason it lands — so a
+        # business with no masthead is not ready to be worked, it is waiting
+        # on the alignment queue.
+        where.append("masthead IS NOT NULL AND masthead != ''")
         where.append("email IS NOT NULL AND email != ''")
         where.append("do_not_contact = 0")
         where.append("status NOT IN ('contacted','replied','won','lost','disqualified')")
@@ -739,6 +744,11 @@ def industry_options() -> list[str]:
         for value in distinct_values(column):
             seen.setdefault(value.strip().lower(), value.strip())
     return sorted(seen.values(), key=str.lower)
+
+
+def state_options() -> list[str]:
+    """The states actually present, so the filter never offers an empty one."""
+    return sorted({v.strip().upper() for v in distinct_values("state") if v.strip()})
 
 
 # ---------- Contacts ----------

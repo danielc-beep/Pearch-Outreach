@@ -524,6 +524,23 @@ kbd {
   .address-row { grid-template-columns: 1fr; gap: 10px; }
 }
 
+/* ---------- Aligning to a masthead ---------- */
+/* Its own column shares: the picker is the widest thing on the row and a
+   select does not shrink on its own, which pushes the Save button out from
+   under it and on top of the next column. */
+.align-row { grid-template-columns: minmax(0,1.4fr) minmax(0,1.3fr) minmax(0,0.8fr); }
+.align-pick { display: flex; align-items: center; gap: 8px; }
+.align-pick select { flex: 1; min-width: 0; }
+.align-why { text-align: right; }
+@media (max-width: 900px) {
+  /* minmax(0,…) rather than 1fr: a grid item will not shrink below its own
+     min-content otherwise, and a select full of masthead names has a wide
+     one — which pushes the whole row past the edge of a phone. */
+  .align-row { grid-template-columns: minmax(0, 1fr); }
+  .align-row > * { min-width: 0; }
+  .align-why { text-align: left; }
+}
+
 /* ---------- Micro-interaction ----------
    Ambient motion is scenery; this is the interface acknowledging that you
    touched it. Everything here is short — 120ms to 400ms — because a delay

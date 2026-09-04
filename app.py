@@ -345,6 +345,37 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
     )
 
 
+@app.get("/align", response_class=HTMLResponse)
+def align_page(request: Request, industry: str = "", state: str = "") -> HTMLResponse:
+    """
+    The businesses with no masthead against their name.
+
+    Nothing can be worked or emailed without one, so this is a gate rather
+    than a tidy-up: an email that opens "the Newcastle Herald is putting
+    together..." has to be true, and until a masthead is set there is nothing
+    to put in that sentence but ACM, which is the weaker letter.
+
+    Each row arrives with the suburb-and-region match already chosen where
+    there is one, so the common case is reading a name and pressing Save.
+    """
+    rows, total = db.list_businesses(masthead="none", industry=industry, state=state,
+                                     sort="score", limit=80)
+    suggested = 0
+    for business in rows:
+        site = mastheads.match_business(business)
+        business["suggested"] = site
+        business["suggested_from"] = business.get("suburb") or business.get("region") or ""
+        suggested += 1 if site else 0
+    return page(
+        request, "align.html",
+        nav="align",
+        businesses=rows, total=total, suggested=suggested,
+        f={"industry": industry, "state": state},
+        industries=db.industry_options(),
+        states=db.state_options(),
+    )
+
+
 @app.get("/addresses", response_class=HTMLResponse)
 def addresses_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
     """

@@ -104,6 +104,9 @@ def _seed_contactable():
         business_id, _ = db.upsert_business({
             "name": name, "industry": "Trades", "suburb": "Newcastle",
             "rating": rating, "review_count": 40, "source": "csv",
+            # Aligned, so these tests isolate the rating rule from the
+            # masthead one — both gate the queue and the send.
+            "masthead": "newcastleherald.com.au",
             "email": f"hello@{name.split()[0].lower()}.com.au",
             "website": f"https://{name.split()[0].lower()}.com.au",
         })

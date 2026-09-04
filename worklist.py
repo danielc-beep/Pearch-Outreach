@@ -60,6 +60,13 @@ def board() -> list[dict[str, Any]]:
               "replied to an email",
               "Someone answered. That is the point of all of this, and it goes cold fastest.",
               "Open them", "/businesses?status=replied", "hot"),
+        # Above the review row on purpose: nothing here can be reviewed until
+        # it has a masthead, so this is the queue that unblocks that one.
+        _item("unaligned", unaligned,
+              "not aligned to a masthead",
+              "Nothing moves without one. Their emails would come from ACM rather than "
+              "the local paper that carries weight.",
+              "Align them", "/align", "warn"),
         _item("review", to_review,
               "waiting for a decision",
               "Read the business and its email, then approve it or rule it out.",
@@ -68,10 +75,6 @@ def board() -> list[dict[str, Any]]:
               "approved and ready to send",
               "Reviewed, drafted and signed off. Nothing is stopping these but the sending.",
               "Open the outbox", "/outbox?status=approved"),
-        _item("unaligned", unaligned,
-              "not aligned to a masthead",
-              "Their emails would go out from ACM rather than the local paper that carries weight.",
-              "Align them", "/businesses?masthead=none", "warn"),
         _item("no_email", no_email,
               "have no email address",
               "Found, scored, and unusable until someone has an address to write to.",

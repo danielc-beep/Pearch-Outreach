@@ -626,6 +626,10 @@ def preflight(message: dict[str, Any]) -> list[str]:
     business = db.get_business(int(message["business_id"])) if message.get("business_id") else None
     if business and business.get("do_not_contact"):
         problems.append(f"{business['name']} is marked do-not-contact.")
+    if business and not (business.get("masthead") or "").strip():
+        # Without one the letter comes from ACM, which is the weaker letter and
+        # not the one anyone approved. Alignment is a decision, not a default.
+        problems.append(f"{business['name']} is not aligned to a masthead.")
     if business and MIN_PROSPECT_RATING > 0:
         # The last gate on the rating floor, and the one that matters: every
         # other check happens before a person changes their mind. The email
