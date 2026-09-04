@@ -229,8 +229,25 @@
     if (!card) { at++; return show(); }
     current = card;
     render(card);
+    const fresh = cardEl.querySelector('.queue-card');
+    if (fresh && !reduceMotion) fresh.classList.add('js-enter');
     // Fetch the next one now, so moving on is instant.
     if (ids[at + 1]) fetchCard(ids[at + 1]);
+  }
+
+  // The card leaves in the direction of the decision: approved right, ruled
+  // out left, skipped down. A keystroke that only swaps the content gives no
+  // sense of having done anything, which is the difference between working a
+  // queue and watching one.
+  const EXIT = {approve: 'is-approved', reject: 'is-rejected', skip: 'is-skipped'};
+  const reduceMotion = window.matchMedia
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function playExit(decision) {
+    const card = cardEl.querySelector('.queue-card');
+    if (!card || reduceMotion) return Promise.resolve();
+    card.classList.add(EXIT[decision]);
+    return new Promise((resolve) => window.setTimeout(resolve, 200));
   }
 
   async function decide(decision) {
@@ -239,16 +256,22 @@
     const id = current.business.id;
     const name = current.business.name;
     try {
+      // The animation runs while the request is in flight, not after it, so
+      // it costs nothing in time.
+      const leaving = playExit(decision);
       if (decision !== 'skip') {
         await window.postJSON('/api/review/decide/' + id, {decision: decision});
         decided++;
         flash(name + (decision === 'approve' ? ' approved' : ' marked not a fit'),
               decision === 'approve' ? 'ok' : 'info');
       }
+      await leaving;
       cache.delete(id);
       at++;
       await show();
     } catch (err) {
+      const card = cardEl.querySelector('.queue-card');
+      if (card) card.classList.remove(EXIT[decision]);   // it stayed; show that
       flash(err.message, 'error');
     } finally {
       busy = false;

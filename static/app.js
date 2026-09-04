@@ -54,3 +54,50 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 });
+
+
+/* ---------------------------------------------------------------
+   Entrances and counting.
+
+   Both are deliberately cheap: a stagger capped so a hundred-row table
+   does not take three seconds to arrive, and a count-up short enough
+   that nobody waits to read a number they can already see.
+   --------------------------------------------------------------- */
+(function () {
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  document.addEventListener('DOMContentLoaded', function () {
+    if (reduce) return;
+
+    // Stagger the things that arrive as a group.
+    ['.board-item', '.address-row', '.grid-4 > .card', '.pipeline .stage']
+      .forEach(function (selector) {
+        var nodes = document.querySelectorAll(selector);
+        for (var i = 0; i < nodes.length && i < 12; i++) {
+          nodes[i].style.animationDelay = (i * 45) + 'ms';
+          nodes[i].classList.add('js-enter');
+        }
+      });
+
+    // Count the big numbers up. Only the big ones — a count-up on a table
+    // cell is noise, and on a number above a few thousand it is a slot
+    // machine, so both are left alone.
+    document.querySelectorAll('.stat .num, .board-n').forEach(function (el) {
+      var text = el.firstChild && el.firstChild.nodeValue;
+      var target = parseInt((text || '').trim(), 10);
+      if (!target || target < 2 || target > 9999) return;
+
+      var started = null;
+      var duration = 420;
+      el.firstChild.nodeValue = '0';
+      (function step(now) {
+        if (started === null) started = now;
+        var through = Math.min(1, (now - started) / duration);
+        // Ease out, so it lands rather than stopping dead.
+        var eased = 1 - Math.pow(1 - through, 3);
+        el.firstChild.nodeValue = String(Math.round(target * eased));
+        if (through < 1) window.requestAnimationFrame(step);
+      })(performance.now());
+    });
+  });
+})();

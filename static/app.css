@@ -523,3 +523,104 @@ kbd {
 @media (max-width: 900px) {
   .address-row { grid-template-columns: 1fr; gap: 10px; }
 }
+
+/* ---------- Micro-interaction ----------
+   Ambient motion is scenery; this is the interface acknowledging that you
+   touched it. Everything here is short — 120ms to 400ms — because a delay
+   you can notice is a delay you resent by the fiftieth time. */
+
+/* Buttons depress. A tint alone reads as a hover state, not a press. */
+.btn:active:not(:disabled),
+.nav-cta:active,
+.searchbar button:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+.btn, .nav-cta, .searchbar button { transition: 0.15s, transform 0.08s; }
+
+/* Rows lift under the pointer rather than only changing colour. */
+tbody tr { transition: background 0.15s, box-shadow 0.15s; }
+tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
+
+/* Score bars fill from nothing on load, so the number arrives rather than
+   simply being there. */
+@keyframes score-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.score .bar i { transform-origin: left center; animation: score-fill 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* Cards and rows enter with a short stagger. The delays are set inline by
+   app.js, which is also what keeps this to one paint. */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.js-enter { animation: rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* The review queue's decision has a direction: approved goes right, ruled
+   out goes left. Pressing a key should have a consequence you can see. */
+@keyframes leave-right { to { opacity: 0; transform: translateX(46px); } }
+@keyframes leave-left  { to { opacity: 0; transform: translateX(-46px); } }
+@keyframes leave-down  { to { opacity: 0; transform: translateY(16px); } }
+.queue-card.is-approved { animation: leave-right 0.22s ease-in both; }
+.queue-card.is-rejected { animation: leave-left 0.22s ease-in both; }
+.queue-card.is-skipped  { animation: leave-down 0.18s ease-in both; }
+
+/* Flash messages arrive rather than blink into place. */
+.notice { animation: rise 0.25s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* Nothing above should move for anyone who has asked it not to. The blanket
+   rule further up covers duration; this covers the transforms themselves. */
+@media (prefers-reduced-motion: reduce) {
+  .js-enter, .notice, .score .bar i,
+  .queue-card.is-approved, .queue-card.is-rejected, .queue-card.is-skipped {
+    animation: none !important;
+  }
+  .btn:active:not(:disabled), .nav-cta:active { transform: none; }
+}
+
+/* ---------- Hierarchy ----------
+   Every surface being the same rounded navy rectangle is a machine's
+   instinct. ACM is a publisher, so the weight comes from where a newspaper
+   gets it: heavy display numerals, a hairline rule under a section head,
+   and one surface that is deliberately not like the others. */
+
+/* Numbers carry the page, so let them. Tabular figures so a column of them
+   lines up, and tight tracking so they read as display type. */
+.stat .num, .board-n, .queue-score .num, .pipeline .stage .n {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.045em;
+  font-weight: 800;
+}
+.stat .num { font-size: 52px; }
+.board-n { font-size: 34px; min-width: 66px; }
+.queue-score .num { font-size: 54px; }
+
+/* A hairline under a section head. Cheap, and it is the single thing that
+   most makes a page look set rather than stacked. */
+.section-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px; margin-bottom: 24px;
+}
+.section-head h2 { position: relative; }
+/* A short cyan rule above the heading, the way a masthead marks a section. */
+.section-head h2::before {
+  content: ""; position: absolute; top: -10px; left: 0;
+  width: 34px; height: 2px; background: var(--cyan); border-radius: 2px;
+}
+.section-head > div:first-child { padding-top: 10px; }
+.eyebrow + h2::before { display: none; }   /* the eyebrow already marks it */
+.eyebrow + h2 { }
+
+/* Labels in small caps, which is what a rate card or a results table uses. */
+.stat .label, .pipeline .stage .s, .queue-score .s {
+  text-transform: uppercase; letter-spacing: 0.09em; font-size: 11px; font-weight: 600;
+}
+.stat .label { font-size: 11.5px; margin-top: 10px; }
+
+/* The one surface that is not like the others. The review card is where the
+   work happens, so it reads as paper on the night sky rather than another
+   panel in the stack. */
+.queue-card {
+  background: linear-gradient(180deg, #223061 0%, #1C2851 100%);
+  border-color: rgba(255,255,255,0.22);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.30), 0 30px 70px -30px rgba(0,0,0,0.95);
+}
+.queue-card .queue-head { border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+.queue-actions { background: #26356B; }
+
+/* The business name on the queue card is the headline of that card. */
+.queue-card h2 { font-size: 34px; letter-spacing: -0.03em; }
+@media (max-width: 720px) { .queue-card h2 { font-size: 26px; } }

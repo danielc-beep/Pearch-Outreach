@@ -116,3 +116,40 @@ def test_the_search_bar_chevron_clears_the_text(client):
     # Room reserved for it, and the text ellipsised before it gets there.
     assert "padding-right: 20px;" in css
     assert "text-overflow: ellipsis;" in css
+
+
+def test_the_heading_flourish_is_the_exception_not_the_rule(client):
+    """
+    Twelve of eighteen headings were the same construction — plain words plus
+    an italic serif flourish. A device applied without exception is what reads
+    as machine-written, so most headings now say the plain thing.
+    """
+    import pathlib
+    import re
+    templates = pathlib.Path(__file__).resolve().parent.parent / "templates"
+    headings = []
+    for path in templates.glob("*.html"):
+        headings += re.findall(r"<h2>(.*?)</h2>", path.read_text(), re.S)
+    literal = [h for h in headings if "{{" not in h]
+    flourished = [h for h in literal if "<em>" in h]
+    assert len(literal) >= 10
+    assert len(flourished) <= 4, flourished
+
+
+def test_the_interface_responds_to_being_touched(client):
+    css = client.get("/static/app.css").text
+    assert ".btn:active:not(:disabled)" in css          # buttons depress
+    assert "@keyframes score-fill" in css               # score bars fill
+    assert "@keyframes rise" in css                     # things enter
+    assert "@keyframes leave-right" in css              # the queue has a direction
+    js = client.get("/static/app.js").text
+    assert "animationDelay" in js                       # staggered entrance
+    assert "requestAnimationFrame(step)" in js          # numbers count up
+
+
+def test_none_of_it_moves_under_reduced_motion(client):
+    css = client.get("/static/app.css").text
+    tail = css[css.index("Micro-interaction"):]
+    assert "@media (prefers-reduced-motion: reduce)" in tail
+    assert "animation: none !important;" in tail
+    assert "prefers-reduced-motion" in client.get("/static/app.js").text
