@@ -50,3 +50,35 @@ def test_body_copy_is_bright_enough_to_read_over_the_field(client):
     # Panels sit at 90% so a light passing behind a paragraph is a shimmer,
     # not a competing mark.
     assert "rgba(31,46,92,0.90)" in css
+
+
+def test_the_swarm_flocks_and_avoids_the_panels(client):
+    js = client.get("/static/fairy-lights.js").text
+    # The three boid rules, over a grid rather than every pair.
+    for rule in ("W_ALIGN", "W_COHERE", "W_SEPARATE", "refillGrid"):
+        assert rule in js, rule
+    # Panels are obstacles, and a light inside one is never drawn.
+    assert "W_AVOID" in js
+    assert "p.hidden = true" in js
+    assert ".topbar, .footer, .card, .table-wrap, .searchbar, .source-card, .notice" in js
+    # Panel positions move under a fixed canvas, so they are re-read on scroll.
+    assert "addEventListener('scroll'" in js
+
+
+def test_panels_carry_no_backdrop_filter(client):
+    """
+    The swarm steers around every panel, so the only thing behind one is the
+    static sky. A backdrop blur would make the browser redo that blur on every
+    animated frame — it cost two thirds of the frame rate on the table page.
+    """
+    import re
+    css = client.get("/static/app.css").text
+    # The word appears in a comment explaining the absence; look for the
+    # declaration itself.
+    assert not re.search(r"^\s*(-webkit-)?backdrop-filter\s*:", css, re.M)
+    assert "backdrop-filter: blur" not in css
+
+
+def test_the_sticky_header_is_opaque(client):
+    """It could be translucent only while a blur smeared what passed under it."""
+    assert "background: #101A3E;" in client.get("/static/app.css").text
