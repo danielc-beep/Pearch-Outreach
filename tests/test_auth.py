@@ -280,3 +280,133 @@ def test_the_api_works_once_signed_in(monkeypatch):
     c = _client(monkeypatch, "s3cret")
     _sign_in(c)
     assert c.get("/api/stats", headers={"host": "acm-outreach.onrender.com"}).status_code == 200
+
+
+# ---------- Changing the password from inside the app ----------
+# The password lived only in the hosting dashboard, which meant nobody without
+# Render credentials could ever change it — and it took an afternoon to find
+# out it was not the value everyone believed it was.
+
+def _stored_client(monkeypatch, env_password="s3cret"):
+    """A signed-in client with a clean settings table."""
+    import db
+    db.reset_db()
+    c = _client(monkeypatch, env_password)
+    import auth
+    auth.forget_cached_password()
+    _sign_in(c, password=env_password)
+    return c
+
+
+def _change(c, current, new, confirm=None):
+    return c.post("/password", data={"current": current, "new_password": new,
+                                     "confirm": new if confirm is None else confirm})
+
+
+def test_the_change_password_page_needs_a_session(monkeypatch):
+    c = _client(monkeypatch, "s3cret")
+    response = c.get("/password", headers={"host": "acm-outreach.onrender.com"})
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("/login")
+
+
+def test_a_new_password_takes_effect(monkeypatch):
+    import auth
+    c = _stored_client(monkeypatch)
+    assert _change(c, "s3cret", "Pearch2026").status_code == 303
+    assert auth.password_ok("Pearch2026")
+    assert auth.password_ok("s3cret") is False
+
+
+def test_you_can_sign_in_again_with_the_new_one(monkeypatch):
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "Pearch2026")
+    c.get("/logout")
+    assert _sign_in(c, password="s3cret").status_code == 401
+    assert _sign_in(c, password="Pearch2026").status_code == 303
+
+
+def test_changing_it_does_not_sign_out_the_person_changing_it(monkeypatch):
+    """The session key comes from the password, so the cookie must be reissued."""
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "Pearch2026")
+    assert c.get("/", headers={"host": "acm-outreach.onrender.com"}).status_code == 200
+
+
+def test_it_does_sign_out_everybody_else(monkeypatch):
+    import auth
+    from fastapi.testclient import TestClient
+    import app as app_module
+    c = _stored_client(monkeypatch)
+    other = TestClient(app_module.app, follow_redirects=False)
+    _sign_in(other, password="s3cret")
+    assert other.get("/", headers={"host": "acm-outreach.onrender.com"}).status_code == 200
+    _change(c, "s3cret", "Pearch2026")
+    assert other.get("/", headers={"host": "acm-outreach.onrender.com"}).status_code == 303
+
+
+def test_the_wrong_current_password_changes_nothing(monkeypatch):
+    import auth
+    c = _stored_client(monkeypatch)
+    response = _change(c, "not-it", "Pearch2026")
+    assert "not the current password" in response.text
+    assert auth.password_ok("s3cret")
+
+
+def test_a_mistyped_confirmation_changes_nothing(monkeypatch):
+    import auth
+    c = _stored_client(monkeypatch)
+    response = _change(c, "s3cret", "Pearch2026", confirm="Pearch2027")
+    assert "do not match" in response.text
+    assert auth.password_ok("s3cret")
+
+
+def test_a_short_password_is_refused(monkeypatch):
+    import auth
+    c = _stored_client(monkeypatch)
+    assert "six characters" in _change(c, "s3cret", "ACM26").text
+    assert auth.password_ok("s3cret")
+
+
+def test_the_password_is_never_stored_in_the_clear(monkeypatch):
+    import db
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "Pearch2026")
+    stored = db.get_setting("password_hash")
+    assert stored.startswith("pbkdf2$")
+    assert "Pearch2026" not in stored
+
+
+def test_the_dashboard_password_is_the_way_back(monkeypatch):
+    """
+    Forget the in-app password and changing PEARCH_PASSWORD gets you in again.
+    Without this the only recovery would be editing the database by hand.
+    """
+    import auth
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "forgotten-forever")
+
+    _client(monkeypatch, "a-new-dashboard-password")
+    import importlib
+    importlib.reload(auth)
+    auth.forget_cached_password()
+    assert auth.password_ok("a-new-dashboard-password")
+    assert auth.password_ok("forgotten-forever") is False
+
+
+def test_the_dashboard_password_stops_working_once_changed_in_the_app(monkeypatch):
+    """Exactly one password works at a time, or revoking access means nothing."""
+    import auth
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "Pearch2026")
+    assert auth.password_ok("s3cret") is False
+
+
+def test_a_tampered_hash_refuses_rather_than_crashing(monkeypatch):
+    import auth, db
+    c = _stored_client(monkeypatch)
+    _change(c, "s3cret", "Pearch2026")
+    for junk in ("", "rubbish", "pbkdf2$notanumber$aa$bb", "sha1$1$aa$bb"):
+        db.set_setting("password_hash", junk)
+        auth.forget_cached_password()
+        assert auth.password_ok("Pearch2026") is False, junk

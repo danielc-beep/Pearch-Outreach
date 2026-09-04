@@ -23,6 +23,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import secrets
 import time
 from collections import defaultdict
 
@@ -73,18 +74,7 @@ def _is_local(request: Request) -> bool:
     return host in LOCAL_HOSTS
 
 
-# ---------- The session cookie ----------
-
-def _key() -> bytes:
-    """
-    The signing key, derived from the password.
-
-    Deriving it means a password change invalidates every existing session,
-    which is what anyone changing a shared password expects. It also means
-    there is no second secret to set and forget.
-    """
-    return hashlib.sha256(("acm-outreach-session:" + APP_PASSWORD).encode()).digest()
-
+# ---------- Small helpers ----------
 
 def _b64(raw: bytes) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
@@ -92,6 +82,110 @@ def _b64(raw: bytes) -> str:
 
 def _unb64(text: str) -> bytes:
     return base64.urlsafe_b64decode(text + "=" * (-len(text) % 4))
+
+
+def _same(typed: str, expected: str) -> bool:
+    """A comparison that takes the same time whether or not it matches."""
+    return hmac.compare_digest(typed.encode("utf-8", "surrogatepass"),
+                               expected.encode("utf-8", "surrogatepass"))
+
+
+# ---------- The password ----------
+# The password can be changed from inside the app, because a shared password
+# that can only be changed by someone with a hosting dashboard open is a
+# password nobody changes. It is stored as a PBKDF2 hash, never in the clear.
+#
+# PEARCH_PASSWORD stays the way in and the way back. Whenever the value in the
+# environment changes, any password set in the app is discarded and the new
+# environment value takes over — so a forgotten password is always recoverable
+# from the dashboard, and exactly one password works at any moment.
+
+ROUNDS = 240_000
+SETTING = "password_hash"
+SETTING_ENV = "password_env"    # the environment password in force when it was set
+
+_cached: tuple[str, str] | None = None      # (hash, env fingerprint)
+
+
+def _fingerprint(password: str) -> str:
+    return hashlib.sha256(("acm-outreach-env:" + password).encode()).hexdigest()
+
+
+def hash_password(password: str, salt: bytes | None = None) -> str:
+    salt = salt if salt is not None else secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, ROUNDS)
+    return f"pbkdf2${ROUNDS}${_b64(salt)}${_b64(digest)}"
+
+
+def hash_matches(stored: str, password: str) -> bool:
+    try:
+        scheme, rounds, salt, digest = stored.split("$")
+        if scheme != "pbkdf2":
+            return False
+        candidate = hashlib.pbkdf2_hmac("sha256", password.encode(),
+                                        _unb64(salt), int(rounds))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(candidate, _unb64(digest))
+
+
+def _stored() -> str:
+    """
+    The in-app password hash, if one is set and still current.
+
+    "Still current" means it was set while the environment held the password
+    it holds now. Change PEARCH_PASSWORD in the dashboard and this is dropped,
+    which is the recovery path.
+    """
+    global _cached
+    if not APP_PASSWORD:
+        return ""
+    if _cached is None:
+        import db
+        _cached = (db.get_setting(SETTING), db.get_setting(SETTING_ENV))
+    stored, env_seen = _cached
+    return stored if stored and env_seen == _fingerprint(APP_PASSWORD) else ""
+
+
+def forget_cached_password() -> None:
+    """Drop the cached read — after a change here, or a restore from backup."""
+    global _cached
+    _cached = None
+
+
+def set_password(new_password: str) -> None:
+    import db
+    db.set_setting(SETTING, hash_password(new_password))
+    db.set_setting(SETTING_ENV, _fingerprint(APP_PASSWORD))
+    forget_cached_password()
+
+
+def password_ok(password: str) -> bool:
+    if not APP_PASSWORD:
+        return False
+    stored = _stored()
+    if stored:
+        return hash_matches(stored, password)
+    return _same(password, APP_PASSWORD)
+
+
+def password_is_from_the_dashboard() -> bool:
+    """Whether the password in force is still the one set in the environment."""
+    return not _stored()
+
+
+# ---------- The session cookie ----------
+
+def _key() -> bytes:
+    """
+    The signing key, derived from whichever password is in force.
+
+    Deriving it means a password change invalidates every existing session,
+    which is what anyone changing a shared password expects. It also means
+    there is no second secret to set and forget.
+    """
+    return hashlib.sha256(
+        ("acm-outreach-session:" + APP_PASSWORD + "|" + _stored()).encode()).digest()
 
 
 def make_token(now: float | None = None) -> str:
@@ -122,12 +216,6 @@ def token_ok(token: str, now: float | None = None) -> bool:
         return False
 
 
-def _same(typed: str, expected: str) -> bool:
-    """A comparison that takes the same time whether or not it matches."""
-    return hmac.compare_digest(typed.encode("utf-8", "surrogatepass"),
-                               expected.encode("utf-8", "surrogatepass"))
-
-
 def credentials_ok(username: str, password: str) -> bool:
     """
     The username is matched case-insensitively against every accepted name —
@@ -142,7 +230,7 @@ def credentials_ok(username: str, password: str) -> bool:
     named = False
     for accepted in APP_USERNAMES:
         named |= _same(typed, accepted.lower())
-    return named & _same((password or "").strip(), APP_PASSWORD)
+    return named & password_ok((password or "").strip())
 
 
 # ---------- Throttling ----------

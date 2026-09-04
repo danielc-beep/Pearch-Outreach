@@ -154,6 +154,15 @@ CREATE INDEX IF NOT EXISTS idx_trash_batch ON trash(batch);
 """
 
 
+CREATE_SETTINGS = """
+CREATE TABLE IF NOT EXISTS settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
+
 MIGRATIONS: list[tuple[str, str]] = [
     ("prospecting_runs", "ALTER TABLE prospecting_runs ADD COLUMN result_ids TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
@@ -195,6 +204,7 @@ def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
     conn.executescript(CREATE_TRASH)
+    conn.executescript(CREATE_SETTINGS)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -210,10 +220,38 @@ def reset_db() -> None:
     """Drop everything and recreate. Used by the tests and `--reset`."""
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
-                  "contacts", "suppressions", "trash", "businesses"):
+                  "contacts", "suppressions", "trash", "settings", "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
     init_db()
+
+
+# ---------- Settings ----------
+# A small key/value table for the handful of things that have to be changeable
+# from inside the app rather than from a hosting dashboard. Today that is the
+# shared password: a setting nobody should have to file a ticket to change.
+
+def get_setting(key: str, default: str = "") -> str:
+    try:
+        row = get_conn().execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    except sqlite3.Error:
+        return default          # the table is not there yet; the caller has a fallback
+    return row["value"] if row else default
+
+
+def set_setting(key: str, value: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+            "updated_at = excluded.updated_at",
+            (key, value, now()))
+
+
+def delete_setting(key: str) -> None:
+    with tx() as conn:
+        conn.execute("DELETE FROM settings WHERE key = ?", (key,))
 
 
 # ---------- Businesses ----------

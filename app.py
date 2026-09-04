@@ -511,6 +511,47 @@ def logout():
     return auth.clear_session(RedirectResponse("/login", status_code=303))
 
 
+@app.get("/password", response_class=HTMLResponse)
+def password_page(request: Request, changed: int = 0) -> HTMLResponse:
+    return page(request, "password.html", nav="",
+                changed=bool(changed), error="",
+                from_dashboard=auth.password_is_from_the_dashboard())
+
+
+@app.post("/password")
+def password_change(request: Request, current: str = Form(""),
+                    new_password: str = Form(""), confirm: str = Form("")):
+    """
+    Changing the shared password without a hosting dashboard open.
+
+    A password that can only be changed by whoever has Render credentials is a
+    password that never gets changed, which matters more than it sounds: this
+    one link opens the whole contact database.
+    """
+    new_password = new_password.strip()
+    problem = ""
+    if not auth.password_ok(current.strip()):
+        problem = "That is not the current password."
+    elif len(new_password) < 6:
+        problem = "The new password needs to be at least six characters."
+    elif new_password != confirm.strip():
+        problem = "The two new passwords do not match."
+    elif auth.password_ok(new_password):
+        problem = "That is already the password."
+
+    if problem:
+        log.warning("password change refused: %s", problem)
+        return page(request, "password.html", nav="", changed=False, error=problem,
+                    from_dashboard=auth.password_is_from_the_dashboard())
+
+    auth.set_password(new_password)
+    # The session key is derived from the password, so the cookie in the browser
+    # that just made this change is now invalid too. Issue a fresh one, or the
+    # person changing the password would be the first one locked out by it.
+    response = RedirectResponse("/password?changed=1", status_code=303)
+    return auth.set_session(response, secure=_https(request))
+
+
 @app.get("/backups", response_class=HTMLResponse)
 def backups_page(request: Request) -> HTMLResponse:
     """Snapshots and the trash — the two ways back from a mistake."""
