@@ -111,9 +111,16 @@ ICP = {
         "Hunter", "Illawarra", "Central West NSW", "Riverina", "Bendigo",
         "Ballarat", "Canberra", "Launceston", "Wollongong", "Newcastle",
     ],
-    "min_rating": 3.5,
+    "min_rating": 4.0,
     "min_reviews": 5,
 }
+
+# The hard floor for prospecting, separate from the ICP scoring above. Every
+# outreach email opens by congratulating the business on its Google rating, so
+# a business we would not congratulate has no business being in the list.
+# A record with no rating at all is not evidence of a good one, so it is
+# dropped too. Set PEARCH_MIN_RATING=0 to take everything.
+MIN_PROSPECT_RATING = float(os.getenv("PEARCH_MIN_RATING", "4.0"))
 
 # ---------- Regions ----------
 # Postcode ranges → the ACM region a business belongs to. Deliberately coarse:

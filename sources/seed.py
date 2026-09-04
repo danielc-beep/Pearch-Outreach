@@ -103,8 +103,9 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
             "industry": trade,
             "category": trade,
             "size_band": rng.choice(_SIZE_BANDS),
-            "rating": round(rng.uniform(3.2, 5.0), 1),
-            "review_count": rng.randint(0, 180),
+            # Above the prospecting floor, because that is what a real run returns.
+            "rating": round(rng.uniform(4.0, 5.0), 1),
+            "review_count": rng.randint(6, 180),
             "description": f"Sample record — a fictional {industry.lower()} in {suburb}, {state}.",
             "notes": "Sample data. Not a real business — do not contact.",
             "source_ref": domain,

@@ -25,8 +25,8 @@ from pydantic import BaseModel, Field
 
 import db
 from config import (ANTHROPIC_API_KEY, DAILY_SEND_CAP, DRAFT_EFFORT, DRAFT_MODEL,
-                    FROM_EMAIL, FROM_NAME, REPLY_TO_EMAIL, RESEND_API_KEY,
-                    SEND_ENABLED, SENDER_IDENTITY, UNSUBSCRIBE_URL)
+                    FROM_EMAIL, FROM_NAME, MIN_PROSPECT_RATING, REPLY_TO_EMAIL,
+                    RESEND_API_KEY, SEND_ENABLED, SENDER_IDENTITY, UNSUBSCRIBE_URL)
 
 log = logging.getLogger(__name__)
 
@@ -59,10 +59,11 @@ produce the trusted content that keeps our communities connected and informed.
 
 # ---------- Google reviews ----------
 
-# What we are willing to call a high rating in an email. Deliberately well
-# above the ICP's min_rating of 3.5, which is a floor for whether a business
-# is worth prospecting at all — not a standard worth congratulating anyone on.
-PRAISEWORTHY_RATING = 4.3
+# Tied to the prospecting floor on purpose. A business is in the database
+# because it cleared that bar, and the email opens by congratulating it on the
+# rating that got it there — so a second, higher bar here would leave records
+# we deliberately collected with an opening we refuse to write for them.
+PRAISEWORTHY_RATING = MIN_PROSPECT_RATING if MIN_PROSPECT_RATING > 0 else 4.0
 PRAISEWORTHY_REVIEWS = 5
 
 

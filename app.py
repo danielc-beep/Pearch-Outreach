@@ -32,7 +32,8 @@ import prospect
 import sources
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE,
-                    DAILY_SEND_CAP, SEND_ENABLED, STATIC_DIR, TEMPLATES_DIR)
+                    DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
+                    STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
 
 logging.basicConfig(level=logging.INFO)
@@ -95,6 +96,16 @@ def _int_param(value: str | int | None, default: int = 0) -> int:
         return default
 
 
+def _float_param(value: str | float | None, default: float = 0.0) -> float:
+    """_int_param for a rating box, which holds a decimal."""
+    if value in (None, ""):
+        return default
+    try:
+        return float(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def preferred_source(infos: list[sources.SourceInfo]) -> str:
     """Default the source picker to the best thing that actually works today."""
     by_key = {s.key: s for s in infos}
@@ -133,21 +144,22 @@ def home(request: Request) -> HTMLResponse:
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
                has_email: str = "", website_status: str = "", min_score: str = "",
-               sort: str = "score", page_no: str = "1") -> HTMLResponse:
+               min_rating: str = "", sort: str = "score", page_no: str = "1") -> HTMLResponse:
     min_score_value = _int_param(min_score)
     page_no = max(1, _int_param(page_no, 1))
     rows, total = db.list_businesses(
         q=q, status=status, region=region, state=state, industry=industry, source=source,
         has_email={"1": True, "0": False}.get(has_email),
         website_status=website_status,
-        min_score=min_score_value, sort=sort,
+        min_score=min_score_value, min_rating=_float_param(min_rating), sort=sort,
         limit=PAGE_SIZE, offset=(page_no - 1) * PAGE_SIZE,
     )
     # Keep the raw string in the filter dict so the form redisplays what was
     # typed, rather than replacing an empty box with a 0.
     filters = {"q": q, "status": status, "region": region, "state": state,
                "industry": industry, "source": source, "has_email": has_email,
-               "website_status": website_status, "min_score": min_score, "sort": sort}
+               "website_status": website_status, "min_score": min_score,
+               "min_rating": min_rating, "sort": sort}
     query_string = urlencode({k: v for k, v in filters.items() if v})
 
     def page_url(n: int) -> str:
@@ -176,6 +188,8 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         page_url=page_url,
         export_query=f"?{query_string}" if query_string else "",
         sample_count=db.count_sample_businesses(),
+        min_prospect_rating=MIN_PROSPECT_RATING,
+        below_rating_count=db.count_below_rating(MIN_PROSPECT_RATING),
         unreachable_count=db.list_businesses(website_status="unreachable", limit=1)[1],
     )
 
@@ -352,10 +366,12 @@ def api_prospect_run(req: ProspectRequest) -> JSONResponse:
 
 @app.get("/api/businesses")
 def api_businesses(q: str = "", status: str = "", region: str = "", industry: str = "",
-                   min_score: str = "", sort: str = "score", limit: int = 50,
+                   min_score: str = "", min_rating: str = "",
+                   sort: str = "score", limit: int = 50,
                    offset: int = 0) -> JSONResponse:
     rows, total = db.list_businesses(q=q, status=status, region=region, industry=industry,
-                                     min_score=_int_param(min_score), sort=sort,
+                                     min_score=_int_param(min_score),
+                                     min_rating=_float_param(min_rating), sort=sort,
                                      limit=min(limit, 500), offset=offset)
     return JSONResponse({"total": total, "businesses": rows})
 
@@ -367,6 +383,25 @@ class BusinessPatch(BaseModel):
     notes: str | None = None
     industry: str | None = None
     do_not_contact: int | None = None
+
+
+@app.post("/api/businesses/purge-low-rated")
+def api_purge_low_rated() -> JSONResponse:
+    """
+    Delete every business under the Google rating floor.
+
+    Declared above the /{business_id} routes: a literal path has to be
+    registered before the parameterised one, or FastAPI matches
+    "purge-low-rated" as a business id and rejects it as a 422.
+
+    The floor is applied to new prospecting runs, but anything found before it
+    existed stays until something removes it. Since every email opens by
+    congratulating the business on its rating, a record we would not
+    congratulate is one we cannot work.
+    """
+    removed = db.delete_below_rating(MIN_PROSPECT_RATING)
+    log.info("purged %s businesses under %s stars", removed, MIN_PROSPECT_RATING)
+    return JSONResponse({"removed": removed, "remaining": db.stats()["total"]})
 
 
 @app.post("/api/businesses/{business_id}")
@@ -496,9 +531,11 @@ def api_send(message_id: int, request: Request) -> JSONResponse:
 
 @app.get("/api/export.csv")
 def api_export(q: str = "", status: str = "", region: str = "", industry: str = "",
-               min_score: str = "", has_email: str = "", sort: str = "score") -> StreamingResponse:
+               min_score: str = "", min_rating: str = "", has_email: str = "",
+               sort: str = "score") -> StreamingResponse:
     rows, _ = db.list_businesses(q=q, status=status, region=region, industry=industry,
                                  min_score=_int_param(min_score),
+                                 min_rating=_float_param(min_rating),
                                  has_email={"1": True, "0": False}.get(has_email),
                                  sort=sort, limit=100000)
     columns = ["id", "name", "website", "email", "phone", "address", "suburb", "state",

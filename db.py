@@ -348,6 +348,26 @@ def delete_sample_businesses() -> int:
     return count
 
 
+BELOW_RATING_CLAUSE = "(rating IS NULL OR rating < ?)"
+
+
+def count_below_rating(minimum: float) -> int:
+    """How many stored businesses would not clear the rating floor."""
+    row = get_conn().execute(
+        f"SELECT COUNT(*) AS n FROM businesses WHERE {BELOW_RATING_CLAUSE}", (minimum,)
+    ).fetchone()
+    return int(row["n"])
+
+
+def delete_below_rating(minimum: float) -> int:
+    """Remove every business under the rating floor. Returns how many went."""
+    count = count_below_rating(minimum)
+    if count:
+        with tx() as conn:
+            conn.execute(f"DELETE FROM businesses WHERE {BELOW_RATING_CLAUSE}", (minimum,))
+    return count
+
+
 def delete_business(business_id: int) -> None:
     with tx() as conn:
         conn.execute("DELETE FROM businesses WHERE id = ?", (business_id,))
@@ -363,6 +383,7 @@ def list_businesses(
     has_email: bool | None = None,
     website_status: str = "",
     min_score: int = 0,
+    min_rating: float = 0.0,
     sort: str = "score",
     limit: int = 50,
     offset: int = 0,
@@ -391,6 +412,10 @@ def list_businesses(
     if min_score:
         where.append("fit_score >= ?")
         args.append(min_score)
+    if min_rating:
+        # An unrated business fails the floor rather than slipping through it.
+        where.append("rating IS NOT NULL AND rating >= ?")
+        args.append(min_rating)
 
     clause = f"WHERE {' AND '.join(where)}" if where else ""
     order = {

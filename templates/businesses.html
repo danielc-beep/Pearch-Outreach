@@ -69,23 +69,31 @@
     });
   });
 
-  const purgeBtn = document.getElementById('btn-purge-sample');
-  if (purgeBtn) {
-    purgeBtn.addEventListener('click', async () => {
-      if (!confirm('Permanently delete every fictional business? Real prospects are untouched.')) return;
-      purgeBtn.disabled = true;
-      purgeBtn.innerHTML = '<span class="spinner" style="border-top-color:#1A2244"></span>';
+  // Both "remove these records" buttons behave identically: confirm, post,
+  // reload. Only the wording and the endpoint differ.
+  function wirePurge(id, endpoint, question) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    const label = btn.textContent.trim();
+    btn.addEventListener('click', async () => {
+      if (!confirm(question)) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await window.postJSON('/api/sample/purge');
+        await window.postJSON(endpoint);
         window.location = '/businesses';
       } catch (err) {
         document.getElementById('flash').innerHTML =
           '<div class="notice notice-error">' + err.message + '</div>';
-        purgeBtn.disabled = false;
-        purgeBtn.textContent = 'Remove them';
+        btn.disabled = false;
+        btn.textContent = label;
       }
     });
   }
+  wirePurge('btn-purge-sample', '/api/sample/purge',
+            'Permanently delete every fictional business? Real prospects are untouched.');
+  wirePurge('btn-purge-low', '/api/businesses/purge-low-rated',
+            'Permanently delete every business under the rating floor, including any with no rating at all?');
 </script>
 {% endblock %}
 
@@ -146,6 +154,12 @@
                value="{{ f.min_score or '' }}" style="width:88px" />
       </div>
       <div class="f">
+        <label for="f-rating">Min stars</label>
+        <input id="f-rating" type="number" name="min_rating" min="0" max="5" step="0.1"
+               placeholder="{{ '%.1f'|format(min_prospect_rating) }}"
+               value="{{ f.min_rating or '' }}" style="width:88px" />
+      </div>
+      <div class="f">
         <label for="f-sort">Sort</label>
         <select id="f-sort" name="sort">
           {% for key, label in sorts %}<option value="{{ key }}" {{ 'selected' if f.sort == key }}>{{ label }}</option>{% endfor %}
@@ -160,6 +174,19 @@
       <strong>{{ unreachable_count }} website{{ '' if unreachable_count == 1 else 's' }} didn't respond.</strong>
       A business whose site doesn't resolve is either stale or was never real.
       <a href="/businesses?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
+    </div>
+    {% endif %}
+
+    {% if below_rating_count %}
+    <div class="notice notice-warn">
+      <strong>{{ below_rating_count }} business{{ '' if below_rating_count == 1 else 'es' }}
+      under {{ '%.1f'|format(min_prospect_rating) }} stars.</strong>
+      Found before the rating floor existed, or with no Google rating at all. Every
+      email opens by congratulating the business on its rating, so these can't be worked.
+      <a href="/businesses?sort=score&amp;min_rating=0.1">See them</a> or
+      <button class="btn btn-sm" id="btn-purge-low" style="margin-left:8px">
+        Remove {{ 'it' if below_rating_count == 1 else 'them' }}
+      </button>
     </div>
     {% endif %}
 

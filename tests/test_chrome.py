@@ -31,3 +31,22 @@ def test_the_locked_page_uses_the_dark_ground():
     from auth import UNPROTECTED_HTML
     assert "#050A1C" in UNPROTECTED_HTML
     assert "ACM Outreach Database is locked" in UNPROTECTED_HTML
+
+
+def test_the_swarm_is_configured_to_stay_readable(client):
+    js = client.get("/static/fairy-lights.js").text
+    # Capped below the display's density: at full retina the fill rate is what
+    # decides between 60fps and 18.
+    assert "Math.min(window.devicePixelRatio || 1, 1.5)" in js
+    # Still stops for reduced motion and for a hidden tab.
+    assert "prefers-reduced-motion" in js
+    assert "visibilitychange" in js
+
+
+def test_body_copy_is_bright_enough_to_read_over_the_field(client):
+    css = client.get("/static/app.css").text
+    assert "--text:         #F4F9FF;" in css
+    assert "--text-muted:   #C3D4E8;" in css
+    # Panels sit at 90% so a light passing behind a paragraph is a shimmer,
+    # not a competing mark.
+    assert "rgba(11,19,45,0.90)" in css

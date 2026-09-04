@@ -77,7 +77,7 @@ def test_a_weak_rating_is_flagged_in_the_brief_as_well_as_the_rules():
     business = {"name": "Battler Plumbing", "rating": 3.6, "review_count": 40}
     assert "do not praise it" in outreach._prospect_brief(business)
     prompt = _capture_prompt(business)
-    assert "below 4.3" in prompt
+    assert "below 4.0" in prompt
 
 
 def test_claude_is_told_how_to_close():

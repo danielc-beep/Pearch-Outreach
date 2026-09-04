@@ -15,7 +15,7 @@ from typing import Any
 
 import db
 import sources
-from config import region_for_postcode
+from config import MIN_PROSPECT_RATING, region_for_postcode
 import enrich
 from enrich import enrich_from_website, guess_industry
 from scoring import apply_score
@@ -108,6 +108,28 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
+# A CSV is a list someone chose and handed us, often with no Google rating in
+# it at all. Applying the discovery floor there would silently throw away the
+# import, so the floor covers searched sources only.
+UNFILTERED_SOURCES = ("csv",)
+
+
+def meets_rating_floor(record: dict[str, Any], source_key: str = "") -> bool:
+    """
+    Whether this business clears the Google rating floor.
+
+    No rating counts as failing. An unrated listing is not a well-regarded
+    business we have yet to measure — it is one we cannot open an email to,
+    since the first line congratulates them on a number we would not have.
+    """
+    if MIN_PROSPECT_RATING <= 0 or source_key in UNFILTERED_SOURCES:
+        return True
+    try:
+        return float(record.get("rating") or 0) >= MIN_PROSPECT_RATING
+    except (TypeError, ValueError):
+        return False
+
+
 def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[str, Any]:
     """
     Execute one prospecting run and write the results to the database.
@@ -128,6 +150,13 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
 
     records = [normalise(r) for r in raw]
     records = [r for r in records if r["name"]]
+
+    # The rating floor, applied before anything is enriched or written. Doing
+    # it here rather than at send time means we never spend an enrichment
+    # request, a row, or a draft on a business we would not email.
+    found_count = len(records)
+    records = [r for r in records if meets_rating_floor(r, source_key)]
+    below_rating = found_count - len(records)
 
     if enrich:
         targets = [r for r in records if r.get("website") and not r.get("email")][:MAX_INLINE_ENRICH]
@@ -160,13 +189,14 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
             db.add_contact(business_id, {"email": email, "source": "website"})
         touched.append(db.get_business(business_id) or {})
 
-    db.finish_run(run_id, found=len(records), new=new_count, dupes=dupe_count,
+    db.finish_run(run_id, found=found_count, new=new_count, dupes=dupe_count,
                   result_ids=[int(b['id']) for b in touched if b.get('id')])
     return {
         "run_id": run_id,
         "source": source_key,
         "source_label": info.label,
-        "found": len(records),
+        "found": found_count,
+        "below_rating": below_rating,
         "new": new_count,
         "duplicates": dupe_count,
         "businesses": sorted(touched, key=lambda b: b.get("fit_score", 0), reverse=True),
