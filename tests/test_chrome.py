@@ -82,3 +82,24 @@ def test_panels_carry_no_backdrop_filter(client):
 def test_the_sticky_header_is_opaque(client):
     """It could be translucent only while a blur smeared what passed under it."""
     assert "background: #101A3E;" in client.get("/static/app.css").text
+
+
+def test_the_search_bar_is_the_one_light_surface(client):
+    css = client.get("/static/app.css").text
+    assert "max-width: 860px; margin: 0 auto; background: #FFFFFF;" in css
+    # Two class names deep, or the dark input[type=text] rule further down the
+    # file wins on specificity and paints near-white text on the white bar.
+    assert ".searchbar .field input, .searchbar .field select {" in css
+    assert "color: #16224A;" in css
+    assert ".searchbar .field input::placeholder { color: #96A2BA; }" in css
+
+
+def test_the_search_bar_fields_are_only_capped_while_it_is_a_row(client):
+    """Stacked on a phone, a cap leaves the dividers at three different lengths."""
+    css = client.get("/static/app.css").text
+    assert "@media (min-width: 761px) {" in css
+    assert ".searchbar .field-masthead { flex: 1.5; }" in css
+    # And nothing sets those widths inline, where no media query could reach.
+    home = client.get("/").text
+    assert "max-width:280px" not in home
+    assert "max-width:150px" not in home

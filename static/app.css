@@ -149,32 +149,55 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 .hero h1 em { font-style: italic; color: var(--cyan-bright); }
 .hero .lede { margin: 0 auto 32px; }
 
-/* ---------- The prospecting search bar ---------- */
+/* ---------- The prospecting search bar ----------
+   The one light surface on the site. It is the control the whole tool is
+   built around, and a white bar on the night sky reads as the thing you
+   are meant to use rather than another panel to read. Everything inside
+   it is therefore set explicitly against white — the dark palette's tokens
+   would all but vanish here, so none of them are used. */
 .searchbar {
   display: flex; align-items: stretch; gap: 0;
-  max-width: 860px; margin: 0 auto; background: rgba(31,46,92,0.90);
-  border: 1px solid var(--border); border-radius: 999px;
-  box-shadow: var(--shadow); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
+  max-width: 860px; margin: 0 auto; background: #FFFFFF;
+  border: 1px solid rgba(255,255,255,0.28); border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.28), 0 22px 60px -28px rgba(0,0,0,0.9);
+  overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
 }
-.searchbar:focus-within { border-color: var(--border-lit); box-shadow: 0 0 34px -6px var(--cyan-glow); }
+.searchbar:focus-within { border-color: var(--cyan-bright); box-shadow: 0 0 34px -4px var(--cyan-glow); }
 .searchbar .field { flex: 1; display: flex; flex-direction: column; padding: 12px 22px; text-align: left; min-width: 0; }
-.searchbar .field + .field { border-left: 1px solid var(--border); }
-.searchbar label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cyan-soft); }
-.searchbar input, .searchbar select {
-  border: 0; outline: 0; font-family: inherit; font-size: 15px; color: var(--white);
+.searchbar .field + .field { border-left: 1px solid #E4E9F2; }
+.searchbar label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5A6B8C; }
+/* Two class names deep on purpose. The dark `input[type=text]` rule further
+   down this file scores the same as `.searchbar input` and comes later, so it
+   would win — and paint near-white text on this white bar. */
+.searchbar .field input, .searchbar .field select {
+  border: 0; outline: 0; font-family: inherit; font-size: 15px; color: #16224A;
   background: transparent; padding: 2px 0; width: 100%; min-width: 0;
+  box-shadow: none;
 }
-.searchbar select option { background: var(--ink-panel); color: var(--text); }
-.searchbar input::placeholder { color: #7D91AF; }
+.searchbar .field input:focus, .searchbar .field select:focus { box-shadow: none; }
+/* The dropdown itself is drawn by the OS, so it needs telling too. */
+.searchbar .field select option, .searchbar .field select optgroup { background: #FFFFFF; color: #16224A; }
+.searchbar .field input::placeholder { color: #96A2BA; }
 .searchbar button {
   border: 0; background: var(--cyan); color: #04121C; font-family: inherit;
   font-size: 15px; font-weight: 700; padding: 0 34px; cursor: pointer; transition: 0.15s;
 }
 .searchbar button:hover { background: var(--cyan-bright); }
-.searchbar button:disabled { background: #1B4A63; color: var(--text-muted); cursor: progress; }
+.searchbar button:disabled { background: #9FC9D9; color: #33566A; cursor: progress; }
+/* The two pickers are capped only while the bar is a row. Stacked, a cap
+   stops the field reaching the edge of the bar and the dividers come out at
+   three different lengths — which is what an inline max-width did here
+   before, since nothing in a media query can override one. */
+@media (min-width: 761px) {
+  /* A share of the row, not a cap. max-width alone leaves the field at an
+     equal split and then merely stops it growing, which is how the masthead
+     ended up too narrow for "The St George and Sutherland Leader". */
+  .searchbar .field-masthead { flex: 1.5; }
+  .searchbar .field-source { flex: 0 0 148px; }
+}
 @media (max-width: 760px) {
   .searchbar { flex-direction: column; border-radius: 22px; }
-  .searchbar .field + .field { border-left: 0; border-top: 1px solid var(--border); }
+  .searchbar .field + .field { border-left: 0; border-top: 1px solid #E4E9F2; }
   .searchbar button { padding: 16px; }
 }
 .search-hint { color: var(--text-muted); font-size: 13px; margin-top: 14px; }

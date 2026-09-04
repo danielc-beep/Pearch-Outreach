@@ -19,7 +19,7 @@
         <label for="hs-location">Location</label>
         <input id="hs-location" name="location" type="text" placeholder="Newcastle NSW" required />
       </div>
-      <div class="field" style="max-width:280px">
+      <div class="field field-masthead">
         <label for="hs-masthead">Masthead</label>
         <select id="hs-masthead" name="masthead">
           <option value="">Australian Community Media</option>
@@ -32,7 +32,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="field" style="max-width:150px">
+      <div class="field field-source">
         <label for="hs-source">Source</label>
         <select id="hs-source" name="source">
           {% for s in sources if s.key != 'csv' and s.available %}
