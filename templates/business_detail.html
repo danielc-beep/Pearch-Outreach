@@ -41,6 +41,7 @@
               {% else %}—{% endif %}</dd>
             <dt>Address</dt><dd>{{ b.address or '—' }}</dd>
             <dt>Region</dt><dd>{{ b.region or '—' }}{{ ' · ' ~ b.state if b.state }}</dd>
+            <dt>Masthead</dt><dd>{{ masthead_name(b.masthead)|masthead_label }}</dd>
             <dt>Industry</dt><dd>{{ b.industry or '—' }}{% if b.category and b.category != b.industry %} <span class="muted small">({{ b.category }})</span>{% endif %}</dd>
             <dt>Size</dt><dd>{{ b.size_band or '—' }}</dd>
             <dt>Reviews</dt><dd>{% if b.rating %}{{ b.rating }}★ from {{ b.review_count or 0 }}{% else %}—{% endif %}</dd>
@@ -144,6 +145,19 @@
             <label for="set-status">Status <span class="muted small">saves as you change it</span></label>
             <select id="set-status">
               {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if b.status == s }}>{{ s }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="field-block">
+            <label for="set-masthead">Masthead</label>
+            <select id="set-masthead">
+              <option value="">Australian Community Media</option>
+              {% for group in masthead_groups %}
+              <optgroup label="{{ group.state }}">
+                {% for t in group.titles %}
+                <option value="{{ t.site }}" {{ 'selected' if b.masthead == t.site }}>{{ t.name|masthead_label }}</option>
+                {% endfor %}
+              </optgroup>
+              {% endfor %}
             </select>
           </div>
           <div class="field-block">
@@ -256,6 +270,7 @@
     try {
       await post('/api/businesses/' + BUSINESS_ID, {
         email: document.getElementById('set-email').value.trim(),
+        masthead: document.getElementById('set-masthead').value,
         notes: document.getElementById('set-notes').value,
       });
       window.location.reload();

@@ -27,6 +27,21 @@
       <form id="prospect-form">
         <input type="hidden" name="source" id="source-key" value="{{ active_source }}" />
         <div id="source-fields"></div>
+        <div class="field-block">
+          <label for="pf-masthead">Masthead these prospects are pitched from</label>
+          <select id="pf-masthead" name="masthead">
+            <option value="">Australian Community Media</option>
+            {% for group in masthead_groups %}
+            <optgroup label="{{ group.state }}">
+              {% for t in group.titles %}
+              <option value="{{ t.site }}">{{ t.name|masthead_label }}</option>
+              {% endfor %}
+            </optgroup>
+            {% endfor %}
+          </select>
+          <p class="help">Set from the location as you type. The local paper is the
+            credential a business recognises, so the email is written from it.</p>
+        </div>
         <label class="row small muted" style="margin:4px 0 18px;gap:8px">
           <input type="checkbox" id="do-enrich" checked style="width:auto" />
           Visit each website to look for an email address (slower, much better data)
@@ -98,6 +113,30 @@
       btn.disabled = false; btn.textContent = 'Run prospecting';
     }
   });
+
+  // The location box belongs to the source, so it is re-rendered whenever the
+  // source changes — the listener goes on the form, not on the input.
+  (function () {
+    const picker = document.getElementById('pf-masthead');
+    if (!picker) return;
+    let chosenByHand = false;
+    let timer = null;
+    picker.addEventListener('change', () => { chosenByHand = true; });
+    document.getElementById('prospect-form').addEventListener('input', (e) => {
+      if (chosenByHand || e.target.name !== 'location') return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        const typed = e.target.value.trim();
+        if (!typed) { picker.value = ''; return; }
+        try {
+          const r = await fetch('/api/masthead/match?location=' + encodeURIComponent(typed));
+          if (!r.ok) return;
+          const m = await r.json();
+          if (!chosenByHand) picker.value = m.site || '';
+        } catch (err) { /* the picker still works by hand */ }
+      }, 350);
+    });
+  })();
 
   renderFields('{{ active_source }}');
 </script>

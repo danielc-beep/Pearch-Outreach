@@ -19,7 +19,20 @@
         <label for="hs-location">Location</label>
         <input id="hs-location" name="location" type="text" placeholder="Newcastle NSW" required />
       </div>
-      <div class="field" style="max-width:190px">
+      <div class="field" style="max-width:280px">
+        <label for="hs-masthead">Masthead</label>
+        <select id="hs-masthead" name="masthead">
+          <option value="">Australian Community Media</option>
+          {% for group in masthead_groups %}
+          <optgroup label="{{ group.state }}">
+            {% for t in group.titles %}
+            <option value="{{ t.site }}">{{ t.name|masthead_label }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field" style="max-width:150px">
         <label for="hs-source">Source</label>
         <select id="hs-source" name="source">
           {% for s in sources if s.key != 'csv' and s.available %}
@@ -222,6 +235,7 @@
       source: document.getElementById('hs-source').value,
       industry: document.getElementById('hs-industry').value.trim(),
       location: document.getElementById('hs-location').value.trim(),
+      masthead: document.getElementById('hs-masthead').value,
       limit: 40,
     };
     btn.disabled = true;
@@ -231,10 +245,38 @@
       const data = await window.postJSON('/api/prospect/run', body);
       window.location = '/prospect?run=' + data.run_id;
     } catch (err) {
-      hint.innerHTML = '<span style="color:#C0392B">' + err.message + '</span>';
+      hint.innerHTML = '<span style="color:var(--danger)">' + err.message + '</span>';
       btn.disabled = false;
       btn.textContent = 'Prospect';
     }
   });
+
+  // Typing a location preselects its masthead, so the common case needs no
+  // choosing at all. A deliberate pick is never overwritten: once someone has
+  // chosen a paper themselves, the location box stops touching it.
+  (function () {
+    const location = document.getElementById('hs-location');
+    const picker = document.getElementById('hs-masthead');
+    if (!location || !picker) return;
+    let chosenByHand = false;
+    let timer = null;
+
+    picker.addEventListener('change', () => { chosenByHand = true; });
+
+    location.addEventListener('input', () => {
+      if (chosenByHand) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        const typed = location.value.trim();
+        if (!typed) { picker.value = ''; return; }
+        try {
+          const r = await fetch('/api/masthead/match?location=' + encodeURIComponent(typed));
+          if (!r.ok) return;
+          const m = await r.json();
+          if (!chosenByHand) picker.value = m.site || '';
+        } catch (err) { /* the picker still works by hand */ }
+      }, 350);
+    });
+  })();
 </script>
 {% endblock %}

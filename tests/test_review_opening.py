@@ -86,7 +86,7 @@ def test_claude_is_told_how_to_close():
     for point in ("places in our content are limited",
                   "isn't right for them that is completely fine",
                   "congratulate them on their hard work",
-                  "keeps our communities connected and informed"):
+                  "communities connected and informed"):
         assert point in prompt
     # It is a courtesy, not a squeeze.
     assert "not a scarcity tactic" in prompt
@@ -98,7 +98,7 @@ def test_the_template_carries_both_elements_without_claude():
     body = outreach.DEFAULT_CAMPAIGN["body"]
     assert "Congratulations on {reviews}" in body
     assert "Places in our content are limited" in body
-    assert "keeps our communities connected and informed" in body
+    assert "keeps our communities\nconnected and informed" in body
 
 
 def test_the_merged_template_names_a_real_rating():

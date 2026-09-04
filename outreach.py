@@ -24,6 +24,7 @@ import httpx
 from pydantic import BaseModel, Field
 
 import db
+import mastheads
 from config import (ANTHROPIC_API_KEY, DAILY_SEND_CAP, DRAFT_EFFORT, DRAFT_MODEL,
                     FROM_EMAIL, FROM_NAME, MIN_PROSPECT_RATING, REPLY_TO_EMAIL,
                     RESEND_API_KEY, SEND_ENABLED, SENDER_IDENTITY, UNSUBSCRIBE_URL)
@@ -42,19 +43,41 @@ people in {suburb}, and we would like to put it in front of more of them.
 Here is the gap. When someone in {suburb} searches Google for a {industry},
 the AI answer at the top cites a handful of sources, and yours isn't one of
 them. That's what we fix: we get businesses cited inside Google's AI answers
-by publishing credible editorial across the Australian Community Media
-mastheads that Google already trusts.
+by publishing credible editorial in {masthead} — a masthead Google already
+trusts, and one your customers in {suburb} already read.
 
 Worth a 15-minute call to walk you through what we found for {business_name}?
 
 Places in our content are limited, and if this isn't right for you that is
 completely fine — either way, congratulations on the work you have put in. We
-think it is something that genuinely helps our partners, and it also helps ACM
-produce the trusted content that keeps our communities connected and informed.
+think it is something that genuinely helps our partners, and it also helps us
+keep producing the trusted local journalism that keeps our communities
+connected and informed.
 
 {sender_name}
 """,
 }
+
+
+# ---------- The masthead a business is pitched from ----------
+
+def masthead_for(business: dict[str, Any]) -> dict[str, Any]:
+    """
+    The ACM title this business hears from.
+
+    A business in Newcastle knows the Newcastle Herald. "Australian Community
+    Media" is a company they have not dealt with, so the local masthead is the
+    credential that carries and the network is only the fallback.
+
+    Prospecting stamps the masthead on the record. Anything found before that
+    existed, or imported from a CSV, is matched on its suburb and region here
+    rather than being left to the network by default.
+    """
+    stored = (business.get("masthead") or "").strip()
+    if stored:
+        return mastheads.get(stored)
+    matched = mastheads.match(business.get("suburb"), business.get("region"))
+    return mastheads.get(matched)
 
 
 # ---------- Google reviews ----------
@@ -112,6 +135,7 @@ def merge_fields(business: dict[str, Any], contact: dict[str, Any] | None = None
         "industry": (business.get("industry") or "business").lower(),
         "website": business.get("website") or "",
         "reviews": review_standing(business)["phrase"],
+        "masthead": masthead_for(business)["name"],
         "sender_name": FROM_NAME,
     }
 
@@ -172,6 +196,19 @@ def _claude_draft(business: dict[str, Any], fields: dict[str, str],
         return None
 
     standing = review_standing(business)
+    title_for_rule = masthead_for(business)
+    if title_for_rule["site"]:
+        masthead_rule = (
+            "- Name " + title_for_rule["name"] + " where the email says where the\n"
+            "  editorial would run. It is the local paper, and naming it is worth\n"
+            "  more to this business than naming the network that owns it."
+        )
+    else:
+        masthead_rule = (
+            "- No local masthead covers this business's town, so write from\n"
+            "  Australian Community Media and do not name a specific paper."
+        )
+
     if standing["praiseworthy"]:
         rating_rule = (
             "- Name the star rating and the review count in the first sentence or two.\n"
@@ -189,11 +226,24 @@ def _claude_draft(business: dict[str, Any], fields: dict[str, str],
             "  touch because of the work they do locally."
         )
 
-    prompt = f"""You write short B2B outreach emails for the AEO team at
-Australian Community Media. ACM gets businesses cited inside Google's AI
-answers — AI Overviews and the AI Mode results at the top of a search — by
-publishing credible editorial across its network of more than 140 mastheads,
-the sources Google already trusts.
+    title = masthead_for(business)
+    if title["site"]:
+        who = (f"""You write short B2B outreach emails on behalf of {title['name']},
+an Australian Community Media masthead. Say {title['name']} — that is the paper
+this business and its customers already know, and it is the whole reason the
+email carries weight. Mention ACM only if you need to explain what the masthead
+is part of; never pitch as "Australian Community Media" instead of the paper.""")
+    else:
+        # No masthead matched this business's town, so there is no local paper
+        # to speak as and the network has to carry it.
+        who = """You write short B2B outreach emails for the AEO team at
+Australian Community Media, a network of more than 140 Australian mastheads."""
+
+    prompt = f"""{who}
+
+We get businesses cited inside Google's AI answers — AI Overviews and the AI
+Mode results at the top of a search — by publishing credible editorial in
+mastheads Google already trusts.
 
 Here is everything we know about the prospect. It all comes from their own
 website and their Google listing:
@@ -224,6 +274,7 @@ Rules:
   cannot keep.
 - No "I hope this email finds you well", no hype, no em-dash-heavy prose.
 - One ask: a 15-minute call.
+{masthead_rule}
 - CLOSE, before the sign-off, with a short paragraph in your own words that
   makes these four points, in this order and in this spirit: places in our
   content are limited; if this isn't right for them that is completely fine;
@@ -368,10 +419,22 @@ def save_campaign(name: str, subject: str, body: str,
 
 # ---------- Sending ----------
 
-def _footer(to_email: str, base_url: str) -> str:
+def _footer(to_email: str, base_url: str, masthead: dict[str, Any] | None = None) -> str:
+    """
+    The Spam Act footer: who sent this, and how to stop it.
+
+    The masthead leads because that is who the reader thinks they heard from,
+    but Australian Community Media is always named after it. The Act requires
+    the sender to be identified accurately, and a masthead on its own is a
+    brand rather than the entity that actually sent the mail.
+    """
     unsubscribe = UNSUBSCRIBE_URL or f"{base_url.rstrip('/')}/unsubscribe?email={to_email}"
+    identity = SENDER_IDENTITY
+    if masthead and masthead.get("site"):
+        title = masthead["name"]
+        identity = f"{title[0].upper()}{title[1:]} · {SENDER_IDENTITY}"
     return (
-        f"\n\n—\n{SENDER_IDENTITY}\n"
+        f"\n\n—\n{identity}\n"
         f"Don't want to hear from us? Unsubscribe: {unsubscribe}\n"
     )
 
@@ -471,7 +534,8 @@ def send_message(message_id: int, base_url: str = "") -> dict[str, Any]:
     if problems:
         return {"sent": False, "problems": problems}
 
-    footer = _footer(message["to_email"], base_url)
+    business = db.get_business(int(message["business_id"])) if message.get("business_id") else None
+    footer = _footer(message["to_email"], base_url, masthead_for(business or {}))
     try:
         with httpx.Client(timeout=15.0) as client:
             response = client.post(

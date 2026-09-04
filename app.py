@@ -26,6 +26,7 @@ from markupsafe import Markup
 from pydantic import BaseModel, Field
 
 import db
+import mastheads
 import demo
 import outreach
 import prospect
@@ -68,6 +69,20 @@ def score_widget(score: int | None) -> Markup:
     )
 
 
+def masthead_label(name: str) -> str:
+    """
+    A masthead name for a menu rather than a sentence.
+
+    The names are stored the way they are written mid-email — "the Newcastle
+    Herald" — because that is where they spend most of their life. A picker
+    wants the capital.
+    """
+    name = (name or "").strip()
+    return name[:1].upper() + name[1:] if name else name
+
+
+templates.env.filters["masthead_label"] = masthead_label
+
 templates.env.globals.update(
     score_widget=score_widget,
     app_name=APP_NAME,
@@ -76,6 +91,8 @@ templates.env.globals.update(
     password_set=bool(APP_PASSWORD),
     ai_available=bool(ANTHROPIC_API_KEY),
     statuses=db.STATUSES,
+    masthead_groups=mastheads.options(),
+    masthead_name=mastheads.name_for,
 )
 
 
@@ -144,14 +161,16 @@ def home(request: Request) -> HTMLResponse:
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
                has_email: str = "", website_status: str = "", min_score: str = "",
-               min_rating: str = "", sort: str = "score", page_no: str = "1") -> HTMLResponse:
+               min_rating: str = "", masthead: str = "",
+               sort: str = "score", page_no: str = "1") -> HTMLResponse:
     min_score_value = _int_param(min_score)
     page_no = max(1, _int_param(page_no, 1))
     rows, total = db.list_businesses(
         q=q, status=status, region=region, state=state, industry=industry, source=source,
         has_email={"1": True, "0": False}.get(has_email),
         website_status=website_status,
-        min_score=min_score_value, min_rating=_float_param(min_rating), sort=sort,
+        min_score=min_score_value, min_rating=_float_param(min_rating),
+        masthead=masthead, sort=sort,
         limit=PAGE_SIZE, offset=(page_no - 1) * PAGE_SIZE,
     )
     # Keep the raw string in the filter dict so the form redisplays what was
@@ -159,7 +178,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
     filters = {"q": q, "status": status, "region": region, "state": state,
                "industry": industry, "source": source, "has_email": has_email,
                "website_status": website_status, "min_score": min_score,
-               "min_rating": min_rating, "sort": sort}
+               "min_rating": min_rating, "masthead": masthead, "sort": sort}
     query_string = urlencode({k: v for k, v in filters.items() if v})
 
     def page_url(n: int) -> str:
@@ -345,12 +364,21 @@ class ProspectRequest(BaseModel):
     location: str = ""
     limit: int | str = 40
     csv: str = ""
+    masthead: str = ""
+
+
+@app.get("/api/masthead/match")
+def api_masthead_match(location: str = "") -> JSONResponse:
+    """The masthead a typed location falls under, for the search bar to preselect."""
+    site = mastheads.match(location)
+    return JSONResponse({"site": site, "name": mastheads.name_for(site),
+                         "matched": bool(site)})
 
 
 @app.post("/api/prospect/run")
 def api_prospect_run(req: ProspectRequest) -> JSONResponse:
     query = {"industry": req.industry, "location": req.location,
-             "limit": req.limit, "csv": req.csv}
+             "limit": req.limit, "csv": req.csv, "masthead": req.masthead}
     try:
         result = prospect.run(req.source, query, enrich=req.enrich)
     except KeyError as e:
@@ -382,6 +410,7 @@ class BusinessPatch(BaseModel):
     phone: str | None = None
     notes: str | None = None
     industry: str | None = None
+    masthead: str | None = None
     do_not_contact: int | None = None
 
 
@@ -411,6 +440,8 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
     data = {k: v for k, v in patch.model_dump().items() if v is not None}
     if data.get("status") and data["status"] not in db.STATUSES:
         raise HTTPException(status_code=400, detail=f"Unknown status: {data['status']}")
+    if data.get("masthead") and data["masthead"] not in mastheads.BY_SITE:
+        raise HTTPException(status_code=400, detail=f"Unknown masthead: {data['masthead']}")
     if data:
         db.update_business(business_id, data)
         db.log_activity(business_id, "updated", ", ".join(sorted(data)))

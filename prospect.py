@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import db
+import mastheads
 import sources
 from config import MIN_PROSPECT_RATING, region_for_postcode
 import enrich
@@ -168,9 +169,19 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
 
     new_count = dupe_count = 0
     touched: list[dict[str, Any]] = []
+    # Which masthead these prospects get pitched from. Chosen in the search
+    # bar; falls back to whatever the location matches, so a run started from
+    # the API without one still lands on the right local paper.
+    masthead = (query.get("masthead") or "").strip()
+    if not masthead:
+        masthead = mastheads.match(query.get("location"))
+
     for record in records:
         extra_emails = record.pop("_extra_emails", [])
         record["source"] = source_key
+        # Per record, because a search can straddle two mastheads' patches:
+        # the suburb the business is actually in beats the one that was typed.
+        record["masthead"] = mastheads.match(record.get("suburb"), record.get("region")) or masthead
         apply_score(record)
         business_id, created = db.upsert_business(record)
         if created:
@@ -197,6 +208,8 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
         "source_label": info.label,
         "found": found_count,
         "below_rating": below_rating,
+        "masthead": masthead,
+        "masthead_name": mastheads.name_for(masthead),
         "new": new_count,
         "duplicates": dupe_count,
         "businesses": sorted(touched, key=lambda b: b.get("fit_score", 0), reverse=True),

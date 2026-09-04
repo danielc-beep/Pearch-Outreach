@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS businesses (
     score_reasons     TEXT,
     notes             TEXT,
     website_status    TEXT,
+    masthead          TEXT,
     do_not_contact    INTEGER NOT NULL DEFAULT 0,
     last_contacted_at TEXT,
     enriched_at       TEXT
@@ -141,6 +142,7 @@ CREATE TABLE IF NOT EXISTS suppressions (
 MIGRATIONS: list[tuple[str, str]] = [
     ("prospecting_runs", "ALTER TABLE prospecting_runs ADD COLUMN result_ids TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN masthead TEXT"),
 ]
 
 
@@ -204,7 +206,8 @@ BUSINESS_FIELDS = (
     "industry", "category", "size_band", "rating", "review_count",
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
-    "notes", "website_status", "do_not_contact", "last_contacted_at", "enriched_at",
+    "notes", "website_status", "masthead",
+    "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
 STATUSES = [
@@ -382,6 +385,7 @@ def list_businesses(
     source: str = "",
     has_email: bool | None = None,
     website_status: str = "",
+    masthead: str = "",
     min_score: int = 0,
     min_rating: float = 0.0,
     sort: str = "score",
@@ -398,7 +402,8 @@ def list_businesses(
         )
         args += [f"%{q}%"] * 6
     for column, value in (("status", status), ("region", region), ("state", state),
-                          ("source", source), ("website_status", website_status)):
+                          ("source", source), ("website_status", website_status),
+                          ("masthead", masthead)):
         if value:
             where.append(f"{column} = ?")
             args.append(value)
