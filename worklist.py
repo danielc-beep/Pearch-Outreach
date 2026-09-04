@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import backup
 import db
 import review
 from config import MIN_PROSPECT_RATING
@@ -43,6 +44,17 @@ def board() -> list[dict[str, Any]]:
     below_rating = db.count_below_rating(MIN_PROSPECT_RATING)
     to_review = len(review.queue_ids())
 
+    # A backup nudge, but only once there is something worth losing.
+    stale = backup.age_in_days()
+    backup_note = None
+    if db.stats()["total"] >= 20:
+        if stale is None:
+            backup_note = ("No backup has ever been taken. Everything here lives in one "
+                           "file on one disk.")
+        elif stale >= 7:
+            backup_note = (f"The newest backup is {int(stale)} days old, and it is on the "
+                           "same disk as the database it protects.")
+
     items = [
         _item("replied", replied,
               "replied to an email",
@@ -68,6 +80,12 @@ def board() -> list[dict[str, Any]]:
               f"under {MIN_PROSPECT_RATING:.0f} stars",
               "Every email opens by congratulating the business on its rating. These cannot be worked.",
               "Review them", "/businesses?masthead=&min_rating=0.1", "warn"),
+        # Last on purpose. It is housekeeping, not the day's work — but it is
+        # the only item here whose cost is unrecoverable.
+        _item("backup", 1 if backup_note else 0,
+              "backup to take",
+              backup_note or "",
+              "Back it up", "/backups", "warn"),
     ]
     return [i for i in items if i]
 

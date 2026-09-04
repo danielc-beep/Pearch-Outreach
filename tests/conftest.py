@@ -12,6 +12,8 @@ os.environ.setdefault("PEARCH_DB_PATH", str(Path(tempfile.mkdtemp()) / "test.db"
 # Most tests prospect with the sample source, which is off by default in
 # production so fictional businesses cannot reach a real database.
 os.environ.setdefault("PEARCH_ENABLE_SAMPLE_SOURCE", "1")
+# No background snapshots during tests; backup.py is tested directly.
+os.environ.setdefault("PEARCH_BACKUPS", "0")
 
 import pytest  # noqa: E402
 

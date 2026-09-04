@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Backups and recovery — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Backups</div>
+        <h2>Two ways <em>back</em></h2>
+        <p class="lede">Everything this app knows lives in one database file. A snapshot
+          gets you back from a mistake; a downloaded copy gets you back from losing the disk.
+          They are not the same thing.</p>
+      </div>
+      <button class="btn btn-primary" id="btn-backup">Back up now</button>
+    </div>
+
+    <div id="flash"></div>
+
+    <div class="notice notice-warn">
+      <strong>A snapshot on this disk is not an off-site backup.</strong>
+      It protects against a bad purge or a wrong import. If the disk itself goes,
+      the snapshots go with it — so download one now and again, and keep it somewhere else.
+    </div>
+
+    <h3 style="margin-top:26px">Snapshots</h3>
+    <p class="help" style="margin-top:0">
+      Taken automatically before anything that deletes in bulk, and whenever you press the
+      button. The newest {{ keep }} are kept.
+    </p>
+
+    <div class="table-wrap">
+      {% if backups %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Taken</th><th>Why</th><th>Size</th><th></th></tr></thead>
+          <tbody>
+            {% for b in backups %}
+            <tr>
+              <td>{{ b.taken_at }}</td>
+              <td class="sub">{{ b.reason or 'manual' }}</td>
+              <td class="sub">{{ b.size }}</td>
+              <td><a class="btn btn-sm" href="/api/backup/download/{{ b.name }}">Download</a></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        <strong>No snapshots yet.</strong>
+        Press "Back up now" to take the first one.
+      </div>
+      {% endif %}
+    </div>
+
+    <h3 style="margin-top:34px">Recently deleted</h3>
+    <p class="help" style="margin-top:0">
+      Deleting keeps a copy for {{ trash_days }} days — the business, its contacts, its
+      emails and its history. Putting a batch back restores all of it.
+    </p>
+
+    <div class="table-wrap">
+      {% if batches %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>When</th><th>What happened</th><th>Records</th><th></th></tr></thead>
+          <tbody>
+            {% for t in batches %}
+            <tr>
+              <td class="sub">{{ t.deleted_at[:16].replace('T', ' ') }}</td>
+              <td>{{ t.reason or 'deleted' }}</td>
+              <td><strong>{{ t.n }}</strong></td>
+              <td>
+                <button class="btn btn-sm js-restore" data-batch="{{ t.batch }}"
+                        data-n="{{ t.n }}">Put them back</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty"><strong>Nothing deleted recently.</strong></div>
+      {% endif %}
+    </div>
+
+    <p class="muted small" style="margin-top:20px">Database: <span class="mono">{{ db_path }}</span></p>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const flashEl = document.getElementById('flash');
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const flash = (msg, kind) => {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + msg + '</div>';
+  };
+
+  const backupBtn = document.getElementById('btn-backup');
+  backupBtn.addEventListener('click', async () => {
+    backupBtn.disabled = true;
+    backupBtn.innerHTML = '<span class="spinner"></span> Backing up';
+    try {
+      const data = await window.postJSON('/api/backup/now');
+      flash('Snapshot taken — ' + esc(data.size) +
+            '. <a href="/api/backup/download/' + encodeURIComponent(data.name) +
+            '">Download it</a> and keep it somewhere off this disk.', 'ok');
+      setTimeout(() => window.location.reload(), 2500);
+    } catch (err) {
+      flash(esc(err.message), 'error');
+      backupBtn.disabled = false;
+      backupBtn.textContent = 'Back up now';
+    }
+  });
+
+  document.querySelectorAll('.js-restore').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const n = btn.dataset.n;
+      if (!confirm('Put ' + n + ' record' + (n === '1' ? '' : 's') + ' back?')) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>';
+      try {
+        const data = await window.postJSON('/api/trash/restore/' + btn.dataset.batch);
+        flash(data.restored + ' restored. The database now holds ' + data.total + '.', 'ok');
+        setTimeout(() => window.location.reload(), 1800);
+      } catch (err) {
+        flash(esc(err.message), 'error');
+        btn.disabled = false;
+        btn.textContent = 'Put them back';
+      }
+    });
+  });
+</script>
+{% endblock %}

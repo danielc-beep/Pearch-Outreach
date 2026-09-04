@@ -80,7 +80,13 @@
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>';
       try {
-        await window.postJSON(endpoint);
+        const data = await window.postJSON(endpoint);
+        // The undo belongs here, where the mistake was just made — not on a
+        // page someone has to know exists.
+        if (data && data.batch) {
+          sessionStorage.setItem('lastPurge', JSON.stringify(
+            {batch: data.batch, removed: data.removed}));
+        }
         window.location = '/businesses';
       } catch (err) {
         document.getElementById('flash').innerHTML =
@@ -113,6 +119,34 @@
       }
     });
   }
+
+  // Offer the undo on the page you land on after a purge.
+  (function () {
+    const raw = sessionStorage.getItem('lastPurge');
+    if (!raw) return;
+    sessionStorage.removeItem('lastPurge');
+    let last;
+    try { last = JSON.parse(raw); } catch (e) { return; }
+    if (!last || !last.batch || !last.removed) return;
+
+    const flash = document.getElementById('flash');
+    flash.innerHTML =
+      '<div class="notice notice-ok row"><span>' + last.removed +
+      ' removed. Kept for 30 days if that was a mistake.</span>' +
+      '<button class="btn btn-sm right" id="btn-undo-purge">Undo</button></div>';
+    document.getElementById('btn-undo-purge').addEventListener('click', async (e) => {
+      e.currentTarget.disabled = true;
+      e.currentTarget.innerHTML = '<span class="spinner"></span>';
+      try {
+        const data = await window.postJSON('/api/trash/restore/' + last.batch);
+        flash.innerHTML = '<div class="notice notice-ok">' + data.restored +
+          ' put back.</div>';
+        setTimeout(() => window.location.reload(), 1200);
+      } catch (err) {
+        flash.innerHTML = '<div class="notice notice-error">' + err.message + '</div>';
+      }
+    });
+  })();
 
   wirePurge('btn-purge-sample', '/api/sample/purge',
             'Permanently delete every fictional business? Real prospects are untouched.');

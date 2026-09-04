@@ -18,7 +18,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import (HTMLResponse, JSONResponse, RedirectResponse,
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse,
                                StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -32,9 +32,10 @@ import outreach
 import prospect
 import review
 import worklist
+import backup
 import sources
 from auth import PasswordMiddleware
-from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE,
+from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, DB_PATH,
                     DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
@@ -84,6 +85,11 @@ def masthead_label(name: str) -> str:
 
 
 templates.env.filters["masthead_label"] = masthead_label
+
+# A snapshot on startup and once a day after. The disk holds the only copy of
+# everything the app knows, and a deploy is a good moment to take one.
+if os.getenv("PEARCH_BACKUPS", "1") == "1":
+    backup.start_daily()
 
 templates.env.globals.update(
     score_widget=score_widget,
@@ -449,6 +455,45 @@ def outbox(request: Request, status: str = "") -> HTMLResponse:
     )
 
 
+@app.get("/backups", response_class=HTMLResponse)
+def backups_page(request: Request) -> HTMLResponse:
+    """Snapshots and the trash — the two ways back from a mistake."""
+    return page(
+        request, "backups.html", nav="",
+        backups=backup.listing(),
+        batches=db.trash_batches(),
+        keep=backup.KEEP,
+        trash_days=db.TRASH_KEEPS_DAYS,
+        db_path=str(DB_PATH),
+    )
+
+
+@app.post("/api/backup/now")
+def api_backup_now() -> JSONResponse:
+    return JSONResponse(backup.make("manual"))
+
+
+@app.get("/api/backup/download/{name}")
+def api_backup_download(name: str) -> FileResponse:
+    """
+    Hand over a snapshot to keep somewhere else.
+
+    A snapshot on the same disk protects against a mistake. Only a copy off
+    the disk protects against losing the disk, and this is that copy.
+    """
+    path = backup.resolve(name)
+    if not path:
+        raise HTTPException(status_code=404, detail="No such backup")
+    return FileResponse(path, media_type="application/octet-stream", filename=name)
+
+
+@app.post("/api/trash/restore/{batch}")
+def api_restore_batch(batch: str) -> JSONResponse:
+    restored = db.restore_batch(batch)
+    log.info("restored %s businesses from batch %s", restored, batch)
+    return JSONResponse({"restored": restored, "total": db.stats()["total"]})
+
+
 @app.get("/suppressions", response_class=HTMLResponse)
 def suppressions_page(request: Request) -> HTMLResponse:
     return page(request, "suppressions.html", nav="", suppressions=db.list_suppressions())
@@ -580,9 +625,11 @@ def api_purge_low_rated() -> JSONResponse:
     congratulating the business on its rating, a record we would not
     congratulate is one we cannot work.
     """
-    removed = db.delete_below_rating(MIN_PROSPECT_RATING)
-    log.info("purged %s businesses under %s stars", removed, MIN_PROSPECT_RATING)
-    return JSONResponse({"removed": removed, "remaining": db.stats()["total"]})
+    backup.make("before-rating-purge")
+    removed, batch = db.delete_below_rating(MIN_PROSPECT_RATING)
+    log.info("purged %s businesses under %s stars (batch %s)", removed, MIN_PROSPECT_RATING, batch)
+    return JSONResponse({"removed": removed, "batch": batch,
+                         "remaining": db.stats()["total"]})
 
 
 @app.post("/api/businesses/{business_id}")
@@ -622,17 +669,19 @@ def api_purge_sample() -> JSONResponse:
     stay until something removes them — and a database that mixes invented
     companies with real prospects is worse than either alone.
     """
-    removed = db.delete_sample_businesses()
-    log.info("purged %s sample businesses", removed)
-    return JSONResponse({"removed": removed, "remaining": db.stats()["total"]})
+    backup.make("before-sample-purge")
+    removed, batch = db.delete_sample_businesses()
+    log.info("purged %s sample businesses (batch %s)", removed, batch)
+    return JSONResponse({"removed": removed, "batch": batch,
+                         "remaining": db.stats()["total"]})
 
 
 @app.post("/api/businesses/{business_id}/delete")
 def api_delete_business(business_id: int) -> JSONResponse:
     if not db.get_business(business_id):
         raise HTTPException(status_code=404, detail="No such business")
-    db.delete_business(business_id)
-    return JSONResponse({"deleted": business_id})
+    batch = db.delete_business(business_id)
+    return JSONResponse({"deleted": business_id, "batch": batch})
 
 
 @app.post("/api/enrich/missing")

@@ -11,6 +11,7 @@ means adding it to SCHEMA and to MIGRATIONS.
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -140,6 +141,19 @@ CREATE TABLE IF NOT EXISTS suppressions (
 """
 
 # Columns added after the first release. Each entry is applied if missing.
+CREATE_TRASH = """
+CREATE TABLE IF NOT EXISTS trash (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    deleted_at TEXT NOT NULL,
+    batch      TEXT NOT NULL,
+    reason     TEXT,
+    name       TEXT,
+    payload    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trash_batch ON trash(batch);
+"""
+
+
 MIGRATIONS: list[tuple[str, str]] = [
     ("prospecting_runs", "ALTER TABLE prospecting_runs ADD COLUMN result_ids TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
@@ -180,6 +194,7 @@ def tx() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     conn = get_conn()
     conn.executescript(SCHEMA)
+    conn.executescript(CREATE_TRASH)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -195,7 +210,7 @@ def reset_db() -> None:
     """Drop everything and recreate. Used by the tests and `--reset`."""
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
-                  "contacts", "suppressions", "businesses"):
+                  "contacts", "suppressions", "trash", "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
     init_db()
@@ -345,13 +360,9 @@ def count_sample_businesses() -> int:
     return int(row["n"])
 
 
-def delete_sample_businesses() -> int:
-    """Remove every fictional business. Returns how many went."""
-    count = count_sample_businesses()
-    if count:
-        with tx() as conn:
-            conn.execute(f"DELETE FROM businesses WHERE {SAMPLE_CLAUSE}")
-    return count
+def delete_sample_businesses() -> tuple[int, str]:
+    """Remove every fictional business. Returns (how many, the batch that undoes it)."""
+    return _delete_where(SAMPLE_CLAUSE, (), "removed sample data")
 
 
 BELOW_RATING_CLAUSE = "(rating IS NULL OR rating < ?)"
@@ -365,13 +376,34 @@ def count_below_rating(minimum: float) -> int:
     return int(row["n"])
 
 
-def delete_below_rating(minimum: float) -> int:
-    """Remove every business under the rating floor. Returns how many went."""
-    count = count_below_rating(minimum)
-    if count:
-        with tx() as conn:
-            conn.execute(f"DELETE FROM businesses WHERE {BELOW_RATING_CLAUSE}", (minimum,))
-    return count
+def delete_below_rating(minimum: float) -> tuple[int, str]:
+    """Remove every business under the rating floor. Returns (how many, batch id)."""
+    return _delete_where(BELOW_RATING_CLAUSE, (minimum,),
+                         f"removed businesses under {minimum:g} stars")
+
+
+def _delete_where(clause: str, args: tuple[Any, ...], reason: str) -> tuple[int, str]:
+    """
+    Delete every business matching a clause, keeping a copy of each.
+
+    Bulk deletes are where an accident is expensive: one click can take
+    hundreds of records and everything attached to them. Each is captured
+    first, under one batch id, so the whole action is a single undo.
+    """
+    ids = [int(r["id"]) for r in get_conn().execute(
+        f"SELECT id FROM businesses WHERE {clause}", args)]
+    if not ids:
+        return 0, ""
+
+    batch = _new_batch()
+    snapshots = [s for s in (_capture(i) for i in ids) if s]
+    with tx() as conn:
+        for snapshot in snapshots:
+            _to_trash(conn, snapshot, batch, reason)
+        conn.execute(f"DELETE FROM businesses WHERE {clause}", args)
+        conn.execute("DELETE FROM trash WHERE deleted_at < datetime('now', ?)",
+                     (f"-{TRASH_KEEPS_DAYS} days",))
+    return len(ids), batch
 
 
 def businesses_without_masthead(limit: int = 500) -> list[dict[str, Any]]:
@@ -399,9 +431,123 @@ def masthead_counts() -> list[dict[str, Any]]:
     return [{"masthead": r["masthead"], "n": int(r["n"])} for r in rows]
 
 
-def delete_business(business_id: int) -> None:
+# ---------- Trash: nothing is deleted without a way back ----------
+
+TRASH_KEEPS_DAYS = 30
+
+
+def _capture(business_id: int) -> dict[str, Any] | None:
+    """
+    Everything a delete would take with it.
+
+    contacts, messages and activities all cascade from businesses, so
+    capturing the row alone would restore a business with no history and no
+    record of what was sent to it — which is worse than not restoring it,
+    because it looks complete.
+    """
+    conn = get_conn()
+    business = conn.execute("SELECT * FROM businesses WHERE id = ?", (business_id,)).fetchone()
+    if not business:
+        return None
+    return {
+        "business": dict(business),
+        "contacts": [dict(r) for r in conn.execute(
+            "SELECT * FROM contacts WHERE business_id = ?", (business_id,))],
+        "messages": [dict(r) for r in conn.execute(
+            "SELECT * FROM messages WHERE business_id = ?", (business_id,))],
+        "activities": [dict(r) for r in conn.execute(
+            "SELECT * FROM activities WHERE business_id = ?", (business_id,))],
+    }
+
+
+def _to_trash(conn: sqlite3.Connection, snapshot: dict[str, Any],
+              batch: str, reason: str) -> None:
+    conn.execute(
+        "INSERT INTO trash (deleted_at, batch, reason, name, payload) VALUES (?, ?, ?, ?, ?)",
+        (now(), batch, reason, snapshot["business"].get("name"), json.dumps(snapshot)),
+    )
+
+
+def _new_batch() -> str:
+    """One id per user action, so a purge of forty is undone as one thing."""
+    return now() + "-" + secrets.token_hex(4)
+
+
+def list_trash(limit: int = 200) -> list[dict[str, Any]]:
+    rows = get_conn().execute(
+        "SELECT id, deleted_at, batch, reason, name FROM trash "
+        "ORDER BY id DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def trash_batches(limit: int = 40) -> list[dict[str, Any]]:
+    """Recent deletions grouped by the action that caused them."""
+    rows = get_conn().execute(
+        "SELECT batch, reason, COUNT(*) AS n, MAX(deleted_at) AS deleted_at "
+        "FROM trash GROUP BY batch ORDER BY deleted_at DESC LIMIT ?", (limit,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def restore_batch(batch: str) -> int:
+    """
+    Put a deleted batch back, with its contacts, messages and history.
+
+    Rows keep their original ids where those ids are still free, so links
+    from anywhere else in the app still point at the right record.
+    """
+    rows = get_conn().execute(
+        "SELECT id, payload FROM trash WHERE batch = ?", (batch,)).fetchall()
+    if not rows:
+        return 0
+
+    restored = 0
     with tx() as conn:
+        for row in rows:
+            snapshot = json.loads(row["payload"])
+            business = snapshot["business"]
+            taken = conn.execute("SELECT 1 FROM businesses WHERE id = ?",
+                                 (business["id"],)).fetchone()
+            if taken:
+                continue          # something already occupies that id; leave it be
+            columns = ", ".join(business)
+            marks = ", ".join("?" for _ in business)
+            conn.execute(f"INSERT INTO businesses ({columns}) VALUES ({marks})",
+                         list(business.values()))
+            for table in ("contacts", "messages", "activities"):
+                for record in snapshot.get(table, []):
+                    cols = ", ".join(record)
+                    qs = ", ".join("?" for _ in record)
+                    conn.execute(f"INSERT OR IGNORE INTO {table} ({cols}) VALUES ({qs})",
+                                 list(record.values()))
+            conn.execute("DELETE FROM trash WHERE id = ?", (row["id"],))
+            restored += 1
+    return restored
+
+
+def empty_trash(older_than_days: int = 0) -> int:
+    """Clear the trash. With no argument, all of it."""
+    with tx() as conn:
+        if older_than_days:
+            cur = conn.execute("DELETE FROM trash WHERE deleted_at < datetime('now', ?)",
+                               (f"-{int(older_than_days)} days",))
+        else:
+            cur = conn.execute("DELETE FROM trash")
+        return cur.rowcount or 0
+
+
+def delete_business(business_id: int, reason: str = "deleted by hand") -> str:
+    """Delete one business. Returns the batch id that undoes it."""
+    batch = _new_batch()
+    snapshot = _capture(business_id)
+    with tx() as conn:
+        if snapshot:
+            _to_trash(conn, snapshot, batch, reason)
         conn.execute("DELETE FROM businesses WHERE id = ?", (business_id,))
+        conn.execute("DELETE FROM trash WHERE deleted_at < datetime('now', ?)",
+                     (f"-{TRASH_KEEPS_DAYS} days",))
+    return batch
 
 
 def list_businesses(
