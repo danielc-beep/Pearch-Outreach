@@ -175,6 +175,20 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
   box-shadow: none;
 }
 .searchbar .field input:focus, .searchbar .field select:focus { box-shadow: none; }
+/* The native chevron is drawn immediately after the selected text, so a long
+   masthead name runs straight under it. Ours is pinned to the right edge of
+   the field instead, with the text reserved out of its way and ellipsised
+   before it gets there. */
+.searchbar .field select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 20px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' fill='none' stroke='%235A6B8C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 2px top 50%;
+  background-size: 11px 7px;
+}
+.searchbar .field select:hover { cursor: pointer; }
 /* The dropdown itself is drawn by the OS, so it needs telling too. */
 .searchbar .field select option, .searchbar .field select optgroup { background: #FFFFFF; color: #16224A; }
 .searchbar .field input::placeholder { color: #96A2BA; }
@@ -193,7 +207,9 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
      equal split and then merely stops it growing, which is how the masthead
      ended up too narrow for "The St George and Sutherland Leader". */
   .searchbar .field-masthead { flex: 1.5; }
-  .searchbar .field-source { flex: 0 0 148px; }
+  /* Wide enough for "Google Places" now that the chevron reserves its own
+     20px at the right edge. */
+  .searchbar .field-source { flex: 0 0 176px; }
 }
 @media (max-width: 760px) {
   .searchbar { flex-direction: column; border-radius: 22px; }

@@ -103,3 +103,16 @@ def test_the_search_bar_fields_are_only_capped_while_it_is_a_row(client):
     home = client.get("/").text
     assert "max-width:280px" not in home
     assert "max-width:150px" not in home
+
+
+def test_the_search_bar_chevron_clears_the_text(client):
+    """
+    The native arrow is drawn immediately after the selected text, so a long
+    masthead name ran straight under it.
+    """
+    css = client.get("/static/app.css").text
+    assert "appearance: none; -webkit-appearance: none;" in css
+    assert "background-position: right 2px top 50%;" in css
+    # Room reserved for it, and the text ellipsised before it gets there.
+    assert "padding-right: 20px;" in css
+    assert "text-overflow: ellipsis;" in css
