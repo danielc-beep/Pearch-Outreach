@@ -194,7 +194,7 @@
               <td>
                 {% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted small">—</span>{% endif %}
                 {% if b.website_status == 'unreachable' %}
-                <div><span class="pill" style="background:#FFF1F0;border-color:#F6CFCB;color:var(--danger)">site dead</span></div>
+                <div><span class="pill pill-dead">site dead</span></div>
                 {% endif %}
               </td>
               <td class="small">{{ b.phone or '—' }}</td>

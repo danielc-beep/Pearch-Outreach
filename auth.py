@@ -24,10 +24,13 @@ from config import APP_PASSWORD, APP_USERNAME, LOCAL_HOSTS, PUBLIC_PATHS
 
 UNPROTECTED_HTML = """<!doctype html>
 <html><head><meta charset="utf-8"><title>Set a password first</title>
-<style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;background:#fff;
-color:#1A2244;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px}
-.box{max-width:520px}h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 12px}
-p{color:#7A819E;line-height:1.6}code{background:#FFF7CD;padding:2px 6px;border-radius:5px;color:#1A2244}</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;
+background:radial-gradient(ellipse 90% 60% at 50% -10%,#16305E 0%,transparent 60%),
+linear-gradient(180deg,#050A1C 0%,#02060F 100%);background-attachment:fixed;
+color:#E8F1FA;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0;padding:24px}
+.box{max-width:520px}h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 12px;color:#fff}
+p{color:#93A7C4;line-height:1.6}code{background:rgba(0,154,199,0.18);padding:2px 6px;border-radius:5px;color:#7FDCFA}</style>
 </head><body><div class="box">
 <h1>ACM Outreach Database is locked</h1>
 <p>This instance is reachable from the internet but no shared password is set, so

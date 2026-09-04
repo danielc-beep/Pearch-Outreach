@@ -34,7 +34,7 @@
             <dt>Website</dt><dd>
               {% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.website }}</a>
                 {% if b.website_status == 'unreachable' %}
-                <span class="pill" style="background:#FFF1F0;border-color:#F6CFCB;color:var(--danger)">doesn't resolve</span>
+                <span class="pill pill-dead">doesn't resolve</span>
                 {% elif b.website_status == 'live' %}
                 <span class="pill hot">live</span>
                 {% endif %}
