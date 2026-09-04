@@ -38,18 +38,23 @@ DRAFT_WORKERS = 4
 
 DEFAULT_CAMPAIGN = {
     "name": "AI visibility — first touch",
-    "subject": "{business_name} and Google's AI answers",
+    "subject": "{business_name} in Google's AI Overviews",
     "body": """Hi {first_name},
 
 Congratulations on {reviews} —
 that is why we are getting in touch. You are clearly doing good work for
 people in {suburb}, and we would like to put it in front of more of them.
 
-Here is the gap. When someone in {suburb} searches Google for a {industry},
-the AI answer at the top cites a handful of sources, and yours isn't one of
-them. That's what we fix: we get businesses cited inside Google's AI answers
-by publishing credible editorial in {masthead} — a masthead Google already
-trusts, and one your customers in {suburb} already read.
+Here is the gap. When someone in {suburb} searches Google for {industry},
+Google now writes its own answer above everything else — that is AI Mode, and
+the AI Overview at the top of the results — and it names a handful of
+businesses as the sources it drew on. That list is not the ads, and it is not
+the blue links underneath it. It is Google's AI choosing who to quote, and at
+the moment it is not quoting you.
+
+Getting businesses quoted inside AI Mode and AI Overviews is the one thing we
+do. We do it by publishing credible editorial in {masthead} — a masthead
+Google already trusts, and one your customers in {suburb} already read.
 
 Worth a 15-minute call to walk you through what we found for {business_name}?
 
@@ -246,9 +251,15 @@ Australian Community Media, a network of more than 140 Australian mastheads."""
 
     prompt = f"""{who}
 
-We get businesses cited inside Google's AI answers — AI Overviews and the AI
-Mode results at the top of a search — by publishing credible editorial in
+We get businesses quoted inside Google's own AI answers — AI Mode, and the AI
+Overview at the top of a results page — by publishing credible editorial in
 mastheads Google already trusts.
+
+This is not advertising and it is not search-engine optimisation. Google's AI
+writes an answer and names the sources it drew on; that list of sources is a
+different thing from the ads above it and the ranked results below it. Being
+mistaken for AdWords or for an SEO agency is the fastest way to lose a
+reader, so the distinction is not a detail — it is the product.
 
 Here is everything we know about the prospect. It all comes from their own
 website and their Google listing:
@@ -272,6 +283,13 @@ Rules:
 {rating_rule}
 - Never invent a fact, a number, a result, or a claim about their current AI
   visibility. If you would need a fact we have not given you, write around it.
+- NAME THE PART OF GOOGLE. Say "AI Mode" and "AI Overviews" explicitly, and
+  make it unmistakable that this is neither paid advertising nor SEO. Never
+  write a vague line like "get cited at the top of Google" or "get found on
+  Google" — a business owner reads that as AdWords or as an SEO agency, and
+  once they have filed us under either, the email is finished. Describe the
+  thing itself: Google's AI writes the answer and names the sources it drew
+  on, and that list is not the ads and not the ranked results underneath.
 - GOOGLE ONLY. Name Google, and nothing else. Do not mention ChatGPT,
   Perplexity, Copilot, Gemini, Claude, "AI assistants", "chatbots", or
   "LLMs", even in passing or as an example — today we can only put a business
@@ -580,6 +598,20 @@ def _local_parts(email: str) -> set[str]:
     return {local, re.split(r"[.\-+_]", local)[0]}
 
 
+# The product is a specific surface: the answer Google's AI writes, and the
+# sources it names inside it. A draft that only says "Google" describes
+# AdWords and every SEO agency in the country equally well, and a reader who
+# files us under either has stopped reading. Claude rewrites the body freely,
+# so this checks that the distinction survived the rewrite.
+AI_SURFACE_TERMS = ("ai mode", "ai overview", "ai overviews", "ai-generated answer")
+VAGUE_PITCHES = ("top of google", "top of the search", "rank higher",
+                 "search rankings", "get found on google", "page one")
+
+
+def names_the_surface(body: str) -> bool:
+    return any(term in (body or "").lower() for term in AI_SURFACE_TERMS)
+
+
 def warnings(message: dict[str, Any]) -> list[str]:
     """
     Things worth knowing before sending, none of which stop it.
@@ -589,6 +621,18 @@ def warnings(message: dict[str, Any]) -> list[str]:
     too — so these are shown and not enforced.
     """
     notes: list[str] = []
+    body = message.get("body") or ""
+    if not names_the_surface(body):
+        notes.append("This draft never says AI Mode or AI Overviews. Without naming "
+                     "them it reads as AdWords or SEO, which is not what we sell.")
+    lowered = body.lower()
+    hit = next((phrase for phrase in VAGUE_PITCHES if phrase in lowered), "")
+    if hit:
+        # Quoted as it appears in the draft, not as the lowercase pattern that
+        # matched it, so the reader can find the line and fix it.
+        at = lowered.index(hit)
+        notes.append(f"\"{body[at:at + len(hit)]}\" reads as search ranking, not as "
+                     "being quoted inside Google's AI answer.")
     to_email = (message.get("to_email") or "").strip().lower()
     local, _, domain = to_email.partition("@")
     if _local_parts(to_email) & set(ROLE_PREFIXES):

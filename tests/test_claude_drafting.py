@@ -143,3 +143,65 @@ def test_the_stored_draft_falls_back_to_the_template(sample_run):
 
     assert business["name"] in message["subject"]
     assert "{business_name}" not in message["body"]
+
+
+# ---------- Saying which part of Google ----------
+# "Cited at the top of Google" describes AdWords and every SEO agency in the
+# country equally well. The product is the answer Google's AI writes and the
+# sources it names inside it, and a reader who files us under advertising or
+# search rankings has already stopped reading.
+
+def test_the_template_names_ai_mode_and_ai_overviews():
+    import outreach
+    body = outreach.DEFAULT_CAMPAIGN["body"].lower()
+    assert "ai mode" in body
+    assert "ai overview" in body
+
+
+def test_the_template_says_it_is_neither_ads_nor_rankings():
+    import outreach
+    body = outreach.DEFAULT_CAMPAIGN["body"].lower()
+    assert "not the ads" in body
+    assert "blue links" in body
+
+
+def test_the_subject_line_names_the_surface():
+    import outreach
+    assert "ai overview" in outreach.DEFAULT_CAMPAIGN["subject"].lower()
+
+
+@patch.object(outreach, "ANTHROPIC_API_KEY", "sk-ant-test")
+def test_the_drafting_prompt_forbids_the_vague_version():
+    """Claude rewrites the body, so the rule has to be in the brief."""
+    with patch.object(anthropic, "Anthropic") as client_cls:
+        client_cls.return_value.messages.parse.return_value = _response("s", "b")
+        outreach._claude_draft(BUSINESS, {"sender_name": "ACM AEO Team"},
+                               outreach.DEFAULT_CAMPAIGN)
+    prompt = client_cls.return_value.messages.parse.call_args.kwargs["messages"][0]["content"]
+    assert "AI Mode" in prompt and "AI Overviews" in prompt
+    assert "not advertising" in prompt
+    assert "search-engine optimisation" in prompt
+    # The exact phrasing to avoid is named, not just implied.
+    assert "top of Google" in prompt
+    assert "AdWords" in prompt
+
+
+def test_a_draft_that_never_names_the_surface_is_flagged():
+    import outreach
+    notes = outreach.warnings({"body": "We can get you found on Google. Call us."})
+    assert any("AI Mode or AI Overviews" in n for n in notes), notes
+
+
+def test_a_draft_that_sounds_like_seo_is_flagged():
+    import outreach
+    notes = outreach.warnings(
+        {"body": "We get you to the top of Google, cited in AI Overviews."})
+    assert any("search ranking" in n for n in notes), notes
+
+
+def test_a_draft_that_names_the_surface_is_not_flagged():
+    import outreach
+    notes = outreach.warnings({
+        "body": "Google's AI Mode writes the answer and names its sources. "
+                "That list is not the ads. We get you quoted in it."})
+    assert not any("AI Mode or AI Overviews" in n for n in notes), notes
