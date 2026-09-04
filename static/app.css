@@ -6,11 +6,14 @@
    lights read through them without ever sitting behind text.
    --------------------------------------------------------------- */
 :root {
-  /* Night sky */
-  --ink:          #050A1C;
-  --ink-deep:     #02060F;
-  --ink-panel:    #0C1430;
-  --ink-raised:   #121C3D;
+  /* Night sky. Lifted well off black on purpose: bright text on a
+     near-black ground haloes, which is what makes long reading tiring even
+     when the contrast number looks excellent. A mid navy reads cleaner. */
+  --ink:          #16224A;
+  --ink-deep:     #0D1636;
+  --ink-panel:    #1F2E5C;
+  --ink-raised:   #26376B;
+  --ink-sunken:   #101A3D;
 
   /* ACM cyan — #009AC7 is the logo colour; the brighter tints are for
      text and hairlines, which need more lift against the dark ground. */
@@ -23,7 +26,7 @@
   --white:        #FFFFFF;
   --surface:      rgba(255,255,255,0.035);
   --surface-2:    rgba(255,255,255,0.07);
-  --border:       rgba(255,255,255,0.16);
+  --border:       rgba(255,255,255,0.18);
   --border-lit:   rgba(53,198,240,0.42);
   --text:         #F4F9FF;
   /* Muted text is still body copy, not a hint - it clears 7:1 on the panel
@@ -60,9 +63,9 @@ body {
 .sky {
   position: fixed; inset: 0; z-index: -2; pointer-events: none;
   background:
-    radial-gradient(ellipse 90% 60% at 50% -10%, #16305E 0%, transparent 60%),
-    radial-gradient(ellipse 60% 50% at 12% 12%, rgba(0,154,199,0.20) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 60% at 88% 82%, rgba(0,154,199,0.13) 0%, transparent 62%),
+    radial-gradient(ellipse 90% 60% at 50% -10%, #24407A 0%, transparent 62%),
+    radial-gradient(ellipse 60% 50% at 12% 12%, rgba(0,154,199,0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 60% at 88% 82%, rgba(0,154,199,0.15) 0%, transparent 62%),
     linear-gradient(180deg, var(--ink) 0%, var(--ink-deep) 100%);
 }
 #fairy-lights { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
@@ -73,7 +76,7 @@ em, .italic { font-family: var(--serif); font-style: italic; font-weight: 500; }
 
 /* ---------- Chrome ---------- */
 .topbar {
-  background: rgba(5,10,28,0.86); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(13,22,54,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--border); padding: 16px 0; position: sticky; top: 0; z-index: 20;
 }
 .topbar-inner {
@@ -108,7 +111,7 @@ em, .italic { font-family: var(--serif); font-style: italic; font-weight: 500; }
   .nav-cta { margin-left: auto; }
 }
 
-.footer { margin-top: auto; border-top: 1px solid var(--border); padding: 32px 0; background: rgba(2,6,15,0.55); }
+.footer { margin-top: auto; border-top: 1px solid var(--border); padding: 32px 0; background: rgba(13,22,54,0.62); }
 .footer-inner {
   max-width: 1240px; margin: 0 auto; padding: 0 32px;
   display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap;
@@ -143,7 +146,7 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 /* ---------- The prospecting search bar ---------- */
 .searchbar {
   display: flex; align-items: stretch; gap: 0;
-  max-width: 860px; margin: 0 auto; background: rgba(11,19,45,0.90);
+  max-width: 860px; margin: 0 auto; background: rgba(31,46,92,0.90);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border); border-radius: 999px;
   box-shadow: var(--shadow); overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
@@ -174,7 +177,7 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 
 /* ---------- Cards, stats ---------- */
 .card {
-  background: rgba(11,19,45,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(31,46,92,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px;
   box-shadow: var(--shadow);
 }
@@ -209,7 +212,7 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 /* ---------- Tables ---------- */
 .table-wrap {
   border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
-  background: rgba(11,19,45,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(31,46,92,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   box-shadow: var(--shadow);
 }
 .table-scroll { overflow-x: auto; }
@@ -275,7 +278,7 @@ td .sub { color: var(--text-muted); font-size: 13px; }
 .filters .f { display: flex; flex-direction: column; gap: 5px; }
 .filters label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); }
 input[type=text], input[type=email], input[type=number], input[type=search], select, textarea {
-  font-family: inherit; font-size: 14px; color: var(--text); background: rgba(2,6,15,0.55);
+  font-family: inherit; font-size: 14px; color: var(--text); background: var(--ink-sunken);
   border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; outline: 0; transition: 0.15s;
 }
 select option { background: var(--ink-panel); color: var(--text); }
@@ -297,7 +300,7 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
 /* ---------- Source cards ---------- */
 .source-card {
   border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px;
-  background: rgba(11,19,45,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  background: rgba(31,46,92,0.90); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   cursor: pointer; transition: 0.15s; text-align: left; width: 100%;
   font-family: inherit; color: inherit; display: block;
 }
@@ -326,7 +329,7 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
 .timeline .t { color: var(--text-muted); font-size: 11.5px; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
 .draft-body {
-  white-space: pre-wrap; background: rgba(2,6,15,0.55); border: 1px solid var(--border);
+  white-space: pre-wrap; background: var(--ink-sunken); border: 1px solid var(--border);
   border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 1.65; color: var(--text);
 }
 

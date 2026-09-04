@@ -37,10 +37,13 @@
   // sense of movement. The weights decide how many land on each layer.
   // Sizes are small on purpose. Larger glows read as out-of-focus bokeh
   // rather than fairy lights, and behind a headline they compete with it.
+  // Alphas are set against the lifted navy ground. These composite as
+  // 'lighter', so raising the page background eats the dimmest lights —
+  // the low ends carry more than they look like they should.
   var LAYERS = [
-    { weight: 0.62, size: 0.85, speed: 0.10, alpha: [0.18, 0.46] },
-    { weight: 0.30, size: 1.45, speed: 0.26, alpha: [0.28, 0.66] },
-    { weight: 0.08, size: 2.40, speed: 0.52, alpha: [0.30, 0.78] }
+    { weight: 0.62, size: 0.85, speed: 0.10, alpha: [0.26, 0.58] },
+    { weight: 0.30, size: 1.45, speed: 0.26, alpha: [0.36, 0.76] },
+    { weight: 0.08, size: 2.40, speed: 0.52, alpha: [0.40, 0.88] }
   ];
 
   function rand(min, max) { return min + Math.random() * (max - min); }

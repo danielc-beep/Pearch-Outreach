@@ -29,7 +29,7 @@ def test_the_sky_sits_behind_the_content(client):
 
 def test_the_locked_page_uses_the_dark_ground():
     from auth import UNPROTECTED_HTML
-    assert "#050A1C" in UNPROTECTED_HTML
+    assert "#16224A" in UNPROTECTED_HTML
     assert "ACM Outreach Database is locked" in UNPROTECTED_HTML
 
 
@@ -49,4 +49,4 @@ def test_body_copy_is_bright_enough_to_read_over_the_field(client):
     assert "--text-muted:   #C3D4E8;" in css
     # Panels sit at 90% so a light passing behind a paragraph is a shimmer,
     # not a competing mark.
-    assert "rgba(11,19,45,0.90)" in css
+    assert "rgba(31,46,92,0.90)" in css
