@@ -690,72 +690,123 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 
 
-/* ---------- The pipeline, as a shape ---------- */
-.crm-top {
-  display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
-  gap: 30px; align-items: start; margin-top: 8px;
+/* ---------- The pipeline: a bar, then a board ---------- */
+/* One proportional bar in stage order. It reads the same at 99/1 as it does
+   at an even spread, which a pie of eight slices does not. */
+.funnel {
+  display: flex; gap: 3px; margin: 6px 0 12px;
+  height: 46px; border-radius: 10px; overflow: hidden;
 }
-.crm-figure { position: relative; margin: 0; }
-.crm-donut { width: 100%; height: auto; display: block; overflow: visible; }
-/* A 2px surface gap already separates the wedges, so the stroke here is only
-   the lift on hover — drawn outside the fill so it never eats the segment. */
-.crm-seg {
-  transition: opacity 0.15s, transform 0.15s;
-  transform-origin: 120px 120px;
-  cursor: pointer;
+.funnel-seg {
+  flex: var(--share) 1 0; min-width: 34px;
+  background: var(--tone); color: #08152F;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  text-decoration: none; overflow: hidden; white-space: nowrap;
+  font-size: 12.5px; font-weight: 700;
+  transition: flex-grow 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.15s;
 }
-.crm-seg.is-lit { transform: scale(1.035); }
-.crm-donut:hover .crm-seg:not(.is-lit) { opacity: 0.72; }
-.crm-total {
-  text-anchor: middle; fill: var(--white);
-  font-size: 38px; font-weight: 800; letter-spacing: -0.03em;
-  font-variant-numeric: tabular-nums;
-}
-.crm-total-label {
-  text-anchor: middle; fill: var(--text-muted);
-  font-size: 11px; letter-spacing: 0.10em; text-transform: uppercase;
-}
-.crm-tip {
-  position: absolute; pointer-events: none; transform: translate(12px, -50%);
-  background: #101A3E; border: 1px solid var(--border); border-radius: 8px;
-  padding: 5px 9px; font-size: 12px; color: var(--text); white-space: nowrap;
-  box-shadow: var(--shadow); z-index: 2;
-}
+.funnel-seg:hover { filter: brightness(1.12); }
+.funnel-label { overflow: hidden; text-overflow: ellipsis; }
+.funnel-n { font-variant-numeric: tabular-nums; }
+/* Below about 70px a segment cannot hold a word, so it keeps the number. */
+.funnel-seg { container-type: inline-size; }
+@container (max-width: 78px) { .funnel-label { display: none; } }
 
-/* Capped, or the count and the share drift so far from the label that the
-   eye has to travel a dead gap to pair them up. */
-.crm-legend { list-style: none; margin: 0; padding: 0; max-width: 540px; }
-.crm-legend-row { padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.crm-legend-row:last-child { border-bottom: 0; }
-.crm-legend-row.is-empty { opacity: 0.5; }
-.crm-legend-row.is-picked { background: rgba(0,154,199,0.10); border-radius: 8px; padding-left: 10px; }
-.crm-legend-link {
-  display: grid; grid-template-columns: 12px minmax(0,1fr) auto 46px;
-  align-items: center; gap: 10px; text-decoration: none; color: inherit;
+.funnel-key { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; }
+.funnel-key-item { color: var(--text-muted); display: inline-flex; align-items: center; gap: 6px; }
+.funnel-key-item b { color: var(--white); font-variant-numeric: tabular-nums; }
+.funnel-key-item.is-zero { opacity: 0.45; }
+.funnel-key-item.is-ending { opacity: 0.8; }
+.cold-flag {
+  font-style: normal; font-size: 11px; font-weight: 700;
+  color: var(--warning); background: rgba(255,194,77,0.14);
+  border: 1px solid rgba(255,194,77,0.34); border-radius: 999px; padding: 1px 7px;
 }
-.crm-legend-link:hover .crm-legend-name { color: var(--cyan-bright); }
-.crm-swatch {
-  width: 12px; height: 12px; border-radius: 3px; display: inline-block;
-  vertical-align: -1px;
+.crm-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+.crm-flash { position: sticky; top: 66px; z-index: 6; }
+.crm-flash:empty { display: none; }
+
+/* The board. Horizontal scroll is correct here — every CRM does it, and the
+   alternative is eight columns too narrow to hold a business name. */
+.board {
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr);
+  gap: 12px; align-items: start;
+  overflow-x: auto; padding: 4px 24px 28px; scroll-snap-type: x proximity;
 }
-.crm-legend-name { font-weight: 600; color: var(--white); }
-.crm-legend-count { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--white); }
-.crm-legend-pct { font-variant-numeric: tabular-nums; text-align: right; color: var(--text-muted); font-size: 12.5px; }
-.crm-legend-blurb { margin: 3px 0 0 22px; font-size: 12.5px; color: var(--text-muted); }
-.crm-legend-row.is-lit .crm-legend-name { color: var(--cyan-bright); }
+.board-col {
+  scroll-snap-align: start;
+  background: rgba(16,26,62,0.62); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px; transition: background 0.15s, border-color 0.15s;
+}
+.board-col.is-over { background: rgba(0,154,199,0.16); border-color: var(--cyan); }
+.board-col.is-lit { border-color: var(--cyan-bright); }
+.board-col-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 2px 4px 9px; border-bottom: 2px solid var(--tone); margin-bottom: 9px;
+}
+.board-col-name {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text);
+}
+.board-col-n {
+  font-variant-numeric: tabular-nums; font-weight: 700; color: var(--white);
+  background: rgba(255,255,255,0.09); border-radius: 999px; padding: 1px 9px; font-size: 12px;
+}
+.board-col-n.is-bumped { animation: count-bump 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes count-bump {
+  0% { transform: scale(1); background: var(--cyan); color: #04121F; }
+  100% { transform: scale(1); }
+}
+.board-drop { display: flex; flex-direction: column; gap: 8px; min-height: 56px; }
+.board-empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 14px 0 6px; margin: 0; }
+.board-more {
+  width: 100%; margin-top: 9px; padding: 7px; cursor: pointer;
+  background: rgba(255,255,255,0.05); border: 1px dashed var(--border);
+  border-radius: 8px; color: var(--cyan-bright); font: inherit; font-size: 12px;
+}
+.board-more:hover { background: rgba(0,154,199,0.14); }
 
-.crm-row { grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); }
-.crm-move { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.crm-move select { flex: 0 1 150px; min-width: 0; }
+.deal {
+  background: var(--ink-raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 11px; cursor: grab;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.deal:hover { transform: translateY(-1px); border-color: rgba(53,198,240,0.55); box-shadow: var(--shadow); }
+.deal:focus-visible { outline: 2px solid var(--cyan-bright); outline-offset: 2px; }
+.deal.is-dragging { opacity: 0.42; cursor: grabbing; }
+.deal.is-landed { animation: landed 0.55s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes landed {
+  0%   { transform: scale(0.94); box-shadow: 0 0 0 3px rgba(53,198,240,0.55); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(53,198,240,0); }
+}
+/* Amber down the edge, not a full amber card: it is a nudge, not an alarm. */
+.deal.is-cold { border-left: 3px solid var(--warning); }
+.deal.is-cold .deal-age { color: var(--warning); }
+.deal-name { display: block; font-weight: 600; color: var(--white); text-decoration: none; font-size: 13.5px; }
+.deal-name:hover { color: var(--cyan-bright); }
+.deal-meta { margin: 3px 0 7px; font-size: 11.5px; color: var(--text-muted); }
+.deal-foot { margin: 0; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted); }
+.deal-mast { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.deal-age { font-variant-numeric: tabular-nums; }
+.deal-go {
+  margin-left: auto; flex: none; cursor: pointer;
+  width: 22px; height: 22px; border-radius: 6px; padding: 0;
+  background: rgba(0,154,199,0.20); border: 1px solid rgba(53,198,240,0.36);
+  color: var(--cyan-soft); font: inherit; line-height: 1;
+  opacity: 0; transition: opacity 0.15s, background 0.15s;
+}
+.deal:hover .deal-go, .deal:focus-within .deal-go { opacity: 1; }
+.deal-go:hover { background: var(--cyan); color: #04121F; }
 
-@media (max-width: 860px) {
-  .crm-top { grid-template-columns: minmax(0, 1fr); }
-  .crm-figure { max-width: 280px; margin-inline: auto; }
-  .crm-row { grid-template-columns: minmax(0, 1fr); }
-  .crm-row > * { min-width: 0; }
-  .crm-move { justify-content: flex-start; }
+/* Dragging over a board full of cards: everything not being dragged recedes,
+   so the column you are aiming at is the thing you can see. */
+.board.is-dragging-any .deal:not(.is-dragging) { opacity: 0.55; }
+
+@media (max-width: 760px) {
+  .board { grid-auto-columns: minmax(200px, 82vw); padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .crm-seg { transition: none; }
-  .crm-seg.is-lit { transform: none; }
+  .funnel-seg, .deal, .board-col { transition: none; }
+  .deal.is-landed, .board-col-n.is-bumped { animation: none; }
 }

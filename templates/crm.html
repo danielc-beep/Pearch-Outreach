@@ -8,115 +8,112 @@
       <div>
         <div class="eyebrow">Pipeline</div>
         <h2>Where everything is <em>sitting</em></h2>
-        <p class="lede">Every business in the database, by the stage it has reached.
-          Click a stage to open it and move things along.</p>
+        <p class="lede">Drag a card to move a business along, or use the arrow on it.
+          Anything that has sat too long turns amber.</p>
       </div>
-      <a class="btn" href="/businesses">Open the database</a>
-    </div>
-
-    {% if chart.total %}
-    <div class="crm-top">
-      <figure class="crm-figure">
-        <svg viewBox="0 0 {{ chart.size }} {{ chart.size }}" class="crm-donut"
-             role="img" aria-label="Businesses by pipeline stage">
-          <title>Businesses by pipeline stage</title>
-          {% for s in chart.stages %}
-            {% if s.path == 'ring' %}
-            <circle cx="{{ chart.centre }}" cy="{{ chart.centre }}"
-                    r="{{ (chart.outer + chart.inner) / 2 }}" fill="none"
-                    stroke="{{ s.colour }}" stroke-width="{{ chart.outer - chart.inner }}"
-                    class="crm-seg" data-stage="{{ s.key }}" />
-            {% elif s.path %}
-            <a href="/crm?stage={{ s.key }}" aria-label="{{ s.label }}: {{ s.count }} businesses">
-              <path d="{{ s.path }}" fill="{{ s.colour }}" class="crm-seg"
-                    data-stage="{{ s.key }}" data-label="{{ s.label }}"
-                    data-count="{{ s.count }}" data-pct="{{ '%.1f'|format(s.pct) }}" />
-            </a>
-            {% endif %}
-          {% endfor %}
-          <text x="{{ chart.centre }}" y="{{ chart.centre - 4 }}" class="crm-total">{{ chart.total }}</text>
-          <text x="{{ chart.centre }}" y="{{ chart.centre + 18 }}" class="crm-total-label">businesses</text>
-        </svg>
-        <div class="crm-tip" id="crm-tip" hidden></div>
-      </figure>
-
-      <ol class="crm-legend">
-        {% for s in chart.stages %}
-        <li class="crm-legend-row {{ 'is-empty' if not s.count }} {{ 'is-picked' if picked and picked.key == s.key }}">
-          <a href="/crm?stage={{ s.key }}" class="crm-legend-link" data-stage="{{ s.key }}">
-            <span class="crm-swatch" style="background:{{ s.colour }}"></span>
-            <span class="crm-legend-name">{{ s.label }}</span>
-            <span class="crm-legend-count">{{ s.count }}</span>
-            <span class="crm-legend-pct">{{ '%.0f'|format(s.pct) }}%</span>
-          </a>
-          <p class="crm-legend-blurb">{{ s.blurb }}</p>
-        </li>
-        {% endfor %}
-      </ol>
-    </div>
-    {% else %}
-    <div class="card">
-      <h3>Nothing in the pipeline yet</h3>
-      <p class="muted" style="margin:0 0 16px">Sweep a masthead's patch and it fills
-        in a couple of minutes. Everything found starts at New.</p>
-      <a class="btn btn-primary" href="/prospect">Find businesses</a>
-    </div>
-    {% endif %}
-  </section>
-
-  {% if picked %}
-  <section class="section" id="stage" style="margin-top:8px">
-    <div class="section-head">
-      <div>
-        <div class="eyebrow"><span class="crm-swatch" style="background:{{ picked.colour }}"></span>
-          {{ picked.label }}</div>
-        <h2>{{ total_at_stage }} at {{ picked.label|lower }}</h2>
-        <p class="lede">{{ picked.blurb }}</p>
-      </div>
-      <a class="btn" href="/crm">Back to the whole pipeline</a>
-    </div>
-
-    <div id="flash"></div>
-
-    {% if businesses %}
-    <p class="muted small" style="margin:0 0 14px">
-      {% if total_at_stage > businesses|length %}Showing the {{ businesses|length }}
-      highest-scoring of {{ total_at_stage }}.{% else %}Sorted by fit.{% endif %}
-    </p>
-    <div class="address-list">
-      {% for b in businesses %}
-      <div class="address-row crm-row" data-id="{{ b.id }}">
-        <div class="address-who">
-          <div class="address-name"><a href="/businesses/{{ b.id }}">{{ b.name }}</a></div>
-          <div class="muted small">
-            {{ b.industry or b.category or '—' }} · {{ b.suburb or b.region or '—' }}
-            {% if b.rating %} · {{ b.rating }}★{% endif %}
-            · fit {{ b.fit_score }}
-            {% if b.masthead %} · {{ masthead_name(b.masthead)|masthead_label }}{% endif %}
-          </div>
-        </div>
-        <div class="crm-move">
-          {% if picked.next %}
-          <button class="btn btn-sm btn-primary js-next" data-to="{{ picked.next }}"
-                  data-to-label="{{ picked.next_label }}">Move to {{ picked.next_label }}</button>
-          {% endif %}
-          <select class="js-stage" aria-label="Stage for {{ b.name }}">
-            {% for s in stages %}
-            <option value="{{ s.key }}" {{ 'selected' if s.key == picked.key }}>{{ s.label }}</option>
+      <form class="filters" method="get" action="/crm" style="margin:0">
+        <div class="f">
+          <label for="cf-masthead">Masthead</label>
+          <select id="cf-masthead" name="masthead" onchange="this.form.submit()">
+            <option value="">Every masthead</option>
+            {% for group in masthead_groups %}
+            <optgroup label="{{ group.state }}">
+              {% for t in group.titles %}
+              <option value="{{ t.site }}" {{ 'selected' if f.masthead == t.site }}>{{ t.name|masthead_label }}</option>
+              {% endfor %}
+            </optgroup>
             {% endfor %}
           </select>
         </div>
-      </div>
-      {% endfor %}
+        <div class="f">
+          <label for="cf-industry">Industry</label>
+          <select id="cf-industry" name="industry" onchange="this.form.submit()">
+            <option value="">Every trade</option>
+            {% for i in industries %}<option value="{{ i }}" {{ 'selected' if f.industry == i }}>{{ i }}</option>{% endfor %}
+          </select>
+        </div>
+        {% if f.masthead or f.industry %}<a class="btn" href="/crm">Clear</a>{% endif %}
+      </form>
     </div>
-    {% else %}
-    <div class="card">
-      <h3>Nothing at this stage</h3>
-      <p class="muted" style="margin:0">Which is either good news or a gap, depending
-        on which stage it is.</p>
+
+    {% if funnel.total %}
+    <div class="funnel" role="img" aria-label="Businesses by pipeline stage">
+      {% for s in funnel.stages %}{% if s.count %}
+      <a class="funnel-seg" href="#col-{{ s.key }}" data-stage="{{ s.key }}"
+         style="--share:{{ '%.4f'|format(s.pct / 100) }};--tone:{{ s.colour }}"
+         title="{{ s.label }} — {{ s.count }} of {{ funnel.live }}">
+        <span class="funnel-label">{{ s.label }}</span>
+        <span class="funnel-n">{{ s.count }}</span>
+      </a>
+      {% endif %}{% endfor %}
+    </div>
+    <div class="funnel-key">
+      {% for s in funnel.stages %}
+      <span class="funnel-key-item {{ 'is-zero' if not s.count }}" data-stage="{{ s.key }}">
+        <span class="crm-swatch" style="background:{{ s.colour }}"></span>{{ s.label }}
+        <b>{{ s.count }}</b>
+        {% if s.cold %}<em class="cold-flag" title="Sitting longer than {{ s.stale_after }} days">{{ s.cold }} cold</em>{% endif %}
+      </span>
+      {% endfor %}
+      {% for e in funnel.endings %}{% if e.count %}
+      <span class="funnel-key-item is-ending" data-stage="{{ e.key }}">
+        <span class="crm-swatch" style="background:{{ e.colour }}"></span>{{ e.label }} <b>{{ e.count }}</b>
+      </span>
+      {% endif %}{% endfor %}
     </div>
     {% endif %}
   </section>
+
+  <div id="flash" class="crm-flash"></div>
+
+  {% if funnel.total %}
+  <div class="board" id="board">
+    {% for col in columns %}
+    <section class="board-col" id="col-{{ col.key }}" data-stage="{{ col.key }}"
+             data-next="{{ col.next }}" data-total="{{ col.total }}"
+             aria-label="{{ col.label }}">
+      <header class="board-col-head" style="--tone:{{ col.colour }}">
+        <span class="board-col-name">{{ col.label }}</span>
+        <span class="board-col-n js-count">{{ col.total }}</span>
+      </header>
+      <div class="board-drop js-drop">
+        {% for c in col.cards %}
+        <article class="deal {{ 'is-cold' if c.cold }}" draggable="true"
+                 data-id="{{ c.id }}" data-name="{{ c.name }}" tabindex="0">
+          <a class="deal-name" href="/businesses/{{ c.id }}">{{ c.name }}</a>
+          <p class="deal-meta">
+            {{ c.industry or c.category or '—' }}{% if c.suburb %} · {{ c.suburb }}{% endif %}
+            {% if c.rating %} · {{ c.rating }}★{% endif %}
+          </p>
+          <p class="deal-foot">
+            {% if c.masthead %}<span class="deal-mast">{{ masthead_name(c.masthead)|masthead_label }}</span>{% endif %}
+            <span class="deal-age" title="Days at this stage">{{ c.days }}d</span>
+            {% if col.next %}
+            <button class="deal-go js-advance" data-to="{{ col.next }}"
+                    title="Move to {{ col.next_label }}"
+                    aria-label="Move {{ c.name }} to {{ col.next_label }}">→</button>
+            {% endif %}
+          </p>
+        </article>
+        {% endfor %}
+      </div>
+      {% if col.more %}
+      <button class="board-more js-more" data-stage="{{ col.key }}" data-offset="{{ col.shown }}">
+        Show {{ col.more if col.more < 24 else 24 }} more
+      </button>
+      {% elif not col.cards %}
+      <p class="board-empty">Nothing here</p>
+      {% endif %}
+    </section>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="wrap"><div class="card">
+    <h3>Nothing in the pipeline yet</h3>
+    <p class="muted" style="margin:0 0 16px">Sweep a masthead's patch and it fills in a
+      couple of minutes. Everything found starts at New.</p>
+    <a class="btn btn-primary" href="/prospect">Find businesses</a>
+  </div></div>
   {% endif %}
 </div>
 {% endblock %}
@@ -124,74 +121,190 @@
 {% block scripts %}
 <script>
 (function () {
-  // ---- The donut's hover layer ----
-  const tip = document.getElementById('crm-tip');
-  if (tip) {
-    document.querySelectorAll('.crm-seg[data-label]').forEach((seg) => {
-      seg.addEventListener('mousemove', (e) => {
-        const box = seg.closest('.crm-figure').getBoundingClientRect();
-        tip.textContent = seg.dataset.label + ' · ' + seg.dataset.count +
-                          ' (' + seg.dataset.pct + '%)';
-        tip.style.left = (e.clientX - box.left) + 'px';
-        tip.style.top = (e.clientY - box.top) + 'px';
-        tip.hidden = false;
-      });
-      seg.addEventListener('mouseleave', () => { tip.hidden = true; });
-    });
-  }
-
-  // Hovering a legend row lifts its segment, and the other way about, so the
-  // two halves read as one thing rather than a chart with a list beside it.
-  function link(stage, on) {
-    document.querySelectorAll('[data-stage="' + stage + '"]').forEach((el) => {
-      el.classList.toggle('is-lit', on);
-    });
-  }
-  document.querySelectorAll('[data-stage]').forEach((el) => {
-    el.addEventListener('mouseenter', () => link(el.dataset.stage, true));
-    el.addEventListener('mouseleave', () => link(el.dataset.stage, false));
-  });
-
-  // ---- Moving a business along ----
+  const board = document.getElementById('board');
+  if (!board) return;
   const flashEl = document.getElementById('flash');
-  if (!flashEl) return;
+  const query = new URLSearchParams(window.location.search);
+  const filters = {masthead: query.get('masthead') || '', industry: query.get('industry') || ''};
   const esc = (v) => String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  function flash(message, kind) {
-    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + esc(message) + '</div>';
-    window.setTimeout(() => { flashEl.innerHTML = ''; }, 3500);
+  let undo = null;
+  function flash(html, kind) {
+    flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + html + '</div>';
+    const back = flashEl.querySelector('.js-undo');
+    if (back) back.addEventListener('click', () => { if (undo) undo(); });
+    window.clearTimeout(flash.timer);
+    flash.timer = window.setTimeout(() => { flashEl.innerHTML = ''; undo = null; }, 7000);
   }
 
-  async function moveTo(row, stage, label) {
-    const name = row.querySelector('.address-name').textContent.trim();
-    await window.postJSON('/api/crm/' + row.dataset.id + '/stage', {stage: stage});
-    row.classList.add('is-done');
-    flash(name + ' moved to ' + label + '.', 'ok');
-    // The count in the heading is now wrong, and a stale number on a page
-    // about where things are is worse than a reload.
-    window.setTimeout(() => {
-      row.remove();
-      if (!document.querySelector('.crm-row')) window.location.reload();
-    }, 400);
+  const label = (stage) => {
+    const col = board.querySelector('[data-stage="' + stage + '"] .board-col-name');
+    return col ? col.textContent.trim() : stage;
+  };
+
+  // The count is the column's own running total, not "cards on screen plus
+  // what the last page said was left". Those two disagree the moment a card
+  // moves out of a paged column: the server's offset has not moved with it,
+  // so the arithmetic loses one every time.
+  function recount() {
+    board.querySelectorAll('.board-col').forEach((col) => {
+      const shown = col.querySelectorAll('.deal').length;
+      const more = col.querySelector('.js-more');
+      const cell = col.querySelector('.js-count');
+      const n = Number(col.dataset.total || shown);
+      if (cell.textContent.trim() !== String(n)) {
+        cell.textContent = n;
+        cell.classList.remove('is-bumped');
+        void cell.offsetWidth;              // restart the animation
+        cell.classList.add('is-bumped');
+      }
+      col.querySelector('.board-empty')?.remove();
+      if (!shown && !more) {
+        const p = document.createElement('p');
+        p.className = 'board-empty';
+        p.textContent = 'Nothing here';
+        col.appendChild(p);
+      }
+    });
   }
 
-  document.querySelectorAll('.crm-row').forEach((row) => {
-    const next = row.querySelector('.js-next');
-    const select = row.querySelector('.js-stage');
-    if (next) {
-      next.addEventListener('click', async () => {
-        next.disabled = true;
-        try { await moveTo(row, next.dataset.to, next.dataset.toLabel); }
-        catch (err) { flash(err.message, 'error'); next.disabled = false; }
-      });
+  const bump = (stage, by) => {
+    const col = board.querySelector('[data-stage="' + stage + '"]');
+    col.dataset.total = Math.max(0, Number(col.dataset.total || 0) + by);
+  };
+
+  // ---- Moving a card ----
+  async function place(card, stage, {quiet = false} = {}) {
+    const from = card.closest('.board-col').dataset.stage;
+    const drop = board.querySelector('[data-stage="' + stage + '"] .js-drop');
+    if (!drop || from === stage) return;
+    drop.prepend(card);
+    card.classList.remove('is-cold');
+    card.classList.add('is-landed');
+    window.setTimeout(() => card.classList.remove('is-landed'), 600);
+    bump(from, -1); bump(stage, +1);
+    recount();
+    try {
+      await window.postJSON('/api/crm/' + card.dataset.id + '/stage', {stage: stage});
+      if (quiet) return;
+      undo = () => { place(card, from, {quiet: true}); flashEl.innerHTML = ''; };
+      flash(esc(card.dataset.name) + ' moved to ' + esc(label(stage)) +
+            '. <button class="linkish js-undo" type="button">Undo</button>', 'ok');
+    } catch (err) {
+      // Put it back where it came from rather than leaving the board lying.
+      board.querySelector('[data-stage="' + from + '"] .js-drop').prepend(card);
+      bump(stage, -1); bump(from, +1);
+      recount();
+      flash(esc(err.message), 'error');
     }
-    select.addEventListener('change', async () => {
-      const label = select.options[select.selectedIndex].text;
-      try { await moveTo(row, select.value, label); }
-      catch (err) { flash(err.message, 'error'); }
+  }
+
+  board.addEventListener('click', (e) => {
+    const go = e.target.closest('.js-advance');
+    if (go) { e.preventDefault(); place(go.closest('.deal'), go.dataset.to); }
+  });
+
+  // ---- Dragging ----
+  let dragging = null;
+  board.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('.deal');
+    if (!card) return;
+    dragging = card;
+    card.classList.add('is-dragging');
+    board.classList.add('is-dragging-any');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.dataset.id);
+  });
+  board.addEventListener('dragend', () => {
+    dragging?.classList.remove('is-dragging');
+    board.classList.remove('is-dragging-any');
+    board.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
+    dragging = null;
+  });
+  board.querySelectorAll('.board-col').forEach((col) => {
+    col.addEventListener('dragover', (e) => {
+      if (!dragging) return;
+      e.preventDefault();                       // without this, no drop fires
+      e.dataTransfer.dropEffect = 'move';
+      col.classList.add('is-over');
+    });
+    col.addEventListener('dragleave', (e) => {
+      if (!col.contains(e.relatedTarget)) col.classList.remove('is-over');
+    });
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('is-over');
+      if (dragging) place(dragging, col.dataset.stage);
     });
   });
+
+  // ---- Keyboard: a board you cannot drag on is still a board ----
+  const ORDER = [...board.querySelectorAll('.board-col')].map((c) => c.dataset.stage);
+  board.addEventListener('keydown', (e) => {
+    const card = e.target.closest('.deal');
+    if (!card || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
+    const at = ORDER.indexOf(card.closest('.board-col').dataset.stage);
+    let to = null;
+    if (e.key === 'ArrowRight' && at < ORDER.length - 1) to = ORDER[at + 1];
+    if (e.key === 'ArrowLeft' && at > 0) to = ORDER[at - 1];
+    if (!to) return;
+    e.preventDefault();
+    place(card, to);
+    window.setTimeout(() => card.focus(), 60);
+  });
+
+  // ---- Loading the rest of a column ----
+  board.addEventListener('click', async (e) => {
+    const more = e.target.closest('.js-more');
+    if (!more) return;
+    more.disabled = true;
+    const stage = more.dataset.stage;
+    const params = new URLSearchParams({stage: stage, offset: more.dataset.offset, ...filters});
+    try {
+      const data = await (await fetch('/api/crm/column?' + params)).json();
+      const col = board.querySelector('[data-stage="' + stage + '"]');
+      const drop = col.querySelector('.js-drop');
+      // A card that moved out of this column shifted everything behind it, so
+      // the next page by offset can hand back one already on screen. Skip it
+      // rather than showing the same business twice.
+      const here = new Set([...drop.querySelectorAll('.deal')].map((d) => d.dataset.id));
+      data.cards
+        .filter((c) => !here.has(String(c.id)))
+        .forEach((c) => drop.insertAdjacentHTML('beforeend', cardHTML(c, col.dataset.next)));
+      col.dataset.total = data.total;        // the server is the authority
+      more.dataset.offset = data.shown;
+      if (data.more) more.textContent = 'Show ' + Math.min(24, data.more) + ' more';
+      else more.remove();
+      recount();
+    } catch (err) { flash(esc(err.message), 'error'); }
+    more.disabled = false;
+  });
+
+  function cardHTML(c, next) {
+    const bits = [esc(c.industry || '—')];
+    if (c.suburb) bits.push(esc(c.suburb));
+    if (c.rating) bits.push(esc(c.rating) + '★');
+    return '<article class="deal' + (c.cold ? ' is-cold' : '') + '" draggable="true"' +
+      ' data-id="' + c.id + '" data-name="' + esc(c.name) + '" tabindex="0">' +
+      '<a class="deal-name" href="/businesses/' + c.id + '">' + esc(c.name) + '</a>' +
+      '<p class="deal-meta">' + bits.join(' · ') + '</p>' +
+      '<p class="deal-foot">' +
+      (c.masthead ? '<span class="deal-mast">' + esc(c.masthead) + '</span>' : '') +
+      '<span class="deal-age">' + c.days + 'd</span>' +
+      (next ? '<button class="deal-go js-advance" data-to="' + next + '">→</button>' : '') +
+      '</p></article>';
+  }
+
+  // Hovering the funnel lights the column it belongs to.
+  document.querySelectorAll('[data-stage]').forEach((el) => {
+    if (!el.classList.contains('funnel-seg') && !el.classList.contains('funnel-key-item')) return;
+    el.addEventListener('mouseenter', () =>
+      board.querySelector('#col-' + el.dataset.stage)?.classList.add('is-lit'));
+    el.addEventListener('mouseleave', () =>
+      board.querySelector('#col-' + el.dataset.stage)?.classList.remove('is-lit'));
+  });
+
 })();
 </script>
 {% endblock %}

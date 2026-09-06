@@ -445,29 +445,40 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
 
 
 @app.get("/crm", response_class=HTMLResponse)
-def crm_page(request: Request, stage: str = "", masthead: str = "") -> HTMLResponse:
+def crm_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
     """
-    The whole book of work in one shape, and a way into any part of it.
-
-    Picking a stage is a link rather than a script, so the drill-through
-    survives a reload, can be shared, and works before the JavaScript does.
+    The pipeline: a bar showing where everything stands, a column per stage
+    underneath, and a card you can drag from one to the next.
     """
-    picked = crm.get(stage) if stage else None
-    businesses: list[dict[str, Any]] = []
-    total_at_stage = 0
-    if picked:
-        businesses, total_at_stage = db.list_businesses(
-            status=picked["key"], masthead=masthead, sort="score", limit=100)
+    where = {k: v for k, v in (("masthead", masthead), ("industry", industry)) if v}
     return page(
         request, "crm.html",
         nav="crm",
-        chart=crm.overview(),
+        funnel=crm.funnel(),
+        columns=crm.board(**where),
         stages=crm.STAGES,
-        picked=picked,
-        businesses=businesses,
-        total_at_stage=total_at_stage,
-        f={"masthead": masthead},
+        f={"masthead": masthead, "industry": industry},
+        industries=db.industry_options(),
     )
+
+
+@app.get("/api/crm/column")
+def api_crm_column(stage: str, offset: int = 0, masthead: str = "",
+                   industry: str = "") -> JSONResponse:
+    """The next page of one column, for the "show more" at its foot."""
+    if stage not in crm.BY_KEY:
+        raise HTTPException(status_code=400, detail=f"Unknown stage: {stage}")
+    where = {k: v for k, v in (("masthead", masthead), ("industry", industry)) if v}
+    got = crm.column(stage, offset=max(0, offset), **where)
+    return JSONResponse({
+        "stage": stage, "more": got["more"], "shown": got["shown"], "total": got["total"],
+        "cards": [{"id": c["id"], "name": c["name"],
+                   "industry": c.get("industry") or c.get("category") or "",
+                   "suburb": c.get("suburb") or c.get("region") or "",
+                   "rating": c.get("rating"), "fit": c.get("fit_score"),
+                   "masthead": mastheads.name_for(c.get("masthead") or ""),
+                   "days": c["days"], "cold": c["cold"]} for c in got["cards"]],
+    })
 
 
 class StageMove(BaseModel):

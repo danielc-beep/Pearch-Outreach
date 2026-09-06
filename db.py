@@ -623,8 +623,13 @@ def list_businesses(
             args.append(value)
     if masthead == "none":
         # The filter's "Not aligned yet" option, so the records a backfill
-        # could not place are findable rather than invisible.
-        where.append("(masthead IS NULL OR masthead = '')")
+        # could not place are findable rather than invisible. A masthead that
+        # is not one of the 78 counts as not aligned — it reads as set, and
+        # behaves as unset.
+        import mastheads
+        sites = list(mastheads.BY_SITE)
+        where.append(f"(masthead IS NULL OR masthead NOT IN ({', '.join('?' for _ in sites)}))")
+        args.extend(sites)
     if industry:
         where.append("(industry LIKE ? OR category LIKE ?)")
         args += [f"%{industry}%"] * 2
@@ -645,11 +650,16 @@ def list_businesses(
         if MIN_PROSPECT_RATING > 0:
             where.append("rating IS NOT NULL AND rating >= ?")
             args.append(MIN_PROSPECT_RATING)
-        # And aligned to a masthead. The email says which paper is putting the
-        # content together, and that is the whole reason it lands — so a
-        # business with no masthead is not ready to be worked, it is waiting
-        # on the alignment queue.
-        where.append("masthead IS NOT NULL AND masthead != ''")
+        # And aligned to a masthead that exists. The email says which paper is
+        # putting the content together, and that is the whole reason it lands.
+        # Checking the field is merely non-empty is not enough: an imported
+        # record carrying "theexaminer.com.au" — close, but not one of the 78
+        # — passes that check and then falls back to the network, which is
+        # exactly the weaker letter the rule exists to prevent.
+        import mastheads
+        sites = list(mastheads.BY_SITE)
+        where.append(f"masthead IN ({', '.join('?' for _ in sites)})")
+        args.extend(sites)
         where.append("email IS NOT NULL AND email != ''")
         where.append("do_not_contact = 0")
         where.append("status NOT IN ('contacted','replied','won','lost','disqualified')")
@@ -937,6 +947,43 @@ def list_activities(business_id: int, limit: int = 25) -> list[dict[str, Any]]:
         (business_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def count_stale_in_stage(status: str, days: int) -> int:
+    """
+    How many at this stage have been sitting there longer than `days`.
+
+    "Sitting there" is measured from the last recorded stage change, and from
+    the day the record was created when it has never moved — a business that
+    has been New since the day it was found has been New since that day.
+    """
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM businesses b WHERE b.status = ? AND "
+        "COALESCE((SELECT MAX(a.created_at) FROM activities a "
+        "          WHERE a.business_id = b.id AND a.kind = 'stage'), b.created_at) "
+        "<= datetime('now', ?)",
+        (status, f"-{int(days)} days"),
+    ).fetchone()
+    return int(row["n"])
+
+
+def stage_since(business_ids: list[int]) -> dict[int, str]:
+    """
+    When each business last changed stage, in one query rather than N.
+
+    Falls back to nothing for a business that has never moved; the caller
+    uses its creation date, since a record that has sat at New since the day
+    it was found has been at New since the day it was found.
+    """
+    if not business_ids:
+        return {}
+    marks = ", ".join("?" for _ in business_ids)
+    rows = get_conn().execute(
+        f"SELECT business_id, MAX(created_at) AS at FROM activities "
+        f"WHERE kind = 'stage' AND business_id IN ({marks}) GROUP BY business_id",
+        business_ids,
+    ).fetchall()
+    return {int(r["business_id"]): r["at"] for r in rows}
 
 
 # ---------- Suppressions ----------

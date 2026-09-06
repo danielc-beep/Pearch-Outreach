@@ -384,3 +384,33 @@ def test_an_invented_masthead_is_refused(client):
 def test_the_empty_queue_says_so_rather_than_showing_nothing(client):
     body = client.get("/align").text
     assert "Everything is on somebody" in body
+
+
+def test_a_masthead_that_is_not_ours_counts_as_unaligned(client):
+    """
+    "theexaminer.com.au" is close to a real key and is not one. It reads as
+    set, passes a non-empty check, and then falls back to the network at send
+    time — which is the weaker letter the alignment rule exists to prevent.
+    """
+    import db, outreach, review
+    business_id, _ = db.upsert_business({
+        "name": "Nearly Aligned Co", "industry": "Trades", "suburb": "Launceston",
+        "state": "TAS", "rating": 4.7, "review_count": 30, "source": "csv",
+        "masthead": "theexaminer.com.au", "email": "hi@nearly.com.au"})
+
+    assert business_id not in review.queue_ids()
+    assert "Nearly Aligned Co" in client.get("/align").text
+    message = outreach.draft_message(business_id, use_ai=False)
+    problems = outreach.preflight(db.get_message(message["id"]))
+    assert any("not aligned to a masthead" in p and "not an ACM title" in p
+               for p in problems), problems
+
+
+def test_the_real_key_passes(client):
+    import db, review
+    business_id, _ = db.upsert_business({
+        "name": "Properly Aligned Co", "industry": "Trades", "suburb": "Launceston",
+        "state": "TAS", "rating": 4.7, "review_count": 30, "source": "csv",
+        "masthead": "examiner.com.au", "email": "hi@properly.com.au"})
+    assert business_id in review.queue_ids()
+    assert "Properly Aligned Co" not in client.get("/align").text

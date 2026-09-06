@@ -74,44 +74,102 @@ def test_the_endings_do_not_borrow_a_stage_colour():
 
 # ---------- The shape ----------
 
-def test_the_shares_add_up_to_the_whole(client):
+def test_the_bar_shares_add_up_to_the_live_pipeline(client):
     _seed({"new": 22, "researching": 9, "qualified": 14, "contacted": 18,
            "replied": 5, "won": 3, "lost": 4, "disqualified": 7})
-    chart = crm.overview()
-    assert chart["total"] == 82
-    assert round(sum(s["pct"] for s in chart["stages"]), 6) == 100.0
+    f = crm.funnel()
+    assert f["total"] == 82
+    # Lost and ruled out are not stages on the way anywhere, so the bar is
+    # sized against what is still live and reports them separately.
+    assert f["live"] == 71
+    assert round(sum(s["pct"] for s in f["stages"]), 6) == 100.0
+    assert {e["key"]: e["count"] for e in f["endings"]} == {"lost": 4, "disqualified": 7}
 
 
-def test_an_empty_stage_keeps_its_row(client):
+def test_a_pipeline_that_is_almost_all_new_still_reads(client):
+    """
+    The real database is 417 of 421 at New. As a pie that is one flat colour
+    with slivers; as a bar every stage still holds a segment with its number.
+    """
+    _seed({"new": 417, "researching": 1, "qualified": 2, "contacted": 1})
+    f = crm.funnel()
+    by_key = {s["key"]: s for s in f["stages"]}
+    assert round(by_key["new"]["pct"]) == 99
+    assert by_key["researching"]["count"] == 1
+    assert round(sum(s["pct"] for s in f["stages"]), 6) == 100.0
+
+
+def test_an_empty_stage_keeps_its_place(client):
     """A pipeline with nothing at Replied is telling you something."""
     _seed({"new": 3})
-    chart = crm.overview()
-    replied = next(s for s in chart["stages"] if s["key"] == "replied")
-    assert replied["count"] == 0
-    assert replied["path"] == ""          # nothing to draw
-    assert len(chart["stages"]) == len(crm.STAGES)
+    keys = [s["key"] for s in crm.funnel()["stages"]]
+    assert keys == ["new", "researching", "qualified", "contacted", "replied", "won"]
 
 
-def test_one_stage_holding_everything_draws_a_ring(client):
-    """An arc from a point back to the same point draws nothing at all."""
-    _seed({"new": 6})
-    only = next(s for s in crm.overview()["stages"] if s["key"] == "new")
-    assert only["path"] == "ring"
-
-
-def test_an_empty_database_draws_nothing_and_says_so(client):
-    chart = crm.overview()
-    assert chart["total"] == 0
-    assert all(s["path"] == "" for s in chart["stages"])
+def test_an_empty_database_says_so(client):
+    assert crm.funnel()["total"] == 0
     assert "Nothing in the pipeline yet" in client.get("/crm").text
 
 
-def test_every_drawn_segment_is_a_closed_path(client):
-    _seed({"new": 4, "contacted": 4, "won": 2})
-    for stage in crm.overview()["stages"]:
-        if stage["path"] and stage["path"] != "ring":
-            assert stage["path"].startswith("M ") and stage["path"].endswith(" Z")
-            assert stage["path"].count("A ") == 2      # outer edge and inner
+# ---------- Columns ----------
+
+def test_a_column_holds_a_page_and_says_what_is_left(client):
+    _seed({"new": 60})
+    col = crm.column("new")
+    assert len(col["cards"]) == crm.PAGE
+    assert col["total"] == 60
+    assert col["more"] == 60 - crm.PAGE
+
+
+def test_the_next_page_carries_on_where_the_first_stopped(client):
+    _seed({"new": 30})
+    first = {c["id"] for c in crm.column("new")["cards"]}
+    second = crm.column("new", offset=crm.PAGE)
+    assert not (first & {c["id"] for c in second["cards"]})
+    assert second["more"] == 0
+
+
+def test_a_card_carries_how_long_it_has_sat_there(client):
+    _seed({"contacted": 1})
+    card = crm.column("contacted")["cards"][0]
+    assert card["days"] == 0
+    assert card["cold"] is False
+
+
+def test_something_left_too_long_is_marked_cold(client):
+    import db as database
+    _seed({"contacted": 1})
+    business = database.list_businesses(limit=1)[0][0]
+    # Landed at this stage three weeks ago; the threshold is a fortnight.
+    with database.tx() as conn:
+        conn.execute("INSERT INTO activities (created_at, business_id, kind, detail) "
+                     "VALUES (datetime('now', '-21 days'), ?, 'stage', 'moved')",
+                     (business["id"],))
+    card = crm.column("contacted")["cards"][0]
+    assert card["days"] >= 21
+    assert card["cold"] is True
+    assert next(s for s in crm.funnel()["stages"] if s["key"] == "contacted")["cold"] == 1
+
+
+def test_a_stage_with_no_deadline_never_goes_cold(client):
+    """New has no threshold — an unworked list is a backlog, not a failure."""
+    assert crm.BY_KEY["new"]["stale_after"] == 0
+    _seed({"new": 1})
+    assert crm.column("new")["cards"][0]["cold"] is False
+
+
+def test_the_board_is_every_stage_in_working_order(client):
+    _seed({"new": 1})
+    assert [c["key"] for c in crm.board()] == [s["key"] for s in crm.STAGES]
+
+
+def test_a_filter_narrows_every_column(client):
+    _seed({"new": 2})
+    assert crm.column("new", masthead="newcastleherald.com.au")["total"] == 2
+    # A real key that no seeded business carries — "theexaminer.com.au" would
+    # also return nothing, but only because there is no such masthead.
+    assert "examiner.com.au" in __import__("mastheads").BY_SITE
+    assert crm.column("new", masthead="examiner.com.au")["total"] == 0
 
 
 # ---------- Moving along ----------
@@ -164,42 +222,53 @@ def test_the_api_moves_it(client):
 
 # ---------- The page ----------
 
-def test_the_page_shows_every_stage_with_its_count(client):
+def test_the_board_shows_a_column_for_every_stage(client):
     _seed({"new": 2, "won": 1})
     body = client.get("/crm").text
     for stage in crm.STAGES:
-        assert stage["label"] in body, stage["label"]
-    assert "Nobody has looked at them yet" in body
+        assert f'id="col-{stage["key"]}"' in body, stage["key"]
 
 
-def test_picking_a_stage_opens_only_that_stage(client):
-    _seed({"new": 2, "contacted": 3})
-    body = client.get("/crm?stage=contacted").text
-    assert "3 at contacted" in body
-    assert "Contacted Co 0" in body
-    assert "New Co 0" not in body
+def test_the_cards_are_on_the_page_under_their_stage(client):
+    _seed({"new": 1, "contacted": 1})
+    body = client.get("/crm").text
+    assert "New Co 0" in body and "Contacted Co 0" in body
 
 
-def test_the_stage_offers_the_step_after_it(client):
-    _seed({"contacted": 1})
-    assert "Move to Replied" in client.get("/crm?stage=contacted").text
+def test_a_card_can_be_dragged_and_has_a_button_too(client):
+    """Drag is the fast path; the arrow and the arrow keys are the other two."""
+    _seed({"qualified": 1})
+    body = client.get("/crm").text
+    assert 'draggable="true"' in body
+    assert 'class="deal-go js-advance" data-to="contacted"' in body
 
 
 def test_a_finished_stage_offers_no_next_step(client):
     _seed({"won": 1})
-    body = client.get("/crm?stage=won").text
-    # The class name also appears in the page's own script, so match the
-    # button, not the string.
-    assert "js-next" not in body.split("<script>")[0]
-    assert "Move to" not in body.split("<script>")[0]
-    assert 'class="js-stage"' in body   # but you can still put it back
+    markup = client.get("/crm").text.split("<script>")[0]
+    won = markup.split('id="col-won"')[1].split("</section>")[0]
+    assert "js-advance" not in won
 
 
-def test_an_unknown_stage_shows_the_pipeline_rather_than_failing(client):
-    _seed({"new": 1})
-    response = client.get("/crm?stage=nonsense")
+def test_a_big_column_loads_a_page_at_a_time(client):
+    _seed({"new": 60})
+    body = client.get("/crm").text
+    assert body.count('class="deal ') + body.count('class="deal is-cold') <= crm.PAGE + 2
+    assert "Show 24 more" in body
+
+
+def test_the_column_endpoint_returns_the_next_page(client):
+    _seed({"new": 40})
+    response = client.get("/api/crm/column?stage=new&offset=24")
     assert response.status_code == 200
-    assert "Where everything is" in response.text
+    data = response.json()
+    assert len(data["cards"]) == 16
+    assert data["more"] == 0
+    assert set(data["cards"][0]) >= {"id", "name", "days", "cold"}
+
+
+def test_the_column_endpoint_refuses_an_invented_stage(client):
+    assert client.get("/api/crm/column?stage=nonsense").status_code == 400
 
 
 def test_the_campaigns_page_is_gone(client):
