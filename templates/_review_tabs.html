@@ -1,0 +1,12 @@
+{# The two halves of reviewing: give a business its masthead, then decide on
+   it. They were separate sections, but the first gates the second — nothing
+   can be decided on until it is aligned — so they are one place with two
+   tabs, and the align tab carries a count because it is the blocking one. #}
+<nav class="subtabs" aria-label="Review">
+  <a href="/review" class="subtab {{ 'is-on' if tab == 'decide' }}">
+    Decide{% if counts.decide %} <span class="subtab-n">{{ counts.decide }}</span>{% endif %}
+  </a>
+  <a href="/review/align" class="subtab {{ 'is-on' if tab == 'align' }}">
+    Align{% if counts.align %} <span class="subtab-n subtab-warn">{{ counts.align }}</span>{% endif %}
+  </a>
+</nav>

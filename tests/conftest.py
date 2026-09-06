@@ -14,6 +14,9 @@ os.environ.setdefault("PEARCH_DB_PATH", str(Path(tempfile.mkdtemp()) / "test.db"
 os.environ.setdefault("PEARCH_ENABLE_SAMPLE_SOURCE", "1")
 # No background snapshots during tests; backup.py is tested directly.
 os.environ.setdefault("PEARCH_BACKUPS", "0")
+# Nor an automatic rescore on import — test_scoring drives it directly, and a
+# pass over a half-seeded table would race the fixtures.
+os.environ.setdefault("PEARCH_RESCORE", "0")
 
 import pytest  # noqa: E402
 

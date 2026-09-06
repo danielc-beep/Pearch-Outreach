@@ -331,7 +331,7 @@ def test_the_board_sends_you_to_the_queue_not_a_filtered_list(client):
     import worklist
     _seed_for_alignment()
     row = next(i for i in worklist.board() if i["key"] == "unaligned")
-    assert row["href"] == "/align"
+    assert row["href"] == "/review/align"
     assert row["count"] == 2
 
 
@@ -345,7 +345,7 @@ def test_alignment_comes_before_review_on_the_board(client):
 
 def test_the_queue_lists_only_the_unaligned(client):
     _seed_for_alignment()
-    body = client.get("/align").text
+    body = client.get("/review/align").text
     assert "Adrift Dentistry" in body and "Nowhere Motors" in body
     assert "Aligned Plumbing" not in body
 
@@ -353,7 +353,7 @@ def test_the_queue_lists_only_the_unaligned(client):
 def test_the_queue_suggests_a_masthead_from_the_town(client):
     """Newcastle should arrive with the Herald already chosen."""
     _seed_for_alignment()
-    body = client.get("/align").text
+    body = client.get("/review/align").text
     assert 'value="newcastleherald.com.au" selected' in body
     assert "Suggested from Newcastle" in body
 
@@ -361,7 +361,7 @@ def test_the_queue_suggests_a_masthead_from_the_town(client):
 def test_a_town_that_matches_nothing_is_left_for_a_person(client):
     """A wrong masthead is a wrong claim in an email — better to ask."""
     _seed_for_alignment()
-    body = client.get("/align").text
+    body = client.get("/review/align").text
     assert "No match — pick one" in body
 
 
@@ -382,7 +382,7 @@ def test_an_invented_masthead_is_refused(client):
 
 
 def test_the_empty_queue_says_so_rather_than_showing_nothing(client):
-    body = client.get("/align").text
+    body = client.get("/review/align").text
     assert "Everything is on somebody" in body
 
 
@@ -414,3 +414,33 @@ def test_the_real_key_passes(client):
         "masthead": "examiner.com.au", "email": "hi@properly.com.au"})
     assert business_id in review.queue_ids()
     assert "Properly Aligned Co" not in client.get("/align").text
+
+
+def test_the_old_align_link_still_lands(client):
+    """It was its own section; bookmarks and the work board predate the move."""
+    response = client.get("/align", follow_redirects=False)
+    assert response.status_code == 308
+    assert response.headers["location"] == "/review/align"
+
+
+def test_review_is_one_section_with_two_tabs(client):
+    for path in ("/review", "/review/align"):
+        body = client.get(path).text
+        assert 'href="/review"' in body and 'href="/review/align"' in body
+        assert 'class="subtab' in body, path
+
+
+def test_the_align_tab_carries_the_count(client):
+    import db
+    db.upsert_business({"name": "Adrift Co", "industry": "Trades", "suburb": "Nowhere",
+                        "rating": 4.5, "source": "csv", "email": "a@b.com.au"})
+    body = client.get("/review").text
+    tabs = body.split('class="subtabs"')[1].split("</nav>")[0]
+    assert "1" in tabs
+
+
+def test_database_is_the_last_thing_in_the_nav(client):
+    nav = client.get("/").text.split('<nav class="nav">')[1].split("</nav>")[0]
+    links = [line for line in nav.splitlines() if "href=" in line]
+    assert "/businesses" in links[-1], links[-1]
+    assert not any('href="/align"' in line for line in links)

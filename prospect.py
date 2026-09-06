@@ -20,7 +20,7 @@ import sources
 from config import MIN_PROSPECT_RATING, region_for_postcode
 import enrich
 from enrich import enrich_from_website, guess_industry
-from scoring import apply_score
+from scoring import apply_score, score_business
 from util import clean_email, clean_phone, domain_of, normalise_url, parse_address, truncate
 
 log = logging.getLogger(__name__)
@@ -276,6 +276,58 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
     }
 
 
+def rescore_all(batch: int = 500) -> dict[str, Any]:
+    """
+    Recompute every stored fit score against the current scorecard.
+
+    Scores are written once, when a business is found. That is fine until the
+    scorecard changes — and then every ranking in the app is sorted by numbers
+    computed under rules that no longer exist, silently and with no sign on
+    the page that anything is wrong. Fixing the scorecard without this is
+    fixing nothing.
+
+    Only rows whose score actually moves are written, so a run that changes
+    nothing costs no writes and the report says so honestly.
+    """
+    changed = 0
+    checked = 0
+    biggest: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        rows, _ = db.list_businesses(limit=batch, offset=offset, sort="oldest")
+        if not rows:
+            break
+        for business in rows:
+            checked += 1
+            was = int(business.get("fit_score") or 0)
+            score, reasons = score_business(business)
+            if score == was:
+                continue
+            db.update_business(int(business["id"]),
+                               {"fit_score": score, "score_reasons": reasons})
+            changed += 1
+            biggest.append({"id": int(business["id"]), "name": business.get("name"),
+                            "was": was, "now": score, "moved": score - was})
+        offset += len(rows)
+
+    biggest.sort(key=lambda r: abs(r["moved"]), reverse=True)
+    db.set_setting("scoring_version", scoring_version())
+    log.info("rescored %s of %s businesses under scorecard %s",
+             changed, checked, scoring_version())
+    return {"checked": checked, "changed": changed,
+            "version": scoring_version(), "biggest": biggest[:12]}
+
+
+def scoring_version() -> str:
+    import scoring
+    return scoring.VERSION
+
+
+def scores_are_stale() -> bool:
+    """Whether the stored scores predate the current scorecard."""
+    return db.get_setting("scoring_version") != scoring_version()
+
+
 def align_mastheads(limit: int = 500) -> dict[str, Any]:
     """
     Give every stored business its masthead.
@@ -412,19 +464,6 @@ def enrich_missing(limit: int = 12, recheck: bool = False) -> dict[str, Any]:
         "timed_out": unfinished,
         "businesses": updated,
     }
-
-
-def rescore_all() -> int:
-    """Rescore every business — run this after editing the ICP in config.py."""
-    count = 0
-    for business in list(db.iter_all()):
-        scored = apply_score(dict(business))
-        db.update_business(int(business["id"]), {
-            "fit_score": scored["fit_score"],
-            "score_reasons": scored["score_reasons"],
-        })
-        count += 1
-    return count
 
 
 def verify_websites(limit: int = 25, recheck: bool = False) -> dict[str, Any]:

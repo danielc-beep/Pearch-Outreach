@@ -93,6 +93,18 @@ templates.env.filters["masthead_label"] = masthead_label
 if os.getenv("PEARCH_BACKUPS", "1") == "1":
     backup.start_daily()
 
+# A scorecard change has to reach the records already in the database, or the
+# fix exists only in the code and every ranking stays sorted by the old rules.
+# Cheap — one pass, writing only the rows whose score actually moves — so it
+# runs on the deploy that carries the change rather than waiting to be asked.
+if os.getenv("PEARCH_RESCORE", "1") == "1" and prospect.scores_are_stale():
+    try:
+        _result = prospect.rescore_all()
+        log.info("scorecard %s: rescored %s of %s businesses",
+                 _result["version"], _result["changed"], _result["checked"])
+    except Exception:                      # never let it stop the app booting
+        log.exception("could not rescore on start")
+
 templates.env.globals.update(
     score_widget=score_widget,
     app_name=APP_NAME,
@@ -189,13 +201,19 @@ def _review_filters(params: dict[str, str]) -> dict[str, Any]:
     return out
 
 
+def _review_counts() -> dict[str, int]:
+    """What is waiting in each half of Review, for the tab bar."""
+    return {"decide": len(review.queue_ids()),
+            "align": db.list_businesses(masthead="none", limit=1)[1]}
+
+
 @app.get("/review", response_class=HTMLResponse)
 def review_page(request: Request) -> HTMLResponse:
     """One business at a time, with a decision at the end of it."""
     filters = _review_filters(dict(request.query_params))
     return page(
         request, "review.html",
-        nav="review",
+        nav="review", tab="decide", counts=_review_counts(),
         total=len(review.queue_ids(**filters)),
         undrafted=db.list_businesses(needs_review=True, needs_draft=True, limit=1, **filters)[1],
         f={k: (request.query_params.get(k) or "") for k in REVIEW_FILTERS},
@@ -346,7 +364,13 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
     )
 
 
-@app.get("/align", response_class=HTMLResponse)
+@app.get("/align")
+def align_moved() -> RedirectResponse:
+    """Align became a tab of Review. Old links, and old bookmarks, still land."""
+    return RedirectResponse("/review/align", status_code=308)
+
+
+@app.get("/review/align", response_class=HTMLResponse)
 def align_page(request: Request, industry: str = "", state: str = "") -> HTMLResponse:
     """
     The businesses with no masthead against their name.
@@ -369,7 +393,7 @@ def align_page(request: Request, industry: str = "", state: str = "") -> HTMLRes
         suggested += 1 if site else 0
     return page(
         request, "align.html",
-        nav="align",
+        nav="review", tab="align", counts=_review_counts(),
         businesses=rows, total=total, suggested=suggested,
         f={"industry": industry, "state": state},
         industries=db.industry_options(),

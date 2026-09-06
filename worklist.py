@@ -66,7 +66,7 @@ def board() -> list[dict[str, Any]]:
               "not aligned to a masthead",
               "Nothing moves without one. Their emails would come from ACM rather than "
               "the local paper that carries weight.",
-              "Align them", "/align", "warn"),
+              "Align them", "/review/align", "warn"),
         _item("review", to_review,
               "waiting for a decision",
               "Read the business and its email, then approve it or rule it out.",
