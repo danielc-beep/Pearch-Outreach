@@ -244,6 +244,24 @@ document.addEventListener('DOMContentLoaded', () => {
       rows[active].scrollIntoView({block: 'nearest'});
     }
 
+    // Code elsewhere sets `select.value = "..."` — the location box on the
+    // dashboard preselects a masthead as you type, for one. Assigning the
+    // property fires no event, so the box beside it would keep showing the
+    // old name, or nothing. Wrapping the property keeps the upgrade
+    // invisible: existing code carries on assigning, and the visible half
+    // follows. Dispatching a change event instead would be wrong — the
+    // pages that do this also listen for change to mean "a person chose
+    // that", and a machine setting it is not a person choosing it.
+    var native = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(select), 'value');
+    if (native && native.get && native.set) {
+      Object.defineProperty(select, 'value', {
+        configurable: true,
+        get: function () { return native.get.call(select); },
+        set: function (v) { native.set.call(select, v); showChosen(); },
+      });
+    }
+
     input.addEventListener('focus', open);
     input.addEventListener('input', function () {
       render(input.value);

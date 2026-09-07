@@ -186,9 +186,16 @@ def home(request: Request) -> HTMLResponse:
     top, _ = db.list_businesses(sort="score", limit=8)
     infos = sources.all_sources()
     live = next((s.label for s in infos if s.available and s.key not in ("sample", "csv")), "")
+    # A source that can be searched, as opposed to a CSV you already have.
+    # With no key set and the sample source off — which is exactly how this is
+    # deployed — there is nothing in the Source dropdown, so the button posts
+    # an empty source and the server answers 400. From the outside the button
+    # does nothing.
+    searchable = [s for s in infos if s.available and s.key != "csv"]
     return page(
         request, "home.html",
         nav="home",
+        can_search=bool(searchable),
         stats=stats,
         contactable_pct=round(100 * stats["with_email"] / stats["total"]) if stats["total"] else 0,
         top_businesses=top,
@@ -234,6 +241,7 @@ def review_page(request: Request) -> HTMLResponse:
     return page(
         request, "review.html",
         nav="review", tab="decide", counts=_review_counts(),
+        triaged=review.triage(**filters),
         total=len(review.queue_ids(**filters)),
         undrafted=db.list_businesses(needs_review=True, needs_draft=True, limit=1, **filters)[1],
         f={k: (request.query_params.get(k) or "") for k in REVIEW_FILTERS},
@@ -267,8 +275,28 @@ def api_territory_step(step: TerritoryStep) -> JSONResponse:
 
 @app.get("/api/review/queue")
 def api_review_queue(request: Request) -> JSONResponse:
-    ids = review.queue_ids(**_review_filters(dict(request.query_params)))
-    return JSONResponse({"ids": ids, "total": len(ids)})
+    """
+    The queue, triaged.
+
+    `ids` is what a person has to read — the drafts that tripped a check.
+    `clean` is everything the checks are happy with, offered as one approval
+    rather than four hundred keystrokes.
+    """
+    result = review.triage(**_review_filters(dict(request.query_params)))
+    ids = [f["id"] for f in result["flagged"]]
+    return JSONResponse({"ids": ids, "total": len(ids),
+                         "clean": result["clean"], "clean_count": result["clean_count"],
+                         "flagged": result["flagged"]})
+
+
+class ApproveClean(BaseModel):
+    ids: list[int] = []
+
+
+@app.post("/api/review/approve-clean")
+def api_review_approve_clean(body: ApproveClean) -> JSONResponse:
+    """Approve a batch, re-checking each one rather than trusting the list."""
+    return JSONResponse(review.approve_all(body.ids))
 
 
 class DraftBatch(BaseModel):

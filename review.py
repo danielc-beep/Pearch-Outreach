@@ -35,6 +35,107 @@ def queue_ids(**filters: Any) -> list[int]:
     return [int(r["id"]) for r in rows]
 
 
+# ---------- Triage ----------
+# The gates already decide which businesses are worth emailing: four stars,
+# an ACM masthead, an address, an industry in the ICP. Asking a person to
+# confirm that four hundred times is asking them to re-run a filter by hand.
+#
+# What no gate can check is the email itself — whether Claude named the right
+# paper, whether it claimed something we cannot keep, whether the address is a
+# person or a bin. So the queue is triaged: every draft is run through the
+# same checks the send does, the ones that pass are offered as a single
+# approval, and a person reads the ones that do not.
+
+def flags_for(business: dict[str, Any], draft: dict[str, Any] | None) -> list[str]:
+    """
+    Every reason this one wants a human, in the reviewer's words.
+
+    Empty means the automated checks are all satisfied — which is not the
+    same as "definitely fine", only "nothing we know how to check is wrong".
+    """
+    if not draft:
+        return ["No email has been written for it yet."]
+
+    reasons = list(outreach.warnings(draft))
+
+    # The send's own blockers, minus the ones that are about configuration
+    # rather than this business: sending being switched off and the draft not
+    # being approved yet are true of every draft in the queue.
+    about_the_setup = ("Sending is disabled", "No RESEND_API_KEY",
+                       "Message must be approved", "Daily send cap")
+    for problem in outreach.preflight({**draft, "status": "approved"}):
+        if not problem.startswith(about_the_setup):
+            reasons.append(problem)
+
+    body = (draft.get("body") or "").strip()
+    if len(body) < 200:
+        reasons.append("The draft looks too short to be a real email.")
+    masthead = outreach.masthead_for(business)["name"]
+    if masthead and masthead.lower() not in body.lower():
+        reasons.append(f"The draft never names {masthead}.")
+    return reasons
+
+
+def inspect(business_id: int) -> dict[str, Any] | None:
+    """One business, its draft, and what the checks make of it."""
+    business = db.get_business(business_id)
+    if not business:
+        return None
+    draft = _latest_draft(business_id)
+    return {"business": business, "draft": draft,
+            "flags": flags_for(business, draft)}
+
+
+def triage(**filters: Any) -> dict[str, Any]:
+    """
+    Split the queue into what a person needs to read and what they do not.
+
+    Returns ids rather than records: the clean list exists to be approved in
+    one go, and the flagged list is worked one card at a time as before.
+    """
+    clean: list[int] = []
+    flagged: list[dict[str, Any]] = []
+    for business_id in queue_ids(**filters):
+        business = db.get_business(business_id)
+        if not business:
+            continue
+        reasons = flags_for(business, _latest_draft(business_id))
+        if reasons:
+            flagged.append({"id": business_id, "name": business.get("name"),
+                            "flags": reasons})
+        else:
+            clean.append(business_id)
+    return {"clean": clean, "flagged": flagged,
+            "clean_count": len(clean), "flagged_count": len(flagged)}
+
+
+def approve_all(business_ids: list[int]) -> dict[str, Any]:
+    """
+    Approve a batch, re-checking each one as it goes.
+
+    Re-checked rather than trusted: the list was built when the page loaded,
+    and a draft edited or a business changed since then must not be waved
+    through on the strength of a check that has gone stale.
+    """
+    approved, skipped = 0, []
+    for business_id in business_ids:
+        looked = inspect(int(business_id))
+        if looked is None:
+            continue
+        if looked["flags"]:
+            skipped.append({"id": business_id, "name": looked["business"].get("name"),
+                            "flags": looked["flags"]})
+            continue
+        decide(int(business_id), "approve")
+        approved += 1
+    return {"approved": approved, "skipped": skipped}
+
+
+def _latest_draft(business_id: int) -> dict[str, Any] | None:
+    drafts = [m for m in db.list_messages(business_id=business_id) if m["status"] == "draft"]
+    return drafts[0] if drafts else None
+
+
 def card(business_id: int) -> dict[str, Any] | None:
     """Everything the reviewer needs to decide, in one payload."""
     business = db.get_business(business_id)
@@ -43,8 +144,7 @@ def card(business_id: int) -> dict[str, Any] | None:
 
     # The newest draft, if there is one. Anything already approved or sent
     # would have taken the business out of the queue.
-    drafts = [m for m in db.list_messages(business_id=business_id) if m["status"] == "draft"]
-    draft = drafts[0] if drafts else None
+    draft = _latest_draft(business_id)
 
     standing = outreach.review_standing(business)
     return {
@@ -55,6 +155,7 @@ def card(business_id: int) -> dict[str, Any] | None:
         "praiseworthy": standing["praiseworthy"],
         "reasons": business.get("score_reasons") or [],
         "draft": draft,
+        "flags": flags_for(business, draft),
     }
 
 

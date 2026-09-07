@@ -245,3 +245,150 @@ def test_the_territory_route(client):
     bad = client.post("/api/territory/step", json={
         "masthead": "theland.com.au", "industry": "dentist", "source": "sample"})
     assert bad.status_code == 400
+
+
+# ---------- Triage: read the ones that need reading ----------
+# The gates decide which businesses are worth emailing. Confirming that four
+# hundred times by hand is re-running a filter. What no gate can check is the
+# email itself, so that is what a person is left with.
+
+def _ready(name="Bathurst Plumbing", **extra):
+    import db
+    fields = {"name": name, "industry": "Plumber", "suburb": "Bathurst", "state": "NSW",
+              "website": "https://x.com.au", "rating": 4.8, "review_count": 120,
+              "source": "csv", "masthead": "westernadvocate.com.au",
+              # A person's address, not a role one — "hello@" is a shared
+              # address and the checks are right to hold it.
+              "email": f"sarah@{name.split()[0].lower()}.com.au"}
+    fields.update(extra)
+    business_id, _ = db.upsert_business(fields)
+    return business_id
+
+
+def _draft_saying(business_id, body):
+    import db, outreach
+    message = outreach.draft_message(business_id, use_ai=False)
+    outreach.edit_message(int(message["id"]), "A subject line", body)
+    return db.get_message(int(message["id"]))
+
+
+GOOD = ("Congratulations on your 4.8 star rating from 120 Google reviews. When someone "
+        "searches Google, AI Mode and the AI Overview name a handful of sources, and that "
+        "list is not the ads. We get businesses quoted in it by publishing editorial in "
+        "the Western Advocate, a masthead Google already trusts and one your customers "
+        "read. Worth a 15-minute call? Places are limited and if it is not right for you "
+        "that is completely fine.")
+
+
+def test_a_clean_draft_needs_nobody(client):
+    import review
+    business_id = _ready()
+    _draft_saying(business_id, GOOD)
+    assert review.flags_for(__import__("db").get_business(business_id),
+                            review._latest_draft(business_id)) == []
+
+
+def test_a_draft_that_never_names_the_surface_is_held(client):
+    import db, review
+    business_id = _ready()
+    _draft_saying(business_id, GOOD.replace("AI Mode and the AI Overview", "the top of Google"))
+    flags = review.flags_for(db.get_business(business_id), review._latest_draft(business_id))
+    assert any("AI Mode" in f for f in flags), flags
+
+
+def test_a_draft_that_never_names_the_masthead_is_held(client):
+    import db, review
+    business_id = _ready()
+    _draft_saying(business_id, GOOD.replace("the Western Advocate", "one of our papers"))
+    flags = review.flags_for(db.get_business(business_id), review._latest_draft(business_id))
+    assert any("Western Advocate" in f for f in flags), flags
+
+
+def test_a_shared_address_is_held(client):
+    import db, review
+    business_id = _ready(email="info@shared.com.au")
+    _draft_saying(business_id, GOOD)
+    flags = review.flags_for(db.get_business(business_id), review._latest_draft(business_id))
+    assert any("shared address" in f for f in flags), flags
+
+
+def test_a_business_with_no_draft_is_held(client):
+    import db, review
+    business_id = _ready()
+    flags = review.flags_for(db.get_business(business_id), None)
+    assert any("No email has been written" in f for f in flags), flags
+
+
+def test_a_stub_of_a_draft_is_held(client):
+    import db, review
+    business_id = _ready()
+    _draft_saying(business_id, "Hi there. Call me.")
+    flags = review.flags_for(db.get_business(business_id), review._latest_draft(business_id))
+    assert any("too short" in f for f in flags), flags
+
+
+def test_triage_splits_the_queue(client):
+    import review
+    clean_id = _ready("Clean Co")
+    _draft_saying(clean_id, GOOD.replace("Bathurst", "Bathurst"))
+    dirty_id = _ready("Dirty Co")
+    _draft_saying(dirty_id, "Too short.")
+    result = review.triage()
+    assert clean_id in result["clean"]
+    assert dirty_id in [f["id"] for f in result["flagged"]]
+    assert result["clean_count"] == 1 and result["flagged_count"] == 1
+
+
+def test_approving_the_batch_puts_them_in_the_outbox(client):
+    import db, review
+    ids = []
+    for i in range(3):
+        business_id = _ready(f"Clean Co {i}")
+        _draft_saying(business_id, GOOD)
+        ids.append(business_id)
+    result = review.approve_all(ids)
+    assert result["approved"] == 3 and result["skipped"] == []
+    for business_id in ids:
+        assert db.get_business(business_id)["status"] == "qualified"
+    assert len(db.list_messages(status="approved", limit=99)) == 3
+
+
+def test_the_batch_is_rechecked_rather_than_trusted(client):
+    """
+    The list was built when the page loaded. A draft edited since then must
+    not be waved through on a check that has gone stale.
+    """
+    import db, outreach, review
+    business_id = _ready("Clean Co")
+    message = _draft_saying(business_id, GOOD)
+    outreach.edit_message(int(message["id"]), "Subject", "Too short now.")
+    result = review.approve_all([business_id])
+    assert result["approved"] == 0
+    assert result["skipped"][0]["id"] == business_id
+    assert db.get_business(business_id)["status"] != "qualified"
+
+
+def test_the_queue_endpoint_returns_both_halves(client):
+    clean_id = _ready("Clean Co")
+    _draft_saying(clean_id, GOOD)
+    dirty_id = _ready("Dirty Co")
+    _draft_saying(dirty_id, "Too short.")
+    data = client.get("/api/review/queue").json()
+    assert data["clean"] == [clean_id]
+    assert data["ids"] == [dirty_id]          # only what a person must read
+    assert data["clean_count"] == 1
+
+
+def test_the_page_offers_the_batch(client):
+    clean_id = _ready("Clean Co")
+    _draft_saying(clean_id, GOOD)
+    body = client.get("/review").text
+    assert "pass every check" in body
+    assert "Approve all 1" in body
+
+
+def test_the_card_says_why_it_was_held(client):
+    dirty_id = _ready("Dirty Co")
+    _draft_saying(dirty_id, "Too short.")
+    card = client.get(f"/api/review/card/{dirty_id}").json()
+    assert any("too short" in f for f in card["flags"]), card["flags"]

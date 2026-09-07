@@ -37,15 +37,20 @@
         <select id="hs-source" name="source">
           {% for s in sources if s.key != 'csv' and s.available %}
           <option value="{{ s.key }}" {{ 'selected' if s.key == default_source }}>{{ s.label }}</option>
+          {% else %}
+          <option value="">None configured</option>
           {% endfor %}
         </select>
       </div>
-      <button type="submit" id="hs-go">Prospect</button>
+      <button type="submit" id="hs-go" {{ 'disabled' if not can_search }}>Prospect</button>
     </form>
     <p class="search-hint" id="hs-hint">
-      {% if live_source %}Live search via {{ live_source }}.{% else %}
-      No prospecting API key set, so this runs on <strong>sample data</strong> —
-      everything works, the businesses are fictional.{% endif %}
+      {% if live_source %}Live search via {{ live_source }}.
+      {% elif can_search %}No prospecting API key set, so this runs on
+      <strong>sample data</strong> — everything works, the businesses are fictional.
+      {% else %}<strong>Nothing is set up to search with.</strong> Set
+      <code>GOOGLE_PLACES_API_KEY</code> in the environment to search Google Places.
+      {% endif %}
       Already have a list? <a href="/prospect?source=csv">Import a CSV</a>.
     </p>
   </div>

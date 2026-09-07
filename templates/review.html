@@ -61,6 +61,24 @@
 
     <div id="flash"></div>
 
+    <!-- The batch the checks are happy with. Approving one at a time is
+         re-running a filter by hand: the gates already decided these are
+         worth emailing, and the checks found nothing wrong with the emails. -->
+    {% if triaged.clean_count %}
+    <div class="clearing" id="clearing">
+      <div>
+        <strong id="clearing-n">{{ triaged.clean_count }}</strong>
+        pass every check &mdash; right masthead named, a real person's address,
+        no repeat to a firm we have already written to.
+        <span class="muted">Approving them sends nothing; it puts them in the outbox.</span>
+      </div>
+      <button class="btn btn-primary" id="approve-clean"
+              data-ids="{{ triaged.clean|join(',') }}">
+        Approve all {{ triaged.clean_count }}
+      </button>
+    </div>
+    {% endif %}
+
     <!-- Progress -->
     <div class="queue-progress" id="queue-progress" hidden>
       <div class="queue-bar"><i id="queue-bar-fill"></i></div>
@@ -119,6 +137,33 @@
     window.setTimeout(() => { flashEl.innerHTML = ''; }, 4000);
   }
 
+  // Approving the batch, then reloading — the counts, the tabs and the
+  // remaining queue all move, and a page that half-updates itself after a
+  // bulk action is worse than one that reloads.
+  const clearing = document.getElementById('approve-clean');
+  if (clearing) {
+    clearing.addEventListener('click', async () => {
+      const ids = (clearing.dataset.ids || '').split(',').filter(Boolean).map(Number);
+      if (!ids.length) return;
+      clearing.disabled = true;
+      clearing.innerHTML = '<span class="spinner"></span>';
+      try {
+        const out = await window.postJSON('/api/review/approve-clean', {ids: ids});
+        const held = out.skipped.length
+          ? ' ' + out.skipped.length + ' changed since the page loaded and were held back.'
+          : '';
+        sessionStorage.setItem('review-flash', out.approved + ' approved and waiting in the outbox.' + held);
+        window.location.reload();
+      } catch (err) {
+        flash(err.message, 'error');
+        clearing.disabled = false;
+        clearing.textContent = 'Approve all ' + ids.length;
+      }
+    });
+  }
+  const carried = sessionStorage.getItem('review-flash');
+  if (carried) { sessionStorage.removeItem('review-flash'); flash(carried, 'ok'); }
+
   async function fetchCard(id) {
     if (cache.has(id)) return cache.get(id);
     const r = await fetch('/api/review/card/' + id);
@@ -126,6 +171,17 @@
     const card = await r.json();
     cache.set(id, card);
     return card;
+  }
+
+  // Why this one was not waved through. It is the whole reason the card is
+  // on screen, so it goes above everything else on the right.
+  function renderFlags(flags) {
+    if (!flags || !flags.length) return '';
+    return '<div class="notice notice-warn" style="margin-bottom:16px">' +
+      '<strong>Wants your eye</strong>' +
+      '<ul class="reasons" style="margin:8px 0 0">' +
+      flags.map((f) => '<li>' + escapeHtml(f) + '</li>').join('') +
+      '</ul></div>';
   }
 
   function renderReasons(reasons) {
@@ -182,6 +238,7 @@
             '<h3>The email</h3>' + renderDraft(card.draft) +
           '</div>' +
           '<div>' +
+            renderFlags(card.flags) +
             '<h3>Why it scored</h3>' + renderReasons(card.reasons) +
             '<h3 style="margin-top:18px">Contact</h3>' +
             '<div class="mono small" style="word-break:break-word">' + escapeHtml(b.email || '—') + '</div>' +

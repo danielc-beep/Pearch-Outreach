@@ -882,3 +882,16 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
   background: rgba(0,154,199,0.14); color: #0D1636;
 }
 .searchbar .picker-group { color: #5A6E92; }
+
+
+/* ---------- The batch that needs no reading ---------- */
+.clearing {
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  justify-content: space-between;
+  background: rgba(63,214,147,0.10); border: 1px solid rgba(63,214,147,0.34);
+  border-radius: 12px; padding: 14px 18px; margin-bottom: 18px;
+  font-size: 13.5px; color: var(--text);
+}
+.clearing strong { color: var(--success); font-size: 17px; font-variant-numeric: tabular-nums; }
+.clearing .muted { display: block; margin-top: 3px; font-size: 12.5px; }
+.clearing .btn { flex: none; }
