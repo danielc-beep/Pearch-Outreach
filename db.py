@@ -596,6 +596,7 @@ def list_businesses(
     industry: str = "",
     source: str = "",
     has_email: bool | None = None,
+    has_website: bool | None = None,
     website_status: str = "",
     masthead: str = "",
     needs_review: bool = False,
@@ -637,6 +638,10 @@ def list_businesses(
         where.append("email IS NOT NULL AND email != ''")
     elif has_email is False:
         where.append("(email IS NULL OR email = '')")
+    if has_website is True:
+        where.append("website IS NOT NULL AND website != ''")
+    elif has_website is False:
+        where.append("(website IS NULL OR website = '')")
     if needs_review:
         # The review queue: everyone still awaiting a decision. Contactable,
         # not settled either way, and without a draft already approved or

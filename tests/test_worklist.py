@@ -138,3 +138,48 @@ def test_enrichment_keeps_the_contact_page_it_visited(monkeypatch):
     result = enrich.enrich_from_website("https://noemailhere.com.au")
     assert "email" not in result
     assert result["contact_url"].endswith("/contact")
+
+
+# ---------- A number you can actually get to nought ----------
+
+def test_the_email_count_only_counts_what_can_be_worked(client):
+    """
+    The screen skips businesses with no website — there is nowhere to look —
+    but the count included them, so it read "124 waiting" while showing forty
+    and no amount of work could ever clear it.
+    """
+    import db, worklist
+    db.upsert_business({"name": "Findable", "industry": "Plumber", "suburb": "Newcastle",
+                        "rating": 4.6, "review_count": 20, "source": "csv",
+                        "website": "https://findable.com.au"})
+    db.upsert_business({"name": "Nowhere To Look", "industry": "Plumber",
+                        "suburb": "Newcastle", "rating": 4.6, "review_count": 20,
+                        "source": "csv"})            # no website, no email
+    row = next(i for i in worklist.board() if i["key"] == "no_email")
+    assert row["count"] == 1, "the one with no website is not work"
+
+
+def test_the_page_shows_exactly_what_it_counted(client):
+    import db
+    for i in range(3):
+        db.upsert_business({"name": f"Findable {i}", "industry": "Plumber",
+                            "suburb": "Newcastle", "rating": 4.6, "review_count": 20,
+                            "source": "csv", "website": f"https://f{i}.com.au"})
+    db.upsert_business({"name": "Nowhere To Look", "industry": "Plumber",
+                        "suburb": "Newcastle", "rating": 4.6, "review_count": 20,
+                        "source": "csv"})
+    body = client.get("/addresses").text
+    assert "3 with a website but no email address" in body
+    assert "Nowhere To Look" not in body
+
+
+def test_the_page_says_email_not_just_address(client):
+    """The word "address" beside a list of suburbs reads as a street address."""
+    import db
+    db.upsert_business({"name": "Findable", "industry": "Plumber", "suburb": "Newcastle",
+                        "rating": 4.6, "review_count": 20, "source": "csv",
+                        "website": "https://findable.com.au"})
+    body = client.get("/addresses").text
+    assert "email address" in body
+    assert "paste the email address" in body
+    assert ">Emails<" in body            # and the nav says so too

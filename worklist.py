@@ -39,7 +39,10 @@ def board() -> list[dict[str, Any]]:
     """
     approved = len(db.list_messages(status="approved", limit=5000))
     replied = db.list_businesses(status="replied", limit=1)[1]
-    no_email = db.list_businesses(has_email=False, limit=1)[1]
+    # Only the ones the addresses screen can actually work: no email, but a
+    # website to go looking on. Counting the rest gives a number that never
+    # reaches nought however much work is done.
+    no_email = db.list_businesses(has_email=False, has_website=True, limit=1)[1]
     unaligned = db.count_without_masthead()
     below_rating = db.count_below_rating(MIN_PROSPECT_RATING)
     to_review = len(review.queue_ids())
@@ -77,8 +80,9 @@ def board() -> list[dict[str, Any]]:
               "Open the outbox", "/outbox?status=approved"),
         _item("no_email", no_email,
               "have no email address",
-              "Found, scored, and unusable until someone has an address to write to.",
-              "Find addresses", "/addresses"),
+              "Found, scored, and unusable until someone has an address to write to. "
+              "Each has a website to find one on.",
+              "Find emails", "/addresses"),
         _item("below_rating", below_rating,
               f"under {MIN_PROSPECT_RATING:.0f} stars",
               "Every email opens by congratulating the business on its rating. These cannot be worked.",

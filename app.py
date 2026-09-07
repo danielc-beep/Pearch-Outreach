@@ -424,18 +424,21 @@ def align_page(request: Request, industry: str = "", state: str = "") -> HTMLRes
 @app.get("/addresses", response_class=HTMLResponse)
 def addresses_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
     """
-    The businesses the scraper could not find an address for.
+    The businesses with a website but no EMAIL address on file.
 
-    They are real, they scored, and they are unusable until someone has an
-    address to write to — so this is the one screen where a person can be
-    faster than the automation.
+    Not a street address — this is the one screen where a person beats the
+    automation, by opening a contact page the scraper could not read and
+    copying the address out of it. A business with no website has nowhere to
+    look, so it is not work and is not counted here.
     """
+    # The website filter belongs in the query, not after it. Dropping the
+    # website-less rows in Python left `total` counting records this page
+    # deliberately never shows — so it read "124 waiting" while showing forty,
+    # and no amount of work could ever bring it to nought.
     rows, total = db.list_businesses(
-        has_email=False, masthead=masthead, industry=industry,
+        has_email=False, has_website=True, masthead=masthead, industry=industry,
         sort="score", limit=60,
     )
-    # A business with no website has nowhere to look, so it is not work.
-    rows = [b for b in rows if b.get("website")]
     return page(
         request, "addresses.html",
         nav="addresses",

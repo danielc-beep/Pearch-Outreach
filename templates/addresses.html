@@ -1,18 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Find addresses — {{ app_name }}{% endblock %}
+{% block title %}Find email addresses — {{ app_name }}{% endblock %}
 
 {% block body %}
 <div class="wrap">
   <section class="section" style="margin-top:36px">
     <div class="section-head">
       <div>
-        <div class="eyebrow">Addresses</div>
+        <div class="eyebrow">Email addresses</div>
         <h2>The ones the scraper <em>couldn't crack</em></h2>
-        <p class="lede">Each of these is a real business that scored well and has no address
-          on file. Open its contact page, copy what's there, paste it here. Ten seconds each,
-          and a dead record becomes a prospect.</p>
+        <p class="lede">An <strong>email address</strong>, not a street one. Each of these
+          is a real business that cleared every criterion and has a website, but the
+          scraper could not read an email off it. Open its contact page, copy the
+          address, paste it here. Ten seconds each, and a dead record becomes a prospect.</p>
       </div>
-      <a class="btn" href="/businesses?has_email=0">See them all</a>
+      <a class="btn" href="/businesses?has_email=0">See every one without an email</a>
     </div>
 
     <form class="filters" method="get" action="/addresses">
@@ -44,7 +45,7 @@
 
     {% if businesses %}
     <p class="muted small" style="margin:0 0 14px">
-      {{ total }} without an address{% if total > businesses|length %},
+      {{ total }} with a website but no email address{% if total > businesses|length %},
       showing the {{ businesses|length }} highest-scoring{% endif %}. Sorted by fit.
     </p>
 
@@ -70,9 +71,9 @@
           {% if b.phone %}<span class="muted small mono">{{ b.phone }}</span>{% endif %}
         </div>
         <div class="address-entry">
-          <input type="email" class="js-email" placeholder="paste the address" aria-label="Email for {{ b.name }}" />
+          <input type="email" class="js-email" placeholder="paste the email address" aria-label="Email address for {{ b.name }}" />
           <button class="btn btn-sm btn-primary js-save">Save</button>
-          <button class="btn btn-sm btn-danger js-none" title="No address to be found">None</button>
+          <button class="btn btn-sm btn-danger js-none" title="No email address to be found anywhere">None</button>
         </div>
       </div>
       {% endfor %}
@@ -81,8 +82,8 @@
     <div class="card">
       <h3>Nothing waiting</h3>
       <p class="muted" style="margin:0 0 16px">
-        Every business that scored well has an address on file. Either the enrichment found
-        them all, or there is nothing in the database yet.
+        Every business with a website has an email address on file. Either the enrichment
+        found them all, or there is nothing in the database yet.
       </p>
       <a class="btn btn-primary" href="/prospect">Find more businesses</a>
     </div>
