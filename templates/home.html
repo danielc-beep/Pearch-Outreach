@@ -1,6 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — {{ app_name }}{% endblock %}
 
+{% macro kpi(id, label, value, sub, series, change, money=False, tone='') %}
+{#  No box. A label, a number, the line it has traced, and what that line did.
+    Twelve bordered rectangles on one screen is a form; hairlines and space
+    are how a front page separates things. #}
+<a class="stat-cell {{ tone }}" href="{{ caller() if caller else '#' }}">
+  <span class="stat-label">{{ label }}</span>
+  <span class="stat-value" id="k-{{ id }}" {% if money %}data-money{% endif %}>{{ value }}</span>
+  <span class="stat-under">
+    {% if series and series|length > 1 %}
+    <svg class="spark" viewBox="0 0 100 22" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="{{ spark(series) }}" />
+    </svg>
+    {% endif %}
+    <span class="stat-sub" id="k-{{ id }}-sub">
+      {%- if change %}<b class="delta {{ 'is-up' if change > 0 else 'is-down' }}">{{
+        ('+' if change > 0 else '−') }}{{ ('$' ~ '{:,.0f}'.format(change|abs)) if money
+        else change|abs|round|int }}</b> · {% endif -%}
+      {{ sub }}</span>
+  </span>
+</a>
+{% endmacro %}
+
 {% block body %}
 <div class="wrap dash">
 
@@ -12,48 +34,36 @@
     <div class="dash-live">
       <span class="live-dot" aria-hidden="true"></span>
       <span id="live-word">Live</span>
-      <span class="muted" id="live-ago">·  just now</span>
+      <span class="muted" id="live-ago">· just now</span>
     </div>
   </div>
 
-  <!-- The money, first, because it is the question everything else serves. -->
-  <div class="kpis">
-    <a class="kpi kpi-money" href="/crm">
-      <div class="kpi-label">Pipeline revenue</div>
-      <div class="kpi-n" data-money id="k-pipeline">{{ revenue.pipeline.total|round|int }}</div>
-      <div class="kpi-sub" id="k-pipeline-sub">
-        {{ revenue.pipeline.count }} open
-        {%- if revenue.pipeline.unpriced %} · {{ revenue.pipeline.unpriced }} unpriced{% endif %}
-      </div>
-    </a>
-    <a class="kpi kpi-won" href="/crm?stage=won">
-      <div class="kpi-label">Closed won</div>
-      <div class="kpi-n" data-money id="k-won">{{ revenue.won.total|round|int }}</div>
-      <div class="kpi-sub" id="k-won-sub">{{ revenue.won.count }} signed</div>
-    </a>
-    <a class="kpi" href="/businesses">
-      <div class="kpi-label">Businesses</div>
-      <div class="kpi-n" id="k-total">{{ stats.total }}</div>
-      <div class="kpi-sub" id="k-new">+{{ stats.added_7d }} in 7 days</div>
-    </a>
-    <a class="kpi" href="/businesses?has_email=1">
-      <div class="kpi-label">Contactable</div>
-      <div class="kpi-n" id="k-email">{{ stats.with_email }}</div>
-      <div class="kpi-sub" id="k-emailpct">{{ contactable_pct }}% of the database</div>
-    </a>
-    <a class="kpi" href="/review">
-      <div class="kpi-label">Waiting on you</div>
-      <div class="kpi-n" id="k-queue">{{ (board | selectattr('key', 'equalto', 'review') | list | first).count if board | selectattr('key', 'equalto', 'review') | list else 0 }}</div>
-      <div class="kpi-sub">to decide</div>
-    </a>
-    <a class="kpi" href="/outbox">
-      <div class="kpi-label">Emails sent</div>
-      <div class="kpi-n" id="k-sent">{{ stats.sent }}</div>
-      <div class="kpi-sub" id="k-approved">{{ stats.approved }} approved and waiting</div>
-    </a>
+  <!-- Something the app is doing right now, while it does it. -->
+  <div class="working" id="working" {{ 'hidden' if not running }}>
+    <span class="working-bar" aria-hidden="true"></span>
+    <span id="working-text">
+      {% if running %}Searching {{ running[0].query.get('location', 'for businesses') }}…{% endif %}
+    </span>
   </div>
 
-  <!-- The pipeline, as a bar, so a stage is one click away. -->
+  <!-- The numbers, on one rule, separated by space rather than borders. -->
+  <div class="stats">
+    {% call kpi('pipeline', 'Pipeline revenue', revenue.pipeline.total|round|int,
+                (revenue.pipeline.count ~ ' open' ~ (' · ' ~ revenue.pipeline.unpriced ~ ' unpriced' if revenue.pipeline.unpriced else '')),
+                trend.series.pipeline_value, trend.change.pipeline_value, money=True, tone='is-money') %}/crm{% endcall %}
+    {% call kpi('won', 'Closed won', revenue.won.total|round|int,
+                revenue.won.count ~ ' signed',
+                trend.series.won_value, trend.change.won_value, money=True, tone='is-won') %}/crm?stage=won{% endcall %}
+    {% call kpi('total', 'Businesses', stats.total, 'in 14 days',
+                trend.series.businesses, trend.change.businesses) %}/businesses{% endcall %}
+    {% call kpi('email', 'Contactable', stats.with_email, contactable_pct ~ '% of records',
+                trend.series.with_email, trend.change.with_email) %}/businesses?has_email=1{% endcall %}
+    {% call kpi('queue', 'Waiting on you', queue_count, 'to decide',
+                trend.series.queue, trend.change.queue) %}/review{% endcall %}
+    {% call kpi('sent', 'Emails sent', stats.sent, stats.approved ~ ' approved',
+                trend.series.sent, trend.change.sent) %}/outbox{% endcall %}
+  </div>
+
   {% if funnel.total %}
   <div class="dash-funnel">
     <div class="funnel" role="img" aria-label="Businesses by pipeline stage" id="dash-funnel">
@@ -69,49 +79,44 @@
   {% endif %}
 
   <div class="dash-grid">
-    <!-- What to do next -->
-    <section class="dash-panel">
-      <div class="dash-panel-head">
-        <h2>What's waiting</h2>
-        <a class="linkish" href="/prospect">Find more</a>
-      </div>
+    <!-- The one box on the page, because it is the one thing to act on. -->
+    <section class="dash-col">
+      <div class="col-head"><h2>What's waiting</h2><a class="linkish" href="/prospect">Find more</a></div>
       {% if board %}
-      <div class="board" id="dash-board">
-        {% for item in board %}
-        <a class="board-item {{ 'is-' ~ item.tone if item.tone }}" href="{{ item.href }}">
-          <div class="board-n">{{ item.count }}</div>
-          <div class="board-text">
-            <div class="board-label">{{ item.label }}</div>
-            <div class="board-detail">{{ item.detail }}</div>
-          </div>
-          <span class="board-go">{{ item.action }} →</span>
-        </a>
+      <a class="next-up" href="{{ board[0].href }}">
+        <span class="next-n">{{ board[0].count }}</span>
+        <span class="next-text">
+          <span class="next-label">{{ board[0].label }}</span>
+          <span class="next-detail">{{ board[0].detail }}</span>
+        </span>
+        <span class="next-go">{{ board[0].action }} →</span>
+      </a>
+      <ul class="rest">
+        {% for item in board[1:] %}
+        <li><a href="{{ item.href }}">
+          <span class="rest-n {{ 'is-' ~ item.tone if item.tone }}">{{ item.count }}</span>
+          <span class="rest-label">{{ item.label }}</span>
+          <span class="rest-go">{{ item.action }} →</span>
+        </a></li>
         {% endfor %}
-      </div>
+      </ul>
       {% else %}
-      <div class="card">
-        <h3 style="margin-top:0">{{ next_step.title }}</h3>
-        <p class="muted" style="margin:0 0 14px">{{ next_step.detail }}</p>
-        <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
-      </div>
+      <p class="muted" style="margin:6px 0 12px">{{ next_step.detail }}</p>
+      <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
       {% endif %}
     </section>
 
-    <!-- What the app is doing, which is the part that shows it is alive -->
-    <section class="dash-panel">
-      <div class="dash-panel-head">
-        <h2>Latest activity</h2>
-        <span class="muted small" id="feed-note">updating</span>
-      </div>
+    <!-- What just happened, with the clock running on it. -->
+    <section class="dash-col">
+      <div class="col-head"><h2>Latest activity</h2></div>
       <ol class="feed" id="feed">
         {% for a in activity %}
         <li class="feed-row" data-key="{{ a.created_at }}|{{ a.business_id }}|{{ a.kind }}">
           <span class="feed-kind feed-{{ a.kind }}">{{ a.kind }}</span>
           <span class="feed-what">
-            {% if a.business_id %}<a href="/businesses/{{ a.business_id }}">{{ a.name }}</a> — {% endif %}
-            {{ a.detail }}
+            {% if a.business_id %}<a href="/businesses/{{ a.business_id }}">{{ a.name }}</a> — {% endif %}{{ a.detail }}
           </span>
-          <time class="feed-when" datetime="{{ a.created_at }}">{{ a.created_at[11:16] }}</time>
+          <time class="feed-when" data-at="{{ a.created_at }}">just now</time>
         </li>
         {% else %}
         <li class="feed-empty">Nothing has happened yet. Run a sweep and this fills up.</li>
@@ -119,56 +124,42 @@
       </ol>
     </section>
 
-    <!-- Who the book is for -->
-    <section class="dash-panel">
-      <div class="dash-panel-head">
-        <h2>Coverage</h2>
-        <a class="linkish" href="/review/align">Align the rest</a>
+    <section class="dash-col">
+      <div class="col-head"><h2>Coverage</h2><a class="linkish" href="/review/align">Align the rest</a></div>
+      <div class="cover-group">Mastheads</div>
+      <div class="row">
+        {% for m in mastheads_by_count %}
+        <a class="pill" href="/businesses?masthead={{ m.masthead|urlencode }}">{{ masthead_name(m.masthead)|masthead_label }} · {{ m.n }}</a>
+        {% else %}<span class="muted small">Nothing aligned yet.</span>{% endfor %}
       </div>
-      <div class="card" style="padding:16px 18px">
-        <h3 style="margin-top:0;font-size:11px">Mastheads</h3>
-        {% if mastheads_by_count %}
-        <div class="row" style="margin-bottom:16px">
-          {% for m in mastheads_by_count[:3] %}
-          <a class="pill" href="/businesses?masthead={{ m.masthead|urlencode }}">{{ masthead_name(m.masthead)|masthead_label }} · {{ m.n }}</a>
-          {% endfor %}
-        </div>
-        {% else %}<p class="muted small" style="margin-bottom:16px">Nothing aligned yet.</p>{% endif %}
-        <h3 style="font-size:11px">Industries</h3>
-        {% if stats.top_industries %}
-        <div class="row">
-          {% for i in stats.top_industries[:3] %}
-          <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
-          {% endfor %}
-        </div>
-        {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
+      <div class="cover-group">Industries</div>
+      <div class="row">
+        {% for i in stats.top_industries[:3] %}
+        <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
+        {% else %}<span class="muted small">Nothing yet.</span>{% endfor %}
       </div>
     </section>
 
-    <!-- The best of what is in there -->
-    <section class="dash-panel dash-wide">
-      <div class="dash-panel-head">
-        <h2>Best of the list</h2>
-        <a class="linkish" href="/businesses">See all</a>
-      </div>
-      <div class="table-wrap">
-        <div class="table-scroll"><table>
-          <thead><tr><th>Business</th><th>Industry</th><th>Where</th><th>Value</th><th>Fit</th><th>Stage</th></tr></thead>
-          <tbody>
-            {% for b in top_businesses %}
-            <tr>
-              <td><a href="/businesses/{{ b.id }}"><strong>{{ b.name }}</strong></a></td>
-              <td class="sub">{{ b.industry or b.category or '—' }}</td>
-              <td class="sub">{{ b.suburb or b.region or '—' }}</td>
-              <td class="mono">{{ ('$' ~ '{:,.0f}'.format(b.deal_value)) if b.deal_value else '—' }}</td>
-              <td>{{ score_widget(b.fit_score) }}</td>
-              <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6" class="empty">Nothing in the database yet.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table></div>
+    <section class="dash-col dash-wide">
+      <div class="col-head"><h2>Best of the list</h2><a class="linkish" href="/businesses">See all</a></div>
+      <div class="bare-scroll">
+      <table class="bare">
+        <thead><tr><th>Business</th><th>Industry</th><th>Where</th><th>Value</th><th>Fit</th><th>Stage</th></tr></thead>
+        <tbody>
+          {% for b in top_businesses %}
+          <tr>
+            <td><a href="/businesses/{{ b.id }}"><strong>{{ b.name }}</strong></a></td>
+            <td class="sub">{{ b.industry or b.category or '—' }}</td>
+            <td class="sub">{{ b.suburb or b.region or '—' }}</td>
+            <td class="mono">{{ ('$' ~ '{:,.0f}'.format(b.deal_value)) if b.deal_value else '—' }}</td>
+            <td>{{ score_widget(b.fit_score) }}</td>
+            <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" class="empty">Nothing in the database yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
       </div>
     </section>
   </div>
@@ -178,8 +169,6 @@
 {% block scripts %}
 <script>
 (function () {
-  // A dashboard that only redraws when somebody presses refresh looks the
-  // same whether the app is busy or asleep. This one asks.
   var EVERY = 8000;
   var money = new Intl.NumberFormat('en-AU', {
     style: 'currency', currency: 'AUD', maximumFractionDigits: 0});
@@ -191,45 +180,73 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
-  // Paint a number, counting to it when it moves so the change is seen.
+  // "2 min ago" rather than a timestamp, ticking, because a clock that moves
+  // is the cheapest honest signal that the page is watching something.
+  function ago(iso) {
+    var then = Date.parse(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+    if (isNaN(then)) return '';
+    var s = Math.max(0, Math.round((Date.now() - then) / 1000));
+    if (s < 45) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + 'h ago';
+    return Math.round(s / 86400) + 'd ago';
+  }
+
+  function tickClocks() {
+    document.querySelectorAll('.feed-when[data-at]').forEach(function (t) {
+      t.textContent = ago(t.dataset.at);
+    });
+    var seconds = Math.round((Date.now() - lastAt) / 1000);
+    document.getElementById('live-ago').textContent =
+      seconds < 5 ? '· just now' : '· ' + seconds + 's ago';
+  }
+  tickClocks();
+  window.setInterval(tickClocks, 5000);
+
   function setNumber(el, value, isMoney) {
     if (!el) return;
-    var was = Number(el.dataset.value || el.textContent.replace(/[^0-9.-]/g, '') || 0);
+    var was = Number(el.dataset.value != null ? el.dataset.value
+                     : String(el.textContent).replace(/[^0-9.-]/g, '') || 0);
     var show = function (n) {
       el.textContent = isMoney ? money.format(Math.round(n)) : String(Math.round(n));
     };
     el.dataset.value = value;
     if (was === value) { show(value); return; }
-    el.classList.remove('is-changed');
-    void el.offsetWidth;
-    el.classList.add('is-changed');
+    el.classList.remove('is-changed'); void el.offsetWidth; el.classList.add('is-changed');
     if (reduce) { show(value); return; }
-    var started = null, from = was, span = 420;
+    var started = null, from = was;
     (function step(now) {
       if (started === null) started = now;
-      var through = Math.min(1, (now - started) / span);
+      var through = Math.min(1, (now - started) / 420);
       show(from + (value - from) * (1 - Math.pow(1 - through, 3)));
       if (through < 1) window.requestAnimationFrame(step);
     })(performance.now());
   }
 
   document.querySelectorAll('[data-money]').forEach(function (el) {
-    var raw = Number(el.textContent.trim() || 0);
+    var raw = Number(String(el.textContent).trim() || 0);
     el.dataset.value = raw;
     el.textContent = money.format(raw);
   });
 
-  var agoEl = document.getElementById('live-ago');
-  window.setInterval(function () {
-    var seconds = Math.round((Date.now() - lastAt) / 1000);
-    agoEl.textContent = seconds < 5 ? '· just now' : '· ' + seconds + 's ago';
-  }, 1000);
+  // Redraw a sparkline from a fresh series, so the line grows with the day.
+  function drawSpark(id, series) {
+    var svg = document.querySelector('#k-' + id).parentElement
+      .querySelector('.spark polyline');
+    if (!svg || !series || series.length < 2) return;
+    var low = Math.min.apply(null, series), high = Math.max.apply(null, series);
+    var span = (high - low) || 1, step = 100 / (series.length - 1);
+    svg.setAttribute('points', series.map(function (v, i) {
+      var y = high === low ? 11 : 22 - ((v - low) / span) * 22;
+      return (i * step).toFixed(1) + ',' + y.toFixed(1);
+    }).join(' '));
+  }
 
   function paintFeed(rows) {
     var list = document.getElementById('feed');
     var seen = new Set(Array.from(list.querySelectorAll('.feed-row'))
       .map(function (li) { return li.dataset.key; }));
-    var html = rows.map(function (a) {
+    list.innerHTML = rows.map(function (a) {
       var key = a.created_at + '|' + a.business_id + '|' + a.kind;
       var fresh = seen.size && !seen.has(key) ? ' is-fresh' : '';
       var who = a.business_id
@@ -237,30 +254,17 @@
       return '<li class="feed-row' + fresh + '" data-key="' + esc(key) + '">' +
         '<span class="feed-kind feed-' + esc(a.kind) + '">' + esc(a.kind) + '</span>' +
         '<span class="feed-what">' + who + esc(a.detail) + '</span>' +
-        '<time class="feed-when">' + esc((a.created_at || '').slice(11, 16)) + '</time></li>';
-    }).join('');
-    list.innerHTML = html || '<li class="feed-empty">Nothing has happened yet.</li>';
+        '<time class="feed-when" data-at="' + esc(a.created_at) + '"></time></li>';
+    }).join('') || '<li class="feed-empty">Nothing has happened yet.</li>';
+    tickClocks();
   }
 
-  function paintFunnel(funnel) {
-    var bar = document.getElementById('dash-funnel');
-    if (!bar || !funnel.total) return;
-    funnel.stages.forEach(function (s) {
-      var seg = bar.querySelector('[data-stage="' + s.key + '"]');
-      if (!seg) return;                       // a stage that had nothing on load
-      seg.style.setProperty('--share', (s.pct / 100).toFixed(4));
-      var n = seg.querySelector('.funnel-n');
-      if (n && n.textContent.trim() !== String(s.count)) n.textContent = s.count;
-    });
-  }
-
-  function paintBoard(board) {
-    var wrap = document.getElementById('dash-board');
-    if (!wrap) return;
-    board.forEach(function (item) {
-      var row = wrap.querySelector('a[href="' + item.href + '"] .board-n');
-      if (row) setNumber(row, item.count, false);
-    });
+  function paintWorking(running) {
+    var strip = document.getElementById('working');
+    if (!running.length) { strip.hidden = true; return; }
+    var where = (running[0].query && running[0].query.location) || 'for businesses';
+    document.getElementById('working-text').textContent = 'Searching ' + where + '…';
+    strip.hidden = false;
   }
 
   async function refresh() {
@@ -283,17 +287,37 @@
     setNumber(document.getElementById('k-total'), data.stats.total, false);
     setNumber(document.getElementById('k-email'), data.stats.with_email, false);
     setNumber(document.getElementById('k-sent'), data.stats.sent, false);
-    const review = data.board.find(function (i) { return i.key === 'review'; });
-    setNumber(document.getElementById('k-queue'), review ? review.count : 0, false);
-    document.getElementById('k-approved').textContent =
-      data.stats.approved + ' approved and waiting';
+    setNumber(document.getElementById('k-queue'), data.queue, false);
+    document.getElementById('k-sent-sub').textContent =
+      data.stats.approved + ' approved';
+
+    drawSpark('pipeline', data.trend.series.pipeline_value);
+    drawSpark('won', data.trend.series.won_value);
+    drawSpark('total', data.trend.series.businesses);
+    drawSpark('email', data.trend.series.with_email);
+    drawSpark('queue', data.trend.series.queue);
+    drawSpark('sent', data.trend.series.sent);
+
     paintFeed(data.activity);
-    paintFunnel(data.funnel);
-    paintBoard(data.board);
+    paintWorking(data.running || []);
+
+    var bar = document.getElementById('dash-funnel');
+    if (bar && data.funnel.total) {
+      data.funnel.stages.forEach(function (s) {
+        var seg = bar.querySelector('[data-stage="' + s.key + '"]');
+        if (!seg) return;
+        seg.style.setProperty('--share', (s.pct / 100).toFixed(4));
+        var n = seg.querySelector('.funnel-n');
+        if (n && n.textContent.trim() !== String(s.count)) n.textContent = s.count;
+      });
+    }
+    (data.board || []).forEach(function (item) {
+      var cell = document.querySelector('a[href="' + item.href + '"] .next-n, a[href="' + item.href + '"] .rest-n');
+      if (cell) setNumber(cell, item.count, false);
+    });
   }
 
   window.setInterval(refresh, EVERY);
-  // Coming back to the tab should not show a stale screen.
   document.addEventListener('visibilitychange', function () {
     if (!document.hidden) refresh();
   });

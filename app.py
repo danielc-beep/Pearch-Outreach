@@ -183,7 +183,6 @@ def page(request: Request, name: str, **context: Any) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
-    stats = db.stats()
     top, _ = db.list_businesses(sort="score", limit=5)
     infos = sources.all_sources()
     live = next((s.label for s in infos if s.available and s.key not in ("sample", "csv")), "")
@@ -193,22 +192,29 @@ def home(request: Request) -> HTMLResponse:
     # an empty source and the server answers 400. From the outside the button
     # does nothing.
     searchable = [s for s in infos if s.available and s.key != "csv"]
+    # The same payload the poll fetches, so the first paint and the first
+    # refresh cannot disagree about what the numbers are.
+    data = _dashboard_payload()
+    stats = data["stats"]
     return page(
         request, "home.html",
         nav="home",
         can_search=bool(searchable),
         stats=stats,
-        revenue=db.revenue(DEFAULT_DEAL_VALUE),
+        revenue=data["revenue"],
+        trend=data["trend"],
+        spark=db.spark,
+        running=data["running"],
+        queue_count=data["queue"],
         contactable_pct=round(100 * stats["with_email"] / stats["total"]) if stats["total"] else 0,
         top_businesses=top,
-        runs=db.recent_runs(4),
-        activity=db.recent_activity(8),
-        funnel=crm.funnel(),
-        mastheads_by_count=db.masthead_counts()[:6],
+        activity=data["activity"],
+        funnel=data["funnel"],
+        mastheads_by_count=db.masthead_counts()[:3],
         sources=infos,
         live_source=live,
         default_source=preferred_source(infos),
-        board=worklist.board(),
+        board=data["board"],
         next_step=worklist.next_step(bool(stats["total"])),
     )
 
@@ -752,6 +758,27 @@ def do_unsubscribe(request: Request, email: str = Form(...)) -> HTMLResponse:
     return page(request, "unsubscribe.html", nav="", email=email, done=True)
 
 
+def _dashboard_payload() -> dict[str, Any]:
+    """
+    Everything the dashboard shows, and today's figures written down on the
+    way past. Recording here rather than on a timer means the history is
+    written by the act of looking, which is the one moment the numbers are
+    certainly being computed anyway.
+    """
+    stats = db.stats()
+    money = db.revenue(DEFAULT_DEAL_VALUE)
+    board = worklist.board()
+    queue = next((i["count"] for i in board if i["key"] == "review"), 0)
+    db.record_today({
+        "businesses": stats["total"], "with_email": stats["with_email"],
+        "sent": stats["sent"], "queue": queue,
+        "pipeline_value": money["pipeline"]["total"], "won_value": money["won"]["total"],
+    })
+    return {"at": db.now(), "stats": stats, "revenue": money, "board": board,
+            "funnel": crm.funnel(), "activity": db.recent_activity(8),
+            "trend": db.trend(14), "running": db.running_now(), "queue": queue}
+
+
 @app.get("/api/dashboard")
 def api_dashboard() -> JSONResponse:
     """
@@ -761,16 +788,7 @@ def api_dashboard() -> JSONResponse:
     another tab, or a colleague working the queue, shows up here within a few
     seconds instead of the next time somebody presses refresh.
     """
-    stats = db.stats()
-    money = db.revenue(DEFAULT_DEAL_VALUE)
-    return JSONResponse({
-        "at": db.now(),
-        "stats": stats,
-        "revenue": money,
-        "board": worklist.board(),
-        "funnel": crm.funnel(),
-        "activity": db.recent_activity(8),
-    })
+    return JSONResponse(_dashboard_payload())
 
 
 @app.get("/health")

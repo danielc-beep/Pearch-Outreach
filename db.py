@@ -154,6 +154,20 @@ CREATE INDEX IF NOT EXISTS idx_trash_batch ON trash(batch);
 """
 
 
+CREATE_METRICS = """
+CREATE TABLE IF NOT EXISTS metrics_daily (
+    day            TEXT PRIMARY KEY,
+    businesses     INTEGER NOT NULL DEFAULT 0,
+    with_email     INTEGER NOT NULL DEFAULT 0,
+    sent           INTEGER NOT NULL DEFAULT 0,
+    queue          INTEGER NOT NULL DEFAULT 0,
+    pipeline_value REAL NOT NULL DEFAULT 0,
+    won_value      REAL NOT NULL DEFAULT 0,
+    updated_at     TEXT NOT NULL
+);
+"""
+
+
 CREATE_SETTINGS = """
 CREATE TABLE IF NOT EXISTS settings (
     key        TEXT PRIMARY KEY,
@@ -208,6 +222,7 @@ def init_db() -> None:
     conn.executescript(SCHEMA)
     conn.executescript(CREATE_TRASH)
     conn.executescript(CREATE_SETTINGS)
+    conn.executescript(CREATE_METRICS)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -223,7 +238,8 @@ def reset_db() -> None:
     """Drop everything and recreate. Used by the tests and `--reset`."""
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
-                  "contacts", "suppressions", "trash", "settings", "businesses"):
+                  "contacts", "suppressions", "trash", "settings", "metrics_daily",
+                  "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
     init_db()
@@ -461,6 +477,71 @@ def count_without_masthead() -> int:
         "SELECT COUNT(*) AS n FROM businesses WHERE masthead IS NULL OR masthead = ''"
     ).fetchone()
     return int(row["n"])
+
+
+# ---------- Yesterday ----------
+# A number on its own is a point. The same number with a fortnight behind it
+# is a line, and a line answers the question the point cannot: is this going
+# up. One row a day, rewritten as the day goes on, so the table stays the
+# size of the calendar rather than the size of the traffic.
+
+METRICS = ("businesses", "with_email", "sent", "queue", "pipeline_value", "won_value")
+
+
+def record_today(values: dict[str, Any]) -> None:
+    """Write today's figures, replacing whatever today already said."""
+    day = now()[:10]
+    columns = [m for m in METRICS if m in values]
+    with tx() as conn:
+        conn.execute(
+            f"INSERT INTO metrics_daily (day, updated_at, {', '.join(columns)}) "
+            f"VALUES (?, ?, {', '.join('?' for _ in columns)}) "
+            f"ON CONFLICT(day) DO UPDATE SET updated_at = excluded.updated_at, "
+            + ", ".join(f"{c} = excluded.{c}" for c in columns),
+            [day, now(), *[values[c] for c in columns]])
+
+
+def history(days: int = 14) -> list[dict[str, Any]]:
+    """The last `days` daily rows, oldest first, for drawing."""
+    rows = get_conn().execute(
+        "SELECT * FROM metrics_daily ORDER BY day DESC LIMIT ?", (days,)).fetchall()
+    return [dict(r) for r in reversed(rows)]
+
+
+def trend(days: int = 14) -> dict[str, Any]:
+    """
+    Each metric as a series, with the change across the window.
+
+    `change` compares the newest reading to the oldest one held. With fewer
+    than two days recorded there is no change to report and it says so
+    rather than reporting nought, which would read as "flat".
+    """
+    rows = history(days)
+    out: dict[str, Any] = {"days": len(rows), "series": {}, "change": {}}
+    for metric in METRICS:
+        series = [float(r[metric] or 0) for r in rows]
+        out["series"][metric] = series
+        out["change"][metric] = (series[-1] - series[0]) if len(series) > 1 else None
+    return out
+
+
+def spark(series: list[float], width: float = 100.0, height: float = 22.0) -> str:
+    """
+    A polyline for a sparkline, in a 0-100 by 0-22 box.
+
+    Flat series get a flat line down the middle rather than a divide by zero,
+    and a single reading gets nothing — one point is not a trend.
+    """
+    if len(series) < 2:
+        return ""
+    low, high = min(series), max(series)
+    span = (high - low) or 1.0
+    step = width / (len(series) - 1)
+    points = []
+    for i, value in enumerate(series):
+        y = height - ((value - low) / span) * height if high != low else height / 2
+        points.append(f"{i * step:.1f},{y:.1f}")
+    return " ".join(points)
 
 
 # ---------- Money ----------
@@ -873,6 +954,30 @@ def businesses_by_ids(ids: list[int]) -> list[dict[str, Any]]:
         ids,
     ).fetchall()
     return [row_to_dict(r) for r in rows]
+
+
+def running_now() -> list[dict[str, Any]]:
+    """
+    Prospecting runs still in flight.
+
+    A dashboard that shows the app working while it works is the difference
+    between live and merely recent. A run that died without finishing would
+    sit here for ever, so anything older than ten minutes is not reported —
+    it is not running, it is lost.
+    """
+    rows = get_conn().execute(
+        "SELECT id, started_at, source, query FROM prospecting_runs "
+        "WHERE status = 'running' AND started_at >= datetime('now', '-10 minutes') "
+        "ORDER BY id DESC").fetchall()
+    out = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["query"] = json.loads(item["query"] or "{}")
+        except json.JSONDecodeError:
+            item["query"] = {}
+        out.append(item)
+    return out
 
 
 def recent_activity(limit: int = 10) -> list[dict[str, Any]]:
