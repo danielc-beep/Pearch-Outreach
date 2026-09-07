@@ -46,7 +46,7 @@ required; each key just switches on more of the app.
 | --- | --- |
 | `PEARCH_PASSWORD` | The shared sign-in password. **Required in production** — see below |
 | `GOOGLE_PLACES_API_KEY` | Real business prospecting via Google Places |
-| `ANTHROPIC_API_KEY` | Per-business email drafts written by Claude |
+| `ANTHROPIC_API_KEY` | Per-business email drafts, and the dashboard coach's chat |
 | `PEARCH_DRAFT_MODEL` | Which model drafts (default `claude-opus-5`) |
 | `PEARCH_DRAFT_EFFORT` | How hard it thinks: `low`–`max` (default `medium`) |
 | `RESEND_API_KEY` + `PEARCH_SEND_ENABLED=1` | Actually sending email |
@@ -69,14 +69,40 @@ to work for recipients clicking through from an email.
 
 | Route | What it's for |
 | --- | --- |
-| `/` | Dashboard — the prospecting search bar, live counts, pipeline, top prospects |
+| `/` | Dashboard — target, revenue, pipeline, what's waiting, and the coach |
 | `/businesses` | The database: filter by status, region, industry, score, contactability |
 | `/businesses/{id}` | One business: details, score breakdown, contacts, drafts, timeline |
 | `/prospect` | Pick a source, run a search, see what came back |
-| `/campaigns` | The subject and body being sent, with a live merge preview |
+| `/review` | The queue: one business at a time, and the masthead alignment tab |
+| `/crm` | The kanban board — drag a deal from one stage to the next |
+| `/addresses` | The ones with a website but no email, for going looking |
 | `/outbox` | Drafts waiting for approval, approved messages waiting to send, sent history |
 | `/suppressions` | Everyone permanently excluded from outreach |
 | `/unsubscribe` | The public unsubscribe page linked from every email |
+
+## The coach
+
+The dashboard's third column is an advisor. It reads the live pipeline —
+target and gap, revenue, what is sitting at each stage, what has gone cold,
+which trades have replied and signed — and offers three things to do next,
+best first. Underneath it is a chat box that answers questions against the
+same figures.
+
+Three rules make it safe to act on:
+
+- **It never invents a number.** Claude is handed a brief built from the
+  database and told those are the only figures it may use, so every claim can
+  be checked against the dashboard it sits on.
+- **It never invents a link.** A suggestion names one of the screens in
+  `coach.FOCUS`; the app owns the URL. A made-up path is impossible.
+- **It works without a key.** With no `ANTHROPIC_API_KEY` the same three come
+  out of arithmetic on the same brief, and the panel says which it is showing.
+  Only a model answer is cached, so a key arriving fixes the panel at once
+  rather than waiting for the pipeline to move.
+
+Advice is cached against a fingerprint of the figures that would change it, so
+the page can poll without spending a model call on an afternoon where nothing
+happened.
 
 ## Prospecting sources
 
@@ -145,6 +171,7 @@ pearch-outreach/
 ├── enrich.py           website scrape for email/phone/socials/industry, ABR lookup
 ├── scoring.py          the 0-100 fit score
 ├── outreach.py         drafting (Anthropic SDK), campaigns, approval, sending
+├── coach.py            the dashboard's three suggestions and its sounding board
 ├── util.py             URL/email/phone/address normalising
 ├── sources/            prospecting sources (google_places, csv, sample)
 ├── templates/          Jinja2 pages

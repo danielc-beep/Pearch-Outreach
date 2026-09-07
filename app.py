@@ -36,6 +36,7 @@ import target
 import worklist
 import backup
 import crm
+import coach
 import sources
 import auth
 from auth import PasswordMiddleware
@@ -219,7 +220,6 @@ def home(request: Request) -> HTMLResponse:
         trades=db.industry_performance(),
         activity=data["activity"],
         funnel=data["funnel"],
-        mastheads_by_count=db.masthead_counts()[:3],
         sources=infos,
         live_source=live,
         default_source=preferred_source(infos),
@@ -227,6 +227,8 @@ def home(request: Request) -> HTMLResponse:
         target=data["target"],
         conversion=data["conversion"],
         next_step=worklist.next_step(bool(stats["total"])),
+        coach=coach.preview(),
+        coach_live=bool(ANTHROPIC_API_KEY),
     )
 
 
@@ -816,6 +818,29 @@ def api_dashboard() -> JSONResponse:
     seconds instead of the next time somebody presses refresh.
     """
     return JSONResponse(_dashboard_payload())
+
+
+class CoachTurn(BaseModel):
+    """One question, plus as much of the conversation as the page is holding."""
+    question: str
+    history: list[dict[str, str]] = Field(default_factory=list)
+
+
+@app.get("/api/coach/suggestions")
+def api_coach_suggestions(force: bool = False) -> JSONResponse:
+    """
+    Three things to do next. Asked for by the page after it has drawn.
+
+    The dashboard renders the cached advice immediately and then calls this,
+    so a model call never sits between someone and their numbers.
+    """
+    return JSONResponse(coach.suggestions(force=force))
+
+
+@app.post("/api/coach/ask")
+def api_coach_ask(turn: CoachTurn) -> JSONResponse:
+    """The sounding board: a question answered against the live pipeline."""
+    return JSONResponse(coach.ask(turn.question, turn.history))
 
 
 @app.get("/health")

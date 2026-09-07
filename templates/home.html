@@ -193,20 +193,32 @@
       </ol>
     </section>
 
-    <section class="dash-col">
-      <div class="col-head"><h2>Coverage</h2><a class="linkish" href="/review/align">Align the rest</a></div>
-      <div class="cover-group">Mastheads</div>
-      <div class="row">
-        {% for m in mastheads_by_count %}
-        <a class="pill" href="/businesses?masthead={{ m.masthead|urlencode }}">{{ masthead_name(m.masthead)|masthead_label }} · {{ m.n }}</a>
-        {% else %}<span class="muted small">Nothing aligned yet.</span>{% endfor %}
+    <section class="dash-col coach" id="coach">
+      <div class="col-head">
+        <h2>Coach</h2>
+        <span class="coach-source" id="coach-source" data-source="{{ coach.source }}">{{ 'thinking…' if coach_live else 'from your figures' }}</span>
       </div>
-      <div class="cover-group">Industries</div>
-      <div class="row">
-        {% for i in stats.top_industries[:3] %}
-        <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
-        {% else %}<span class="muted small">Nothing yet.</span>{% endfor %}
-      </div>
+      <ol class="coach-list" id="coach-list">
+        {% for s in coach.suggestions %}
+        <li class="coach-item is-{{ s.urgency }}">
+          <b>{{ s.headline }}</b>
+          <p>{{ s.why }}</p>
+          <a class="linkish" href="{{ s.url }}">{{ s.action }} →</a>
+        </li>
+        {% endfor %}
+      </ol>
+
+      <div class="coach-chat" id="coach-chat" hidden></div>
+
+      <form class="coach-ask" id="coach-ask" autocomplete="off">
+        <input id="coach-q" type="text" maxlength="2000"
+               placeholder="Ask the coach — what should I do about Contacted?">
+        <button class="btn small" type="submit">Ask</button>
+      </form>
+      {% if not coach_live %}
+      <p class="muted small">Chat needs an Anthropic API key. The suggestions above are
+        worked out from your own numbers and do not.</p>
+      {% endif %}
     </section>
 
     <section class="dash-col dash-wide">
@@ -426,12 +438,20 @@
     amountEl.addEventListener('input', preview);
     document.getElementById('t-period').addEventListener('change', preview);
 
-    edit.addEventListener('click', function () {
+    function openEditor() {
       form.hidden = false;
       edit.hidden = true;
       preview();
       amountEl.focus();
       amountEl.select();
+    }
+    edit.addEventListener('click', openEditor);
+    // The coach can suggest setting a target, and its link lands here. A link
+    // that only scrolls to the number it is complaining about would be a
+    // suggestion that does not do the thing it suggests.
+    if (window.location.hash === '#target') openEditor();
+    window.addEventListener('hashchange', function () {
+      if (window.location.hash === '#target') openEditor();
     });
     document.getElementById('t-cancel').addEventListener('click', function () {
       form.hidden = true; edit.hidden = false;
@@ -445,6 +465,100 @@
       } catch (err) { previewEl.textContent = err.message; }
     });
   }
+
+  // ---------- The coach ----------
+  // The panel is rendered from cache on the server so it is never blank, then
+  // asked again here. Repeat asks are cheap: the server only spends a model
+  // call when the pipeline has actually moved, so polling costs nothing on a
+  // quiet afternoon and refreshes itself the moment something changes.
+  (function () {
+    var list = document.getElementById('coach-list');
+    var source = document.getElementById('coach-source');
+    var chat = document.getElementById('coach-chat');
+    var form = document.getElementById('coach-ask');
+    var box = document.getElementById('coach-q');
+    if (!list || !form) return;
+
+    var shown = null;
+    var LIVE = {{ 'true' if coach_live else 'false' }};
+
+    function label(data) {
+      if (data.source === 'claude') return 'Claude · ' + ago(data.at);
+      return 'from your figures';
+    }
+
+    function draw(data) {
+      if (data.fingerprint === shown && source.dataset.source === data.source) {
+        source.textContent = label(data);
+        return;
+      }
+      shown = data.fingerprint;
+      source.dataset.source = data.source;
+      source.textContent = label(data);
+      list.innerHTML = data.suggestions.map(function (s) {
+        return '<li class="coach-item is-' + esc(s.urgency) + '">' +
+               '<b>' + esc(s.headline) + '</b>' +
+               '<p>' + esc(s.why) + '</p>' +
+               '<a class="linkish" href="' + esc(s.url) + '">' + esc(s.action) + ' &rarr;</a>' +
+               '</li>';
+      }).join('');
+      if (!reduce) {
+        list.querySelectorAll('.coach-item').forEach(function (li, i) {
+          li.style.animationDelay = (i * 70) + 'ms';
+          li.classList.add('js-enter');
+        });
+      }
+    }
+
+    async function pull() {
+      try {
+        var res = await fetch('/api/coach/suggestions', {headers: {'Accept': 'application/json'}});
+        if (!res.ok) return;
+        draw(await res.json());
+      } catch (e) { /* the server-rendered three stay up */ }
+    }
+
+    if (LIVE) source.textContent = 'thinking…';
+    pull();
+    window.setInterval(pull, 60000);
+
+    // The sounding board. History lives here rather than on the server: it is
+    // one person thinking out loud on one screen, and it should not outlive
+    // the tab or leak into somebody else's dashboard.
+    var history = [];
+
+    function bubble(role, text, pending) {
+      var div = document.createElement('div');
+      div.className = 'coach-turn is-' + role + (pending ? ' is-pending' : '');
+      div.textContent = text;
+      chat.hidden = false;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+      var question = box.value.trim();
+      if (!question) return;
+      box.value = '';
+      bubble('you', question);
+      var waiting = bubble('coach', 'Thinking…', true);
+      try {
+        var reply = await window.postJSON('/api/coach/ask',
+          {question: question, history: history});
+        waiting.classList.remove('is-pending');
+        waiting.textContent = reply.reply;
+        history.push({role: 'user', text: question});
+        history.push({role: 'assistant', text: reply.reply});
+        history = history.slice(-12);
+      } catch (err) {
+        waiting.classList.remove('is-pending');
+        waiting.textContent = 'That did not go through: ' + err.message;
+      }
+      chat.scrollTop = chat.scrollHeight;
+    });
+  })();
 
   window.setInterval(refresh, EVERY);
   document.addEventListener('visibilitychange', function () {
