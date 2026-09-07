@@ -51,6 +51,30 @@
       {% else %}
       <button class="linkish" id="edit-target" type="button">Set a revenue target →</button>
       {% endif %}
+
+      {# A prompt box takes an extra zero without comment, and a target of a
+         billion looks exactly like a target of a million until every figure
+         on the page is wrong. This shows the number back, formatted, before
+         it is saved. #}
+      <form class="target-edit" id="target-edit" hidden>
+        <label class="target-field">
+          <span>Target</span>
+          <input type="text" inputmode="numeric" id="t-amount"
+                 value="{{ target.amount|round|int if target.set else '' }}"
+                 placeholder="150000" autocomplete="off" />
+        </label>
+        <label class="target-field">
+          <span>Per</span>
+          <select id="t-period">
+            {% for p in ['month', 'quarter', 'year'] %}
+            <option value="{{ p }}" {{ 'selected' if target.period == p }}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <output class="target-preview" id="t-preview"></output>
+        <button class="btn btn-sm btn-primary" type="submit">Save</button>
+        <button class="btn btn-sm" type="button" id="t-cancel">Cancel</button>
+      </form>
     </div>
     <div class="dash-live">
       <span class="live-dot" aria-hidden="true"></span>
@@ -371,22 +395,45 @@
     });
   }
 
-  // Setting the target. A prompt is the right amount of ceremony for one
-  // number that changes twice a year.
+  // Setting the target.
   var edit = document.getElementById('edit-target');
-  if (edit) {
-    edit.addEventListener('click', async function () {
-      var amount = window.prompt(
-        'Revenue target for the period, in dollars:', {{ target.amount|round|int }});
-      if (amount === null) return;
-      var period = window.prompt('Per month, quarter or year?', '{{ target.period }}');
-      if (period === null) return;
+  var form = document.getElementById('target-edit');
+  if (edit && form) {
+    var amountEl = document.getElementById('t-amount');
+    var previewEl = document.getElementById('t-preview');
+
+    function typed() {
+      return Number(String(amountEl.value).replace(/[^0-9.]/g, '')) || 0;
+    }
+    // The whole point: you see what the number is before you save it, so an
+    // extra zero is obvious rather than arithmetically invisible.
+    function preview() {
+      var value = typed();
+      previewEl.textContent = value
+        ? money.format(value) + ' per ' + document.getElementById('t-period').value
+        : '';
+      previewEl.classList.toggle('is-big', value >= 10000000);
+    }
+    amountEl.addEventListener('input', preview);
+    document.getElementById('t-period').addEventListener('change', preview);
+
+    edit.addEventListener('click', function () {
+      form.hidden = false;
+      edit.hidden = true;
+      preview();
+      amountEl.focus();
+      amountEl.select();
+    });
+    document.getElementById('t-cancel').addEventListener('click', function () {
+      form.hidden = true; edit.hidden = false;
+    });
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
       try {
         await window.postJSON('/api/target', {
-          amount: Number(String(amount).replace(/[^0-9.]/g, '')),
-          period: String(period).trim().toLowerCase()});
+          amount: typed(), period: document.getElementById('t-period').value});
         window.location.reload();
-      } catch (err) { window.alert(err.message); }
+      } catch (err) { previewEl.textContent = err.message; }
     });
   }
 

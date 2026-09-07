@@ -164,3 +164,34 @@ def test_the_old_activity_log_is_recovered(client):
 def test_recovery_does_not_run_twice(client):
     business_id = _walk(["qualified"])
     assert db.backfill_moves() == 0        # there are already rows
+
+
+def test_the_target_is_set_from_a_form_not_a_prompt(client):
+    """
+    A prompt box takes an extra zero without comment, and a billion looks
+    exactly like a million until every figure on the page is wrong.
+    """
+    body = client.get("/").text
+    assert 'id="target-edit"' in body
+    assert 'id="t-preview"' in body
+    assert "window.prompt(" not in body.split("target-edit")[1][:2000]
+
+
+def test_the_form_carries_the_current_value_to_correct(client):
+    target.set_target(1_000_000_000, "year")
+    body = client.get("/").text
+    assert 'id="t-amount"' in body and 'value="1000000000"' in body
+
+
+def test_a_billion_is_arithmetically_honest_even_when_it_is_a_typo(client):
+    """
+    The maths was never wrong — the input was. This pins the sums so a real
+    bug here would not hide behind the assumption that it is the typo again.
+    """
+    target.set_target(1_000_000_000, "year")
+    _won(8675, f"{date.today().year}-01-05T10:00:00+00:00")
+    progress = target.progress(today=date(2026, 9, 7))
+    assert progress["days_left"] == 115
+    assert round(progress["expected"]) == 684931507
+    assert round(progress["ahead_by"]) == -684922832
+    assert round(progress["needed_weekly"]) == 62499458

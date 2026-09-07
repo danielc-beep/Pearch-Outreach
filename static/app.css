@@ -1194,3 +1194,22 @@ table.bare td.n { font-variant-numeric: tabular-nums; }
   color: var(--cyan-bright); font-variant-numeric: tabular-nums;
 }
 .rate.is-win { color: var(--success); }
+
+/* Setting the target, in place. */
+.target-edit {
+  display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 6px;
+}
+.target-field { display: flex; flex-direction: column; gap: 2px; }
+.target-field span {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.target-field input { width: 120px; }
+.target-field select { width: 100px; }
+.target-preview {
+  font-size: 12.5px; font-weight: 700; color: var(--cyan-bright);
+  font-variant-numeric: tabular-nums; padding-bottom: 7px;
+}
+/* Ten million or more from an outreach team is almost certainly a stray
+   zero, so it is coloured like a warning rather than like a figure. */
+.target-preview.is-big { color: var(--warning); }
