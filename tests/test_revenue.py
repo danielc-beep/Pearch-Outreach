@@ -111,3 +111,73 @@ def test_a_card_with_no_value_offers_to_take_one(client):
     _worth("Contacted Co", "contacted", masthead="westernadvocate.com.au",
            email="sarah@x.com.au", website="https://x.com.au")
     assert "add $" in client.get("/crm").text
+
+
+# ---------- Which trades are working ----------
+# "Best of the list" ranked by fit score, and with scoring fixed almost
+# everything scores in the nineties — so it ranked almost nothing.
+
+def _trade(name, industry, status, value=None):
+    fields = {"name": name, "industry": industry, "source": "csv", "status": status,
+              "suburb": "Bathurst", "rating": 4.6, "review_count": 30}
+    if value:
+        fields["deal_value"] = value
+    business_id, _ = db.upsert_business(fields)
+    return business_id
+
+
+def test_a_trade_is_measured_by_what_came_of_it(client):
+    for i in range(6):
+        _trade(f"P{i}", "Plumber", "contacted")
+    _trade("P6", "Plumber", "replied")
+    _trade("P7", "Plumber", "won", 9000)
+    rows = {r["industry"]: r for r in db.industry_performance()}
+    plumber = rows["Plumber"]
+    assert plumber["prospects"] == 8
+    assert plumber["reached_out"] == 8          # contacted, replied and won all count
+    assert plumber["replied"] == 2              # a win replied first
+    assert plumber["won"] == 1
+    assert plumber["revenue"] == 9000
+
+
+def test_a_rate_needs_a_base_worth_quoting(client):
+    """Two replies out of three is three data points, not a 67% reply rate."""
+    for i in range(3):
+        _trade(f"S{i}", "Solicitor", "replied")
+    solicitor = {r["industry"]: r for r in db.industry_performance()}["Solicitor"]
+    assert solicitor["reply_rate"] is None
+    assert solicitor["thin"] is True
+    assert solicitor["replied"] == 3            # the count is still shown
+
+
+def test_the_rate_appears_once_the_base_is_there(client):
+    for i in range(5):
+        _trade(f"D{i}", "Dentist", "contacted")
+    _trade("D5", "Dentist", "replied")
+    dentist = {r["industry"]: r for r in db.industry_performance()}["Dentist"]
+    assert dentist["reply_rate"] is not None
+    assert round(dentist["reply_rate"]) == 17   # 1 of 6
+
+
+def test_unprospected_trades_do_not_crowd_out_working_ones(client):
+    _trade("Idle", "Veterinarian", "new")
+    _trade("Earner", "Plumber", "won", 9000)
+    order = [r["industry"] for r in db.industry_performance()]
+    assert order.index("Plumber") < order.index("Veterinarian")
+
+
+def test_a_business_with_no_industry_is_still_counted(client):
+    _trade("Nameless", "", "contacted")
+    assert "Unsorted" in {r["industry"] for r in db.industry_performance()}
+
+
+def test_the_dashboard_shows_the_trades_not_the_fit_ranking(client):
+    _trade("Earner", "Plumber", "won", 9000)
+    body = client.get("/").text
+    assert "Which trades are working" in body
+    assert "Best of the list" not in body
+    assert "Plumber" in body
+
+
+def test_the_empty_state_says_what_fills_it(client):
+    assert "Nothing pitched yet" in client.get("/").text

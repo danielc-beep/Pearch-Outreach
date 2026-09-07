@@ -138,7 +138,8 @@
         {% endfor %}
       </ul>
       {% else %}
-      <p class="muted" style="margin:6px 0 12px">{{ next_step.detail }}</p>
+      <h3 style="margin:8px 0 4px;font-size:15px">{{ next_step.title }}</h3>
+      <p class="muted" style="margin:0 0 12px">{{ next_step.detail }}</p>
       <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
       {% endif %}
     </section>
@@ -178,22 +179,32 @@
     </section>
 
     <section class="dash-col dash-wide">
-      <div class="col-head"><h2>Best of the list</h2><a class="linkish" href="/businesses">See all</a></div>
+      <div class="col-head">
+        <h2>Which trades are working</h2>
+        <span class="muted small">rates shown once at least five have been pitched</span>
+      </div>
       <div class="bare-scroll">
       <table class="bare">
-        <thead><tr><th>Business</th><th>Industry</th><th>Where</th><th>Value</th><th>Fit</th><th>Stage</th></tr></thead>
+        <thead><tr>
+          <th>Industry</th><th class="n">Prospects</th><th class="n">Pitched</th>
+          <th class="n">Replied</th><th class="n">Won</th>
+          <th class="n">Revenue</th><th class="n">Pipeline</th>
+        </tr></thead>
         <tbody>
-          {% for b in top_businesses %}
+          {% for t in trades %}
           <tr>
-            <td><a href="/businesses/{{ b.id }}"><strong>{{ b.name }}</strong></a></td>
-            <td class="sub">{{ b.industry or b.category or '—' }}</td>
-            <td class="sub">{{ b.suburb or b.region or '—' }}</td>
-            <td class="mono">{{ ('$' ~ '{:,.0f}'.format(b.deal_value)) if b.deal_value else '—' }}</td>
-            <td>{{ score_widget(b.fit_score) }}</td>
-            <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
+            <td><a href="/businesses?industry={{ t.industry|urlencode }}"><strong>{{ t.industry }}</strong></a></td>
+            <td class="n sub">{{ t.prospects }}</td>
+            <td class="n sub">{{ t.reached_out }}</td>
+            <td class="n">{{ t.replied }}{% if t.reply_rate is not none %}
+              <span class="rate">{{ '{:.0f}'.format(t.reply_rate) }}%</span>{% endif %}</td>
+            <td class="n">{{ t.won }}{% if t.win_rate is not none %}
+              <span class="rate is-win">{{ '{:.0f}'.format(t.win_rate) }}%</span>{% endif %}</td>
+            <td class="n mono">{{ ('$' ~ '{:,.0f}'.format(t.revenue)) if t.revenue else '—' }}</td>
+            <td class="n mono sub">{{ ('$' ~ '{:,.0f}'.format(t.pipeline)) if t.pipeline else '—' }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="6" class="empty">Nothing in the database yet.</td></tr>
+          <tr><td colspan="7" class="empty">Nothing pitched yet. This fills in as emails go out.</td></tr>
           {% endfor %}
         </tbody>
       </table>

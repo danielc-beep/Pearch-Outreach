@@ -1153,3 +1153,13 @@ table.bare .sub { color: var(--text-muted); }
   .convert-basis { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .target-bar i { transition: none; } }
+
+/* Numbers right-aligned so the columns can be compared down the page, and
+   the rate beside its count rather than in a column of its own. */
+table.bare th.n, table.bare td.n { text-align: right; }
+table.bare td.n { font-variant-numeric: tabular-nums; }
+.rate {
+  display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700;
+  color: var(--cyan-bright); font-variant-numeric: tabular-nums;
+}
+.rate.is-win { color: var(--success); }

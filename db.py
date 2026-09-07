@@ -698,6 +698,58 @@ def revenue(default_value: float = 0.0) -> dict[str, Any]:
             "default_value": float(default_value)}
 
 
+# ---------- Which trades actually work ----------
+# "Best of the list" ranked by fit score, and now that scoring is fixed most
+# things score in the nineties, so it ranked almost nothing. This is the
+# question worth the space instead: of the trades we have pitched, which ones
+# answer, and which ones sign.
+
+REACHED_OUT = ("contacted", "replied", "won", "lost")
+
+
+def industry_performance(min_base: int = 5, limit: int = 8) -> list[dict[str, Any]]:
+    """
+    Every industry we have pitched, by what came of it.
+
+    Rates are left off below `min_base`. Two replies out of three is not a
+    67% reply rate, it is three data points, and a table that prints it as a
+    rate invites a decision the numbers cannot support.
+    """
+    marks = ", ".join("?" for _ in REACHED_OUT)
+    rows = get_conn().execute(
+        f"SELECT COALESCE(NULLIF(TRIM(industry), ''), NULLIF(TRIM(category), ''), 'Unsorted') AS trade, "
+        f"  COUNT(*) AS prospects, "
+        f"  SUM(CASE WHEN status IN ({marks}) THEN 1 ELSE 0 END) AS reached_out, "
+        f"  SUM(CASE WHEN status IN ('replied','won') THEN 1 ELSE 0 END) AS replied, "
+        f"  SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) AS won, "
+        f"  COALESCE(SUM(CASE WHEN status = 'won' THEN deal_value END), 0) AS revenue, "
+        f"  COALESCE(SUM(CASE WHEN status IN ('qualified','contacted','replied') "
+        f"                    THEN deal_value END), 0) AS pipeline "
+        f"FROM businesses GROUP BY trade", list(REACHED_OUT)).fetchall()
+
+    out = []
+    for row in rows:
+        base = int(row["reached_out"])
+        out.append({
+            "industry": row["trade"],
+            "prospects": int(row["prospects"]),
+            "reached_out": base,
+            "replied": int(row["replied"]),
+            "won": int(row["won"]),
+            "revenue": float(row["revenue"] or 0),
+            "pipeline": float(row["pipeline"] or 0),
+            "reply_rate": (100.0 * int(row["replied"]) / base) if base >= min_base else None,
+            "win_rate": (100.0 * int(row["won"]) / base) if base >= min_base else None,
+            "thin": base < min_base,
+        })
+    # Revenue first, then wins, then how many have been pitched — so a trade
+    # that has earned nothing yet but is being worked still surfaces above one
+    # nobody has touched.
+    out.sort(key=lambda r: (r["revenue"], r["won"], r["reached_out"], r["prospects"]),
+             reverse=True)
+    return out[:limit]
+
+
 def masthead_counts() -> list[dict[str, Any]]:
     """How many prospects sit under each masthead, most first."""
     rows = get_conn().execute(

@@ -193,7 +193,6 @@ def page(request: Request, name: str, **context: Any) -> HTMLResponse:
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
-    top, _ = db.list_businesses(sort="score", limit=5)
     infos = sources.all_sources()
     live = next((s.label for s in infos if s.available and s.key not in ("sample", "csv")), "")
     # A source that can be searched, as opposed to a CSV you already have.
@@ -217,7 +216,7 @@ def home(request: Request) -> HTMLResponse:
         running=data["running"],
         queue_count=data["queue"],
         contactable_pct=round(100 * stats["with_email"] / stats["total"]) if stats["total"] else 0,
-        top_businesses=top,
+        trades=db.industry_performance(),
         activity=data["activity"],
         funnel=data["funnel"],
         mastheads_by_count=db.masthead_counts()[:3],
