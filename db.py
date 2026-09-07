@@ -168,6 +168,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_status TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN masthead TEXT"),
     ("businesses", "ALTER TABLE businesses ADD COLUMN contact_url TEXT"),
+    # What this one is worth. Null means nobody has said — which is not the
+    # same as nothing, so the two are counted separately everywhere.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN deal_value REAL"),
 ]
 
 
@@ -262,7 +265,7 @@ BUSINESS_FIELDS = (
     "industry", "category", "size_band", "rating", "review_count",
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
-    "notes", "website_status", "masthead", "contact_url",
+    "notes", "website_status", "masthead", "contact_url", "deal_value",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -458,6 +461,42 @@ def count_without_masthead() -> int:
         "SELECT COUNT(*) AS n FROM businesses WHERE masthead IS NULL OR masthead = ''"
     ).fetchone()
     return int(row["n"])
+
+
+# ---------- Money ----------
+# Two numbers a sales manager asks for before any other: what is in the
+# pipeline, and what has been won. Both are sums of deal_value, split by the
+# stage the business is standing at.
+
+OPEN_STAGES = ("qualified", "contacted", "replied")
+
+
+def revenue(default_value: float = 0.0) -> dict[str, Any]:
+    """
+    Pipeline and closed-won, plus how much of it is guesswork.
+
+    `default_value` fills in for businesses nobody has priced. It is reported
+    separately rather than folded in silently: a pipeline number is worth
+    having only if you know how much of it somebody actually agreed to.
+    """
+    conn = get_conn()
+    marks = ", ".join("?" for _ in OPEN_STAGES)
+
+    def totals(clause: str, args: list[Any]) -> dict[str, Any]:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS n, "
+            f"       SUM(CASE WHEN deal_value IS NOT NULL THEN 1 ELSE 0 END) AS priced, "
+            f"       COALESCE(SUM(deal_value), 0) AS total "
+            f"FROM businesses WHERE {clause}", args).fetchone()
+        priced = int(row["priced"] or 0)
+        unpriced = int(row["n"]) - priced
+        return {"count": int(row["n"]), "priced": priced, "unpriced": unpriced,
+                "set_total": float(row["total"] or 0.0),
+                "total": float(row["total"] or 0.0) + unpriced * float(default_value)}
+
+    return {"pipeline": totals(f"status IN ({marks})", list(OPEN_STAGES)),
+            "won": totals("status = 'won'", []),
+            "default_value": float(default_value)}
 
 
 def masthead_counts() -> list[dict[str, Any]]:
@@ -834,6 +873,20 @@ def businesses_by_ids(ids: list[int]) -> list[dict[str, Any]]:
         ids,
     ).fetchall()
     return [row_to_dict(r) for r in rows]
+
+
+def recent_activity(limit: int = 10) -> list[dict[str, Any]]:
+    """
+    The last things that happened, newest first, with the business named.
+
+    A dashboard that only shows totals looks the same whether the app is busy
+    or asleep. This is the part that shows it is alive.
+    """
+    rows = get_conn().execute(
+        "SELECT a.created_at, a.kind, a.detail, b.id AS business_id, b.name "
+        "FROM activities a LEFT JOIN businesses b ON b.id = a.business_id "
+        "ORDER BY a.id DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
 
 
 def recent_runs(limit: int = 10) -> list[dict[str, Any]]:

@@ -8,7 +8,9 @@ def test_every_page_renders(client, sample_run):
 
 
 def test_home_shows_an_empty_state_before_anything_is_prospected(client):
-    assert "database is empty" in client.get("/").text
+    body = client.get("/").text
+    assert "Nothing in the database yet" in body
+    assert "Find businesses" in body          # and where to go about it
 
 
 def test_prospecting_through_the_api(client):
@@ -440,3 +442,30 @@ def test_highest_scoring_businesses_are_enriched_first(client, monkeypatch):
 
     result = client.post("/api/enrich/missing?limit=1").json()
     assert result["businesses"][0]["name"] == "High"
+
+
+# ---------- The dashboard reads; it does not search ----------
+
+def test_the_dashboard_leads_with_the_money(client):
+    body = client.get("/").text
+    assert "Pipeline revenue" in body
+    assert "Closed won" in body
+
+
+def test_the_dashboard_polls_for_itself(client):
+    """
+    A dashboard that only redraws on refresh looks the same whether the app
+    is busy or asleep.
+    """
+    assert "/api/dashboard" in client.get("/").text
+
+
+def test_the_dashboard_endpoint_answers_with_everything_on_the_page(client):
+    data = client.get("/api/dashboard").json()
+    assert set(data) >= {"at", "stats", "revenue", "board", "funnel", "activity"}
+    assert set(data["revenue"]) >= {"pipeline", "won"}
+
+
+def test_searching_moved_to_prospecting(client):
+    assert "home-search" not in client.get("/").text
+    assert "home-search" in client.get("/prospect").text

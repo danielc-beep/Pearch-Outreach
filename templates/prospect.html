@@ -6,6 +6,61 @@
   <section class="section">
     <div class="eyebrow">Prospect</div>
     <h2>Find businesses</h2>
+
+    <!-- The quick way, moved here off the dashboard: a trade, a town and a
+         masthead. The fuller form below is for a source that wants more. -->
+    <form class="searchbar" id="home-search" autocomplete="off">
+      <div class="field">
+        <label for="hs-industry">Industry</label>
+        <input id="hs-industry" name="industry" type="text" placeholder="mortgage brokers" required />
+      </div>
+      <div class="field">
+        <label for="hs-location">Location</label>
+        <input id="hs-location" name="location" type="text" placeholder="Newcastle NSW" required />
+      </div>
+      <div class="field field-masthead">
+        <label for="hs-masthead">Masthead</label>
+        <select data-search id="hs-masthead" name="masthead">
+          <option value="">Australian Community Media</option>
+          {% for group in masthead_groups %}
+          <optgroup label="{{ group.state }}">
+            {% for t in group.titles %}
+            <option value="{{ t.site }}">{{ t.name|masthead_label }}</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field field-source">
+        <label for="hs-source">Source</label>
+        <select id="hs-source" name="source">
+          {% for s in sources if s.key != 'csv' and s.available %}
+          <option value="{{ s.key }}" {{ 'selected' if s.key == default_source }}>{{ s.label }}</option>
+          {% else %}
+          <option value="">None configured</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" id="hs-go" {{ 'disabled' if not can_search }}>Prospect</button>
+    </form>
+    <p class="search-hint" id="hs-hint">
+      {% if live_source %}Live search via {{ live_source }}.
+      {% elif can_search %}No prospecting API key set, so this runs on
+      <strong>sample data</strong> — everything works, the businesses are fictional.
+      {% else %}<strong>Nothing is set up to search with.</strong> Set
+      <code>GOOGLE_PLACES_API_KEY</code> in the environment to search Google Places.
+      {% endif %}
+      Already have a list? <a href="/prospect?source=csv">Import a CSV</a>.
+    </p>
+    <p class="search-hint" id="hs-hint" style="text-align:center">
+      {% if live_source %}Live search via {{ live_source }}.
+      {% elif can_search %}No prospecting API key set, so this runs on
+      <strong>sample data</strong> — everything works, the businesses are fictional.
+      {% else %}<strong>Nothing is set up to search with.</strong> Set
+      <code>GOOGLE_PLACES_API_KEY</code> in the environment to search Google Places.
+      {% endif %}
+    </p>
+
     <p class="lede" style="margin-bottom:32px">Pick a source, describe who you're after, and it finds
       them, visits their websites for contact details, scores them, and skips anyone already on file.</p>
 
@@ -112,6 +167,62 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+  // The home search bar runs a real prospecting job and then drops the user
+  // on the prospecting page with the results already loaded.
+  document.getElementById('home-search').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('hs-go');
+    const hint = document.getElementById('hs-hint');
+    const body = {
+      source: document.getElementById('hs-source').value,
+      industry: document.getElementById('hs-industry').value.trim(),
+      location: document.getElementById('hs-location').value.trim(),
+      masthead: document.getElementById('hs-masthead').value,
+      limit: 40,
+    };
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    hint.textContent = 'Searching, enriching and scoring — this can take up to a minute.';
+    try {
+      const data = await window.postJSON('/api/prospect/run', body);
+      window.location = '/prospect?run=' + data.run_id;
+    } catch (err) {
+      hint.innerHTML = '<span style="color:var(--danger)">' + err.message + '</span>';
+      btn.disabled = false;
+      btn.textContent = 'Prospect';
+    }
+  });
+
+  // Typing a location preselects its masthead, so the common case needs no
+  // choosing at all. A deliberate pick is never overwritten: once someone has
+  // chosen a paper themselves, the location box stops touching it.
+  (function () {
+    const location = document.getElementById('hs-location');
+    const picker = document.getElementById('hs-masthead');
+    if (!location || !picker) return;
+    let chosenByHand = false;
+    let timer = null;
+
+    picker.addEventListener('change', () => { chosenByHand = true; });
+
+    location.addEventListener('input', () => {
+      if (chosenByHand) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        const typed = location.value.trim();
+        if (!typed) { picker.value = ''; return; }
+        try {
+          const r = await fetch('/api/masthead/match?location=' + encodeURIComponent(typed));
+          if (!r.ok) return;
+          const m = await r.json();
+          if (!chosenByHand) picker.value = m.site || '';
+        } catch (err) { /* the picker still works by hand */ }
+      }, 350);
+    });
+  })();
+
+</script>
 <script>
   const SOURCES = {{ sources_json }};
   const sourceKeyInput = document.getElementById('source-key');

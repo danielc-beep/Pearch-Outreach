@@ -39,6 +39,7 @@ import sources
 import auth
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, APP_USERNAME,
+                    DEFAULT_DEAL_VALUE,
                     DB_PATH, DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
@@ -183,7 +184,7 @@ def page(request: Request, name: str, **context: Any) -> HTMLResponse:
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request) -> HTMLResponse:
     stats = db.stats()
-    top, _ = db.list_businesses(sort="score", limit=8)
+    top, _ = db.list_businesses(sort="score", limit=5)
     infos = sources.all_sources()
     live = next((s.label for s in infos if s.available and s.key not in ("sample", "csv")), "")
     # A source that can be searched, as opposed to a CSV you already have.
@@ -197,9 +198,13 @@ def home(request: Request) -> HTMLResponse:
         nav="home",
         can_search=bool(searchable),
         stats=stats,
+        revenue=db.revenue(DEFAULT_DEAL_VALUE),
         contactable_pct=round(100 * stats["with_email"] / stats["total"]) if stats["total"] else 0,
         top_businesses=top,
-        runs=db.recent_runs(6),
+        runs=db.recent_runs(4),
+        activity=db.recent_activity(8),
+        funnel=crm.funnel(),
+        mastheads_by_count=db.masthead_counts()[:6],
         sources=infos,
         live_source=live,
         default_source=preferred_source(infos),
@@ -516,6 +521,12 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
         territory_groups=[{"name": name, "trades": trades}
                           for name, trades in prospect.TERRITORY_GROUPS],
         live_prospecting=any(s.available and s.key != "csv" and s.key != "sample" for s in infos),
+        # The quick search bar moved here from the dashboard and needs what it
+        # needed there. `sources` is already passed above.
+        live_source=next((s.label for s in infos
+                          if s.available and s.key not in ("sample", "csv")), ""),
+        default_source=preferred_source(infos),
+        can_search=any(s.available and s.key != "csv" for s in infos),
     )
 
 
@@ -552,7 +563,8 @@ def api_crm_column(stage: str, offset: int = 0, masthead: str = "",
                    "suburb": c.get("suburb") or c.get("region") or "",
                    "rating": c.get("rating"), "fit": c.get("fit_score"),
                    "masthead": mastheads.name_for(c.get("masthead") or ""),
-                   "days": c["days"], "cold": c["cold"]} for c in got["cards"]],
+                   "days": c["days"], "cold": c["cold"],
+                   "value": c.get("deal_value")} for c in got["cards"]],
     })
 
 
@@ -740,6 +752,27 @@ def do_unsubscribe(request: Request, email: str = Form(...)) -> HTMLResponse:
     return page(request, "unsubscribe.html", nav="", email=email, done=True)
 
 
+@app.get("/api/dashboard")
+def api_dashboard() -> JSONResponse:
+    """
+    Everything the dashboard counts, in one request.
+
+    The page polls this rather than being reloaded, so a run finishing in
+    another tab, or a colleague working the queue, shows up here within a few
+    seconds instead of the next time somebody presses refresh.
+    """
+    stats = db.stats()
+    money = db.revenue(DEFAULT_DEAL_VALUE)
+    return JSONResponse({
+        "at": db.now(),
+        "stats": stats,
+        "revenue": money,
+        "board": worklist.board(),
+        "funnel": crm.funnel(),
+        "activity": db.recent_activity(8),
+    })
+
+
 @app.get("/health")
 def health() -> dict[str, Any]:
     """
@@ -816,6 +849,7 @@ def api_businesses(q: str = "", status: str = "", region: str = "", industry: st
 
 class BusinessPatch(BaseModel):
     status: str | None = None
+    deal_value: float | None = None
     email: str | None = None
     phone: str | None = None
     notes: str | None = None
@@ -868,6 +902,9 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
         raise HTTPException(status_code=400, detail=f"Unknown status: {data['status']}")
     if data.get("masthead") and data["masthead"] not in mastheads.BY_SITE:
         raise HTTPException(status_code=400, detail=f"Unknown masthead: {data['masthead']}")
+    if "deal_value" in data and not (0 <= float(data["deal_value"]) <= 10_000_000):
+        raise HTTPException(status_code=400,
+                            detail="A deal value has to be between 0 and 10,000,000.")
     if data:
         db.update_business(business_id, data)
         db.log_activity(business_id, "updated", ", ".join(sorted(data)))

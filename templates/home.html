@@ -1,316 +1,302 @@
 {% extends "base.html" %}
-{% block title %}ACM Outreach Database — the Australian business database{% endblock %}
+{% block title %}Dashboard — {{ app_name }}{% endblock %}
 
 {% block body %}
-<section class="hero">
-  <div class="wrap">
-    <div class="eyebrow" style="justify-content:center;display:inline-flex">ACM Outreach Database</div>
-    <h1>Every Australian business worth<br class="hide-sm"> talking to, in <em>one database</em>.</h1>
-    <p class="hero-script"><span class="script">the trusted voice of regional Australia</span></p>
-    <p class="lede">Prospect a suburb and a trade, and it finds the businesses, scores them
-      against your ideal customer, and hands you the ones worth an email.</p>
+<div class="wrap dash">
 
-    <form class="searchbar" id="home-search" autocomplete="off">
-      <div class="field">
-        <label for="hs-industry">Industry</label>
-        <input id="hs-industry" name="industry" type="text" placeholder="mortgage brokers" required />
-      </div>
-      <div class="field">
-        <label for="hs-location">Location</label>
-        <input id="hs-location" name="location" type="text" placeholder="Newcastle NSW" required />
-      </div>
-      <div class="field field-masthead">
-        <label for="hs-masthead">Masthead</label>
-        <select data-search id="hs-masthead" name="masthead">
-          <option value="">Australian Community Media</option>
-          {% for group in masthead_groups %}
-          <optgroup label="{{ group.state }}">
-            {% for t in group.titles %}
-            <option value="{{ t.site }}">{{ t.name|masthead_label }}</option>
-            {% endfor %}
-          </optgroup>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="field field-source">
-        <label for="hs-source">Source</label>
-        <select id="hs-source" name="source">
-          {% for s in sources if s.key != 'csv' and s.available %}
-          <option value="{{ s.key }}" {{ 'selected' if s.key == default_source }}>{{ s.label }}</option>
-          {% else %}
-          <option value="">None configured</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" id="hs-go" {{ 'disabled' if not can_search }}>Prospect</button>
-    </form>
-    <p class="search-hint" id="hs-hint">
-      {% if live_source %}Live search via {{ live_source }}.
-      {% elif can_search %}No prospecting API key set, so this runs on
-      <strong>sample data</strong> — everything works, the businesses are fictional.
-      {% else %}<strong>Nothing is set up to search with.</strong> Set
-      <code>GOOGLE_PLACES_API_KEY</code> in the environment to search Google Places.
-      {% endif %}
-      Already have a list? <a href="/prospect?source=csv">Import a CSV</a>.
-    </p>
+  <div class="dash-head">
+    <div>
+      <div class="eyebrow">Today</div>
+      <h1 class="dash-title">Where the book <em>stands</em></h1>
+    </div>
+    <div class="dash-live">
+      <span class="live-dot" aria-hidden="true"></span>
+      <span id="live-word">Live</span>
+      <span class="muted" id="live-ago">·  just now</span>
+    </div>
   </div>
-</section>
 
-<div class="wrap">
-  <!-- What to do next -->
-  <section class="section" style="margin-top:8px">
-    <div class="section-head">
-      <div>
-        <div class="eyebrow">Today</div>
-        <h2>What's <em>waiting</em></h2>
+  <!-- The money, first, because it is the question everything else serves. -->
+  <div class="kpis">
+    <a class="kpi kpi-money" href="/crm">
+      <div class="kpi-label">Pipeline revenue</div>
+      <div class="kpi-n" data-money id="k-pipeline">{{ revenue.pipeline.total|round|int }}</div>
+      <div class="kpi-sub" id="k-pipeline-sub">
+        {{ revenue.pipeline.count }} open
+        {%- if revenue.pipeline.unpriced %} · {{ revenue.pipeline.unpriced }} unpriced{% endif %}
       </div>
-      {% if board %}<a class="btn" href="/prospect">Find more businesses</a>{% endif %}
-    </div>
+    </a>
+    <a class="kpi kpi-won" href="/crm?stage=won">
+      <div class="kpi-label">Closed won</div>
+      <div class="kpi-n" data-money id="k-won">{{ revenue.won.total|round|int }}</div>
+      <div class="kpi-sub" id="k-won-sub">{{ revenue.won.count }} signed</div>
+    </a>
+    <a class="kpi" href="/businesses">
+      <div class="kpi-label">Businesses</div>
+      <div class="kpi-n" id="k-total">{{ stats.total }}</div>
+      <div class="kpi-sub" id="k-new">+{{ stats.added_7d }} in 7 days</div>
+    </a>
+    <a class="kpi" href="/businesses?has_email=1">
+      <div class="kpi-label">Contactable</div>
+      <div class="kpi-n" id="k-email">{{ stats.with_email }}</div>
+      <div class="kpi-sub" id="k-emailpct">{{ contactable_pct }}% of the database</div>
+    </a>
+    <a class="kpi" href="/review">
+      <div class="kpi-label">Waiting on you</div>
+      <div class="kpi-n" id="k-queue">{{ (board | selectattr('key', 'equalto', 'review') | list | first).count if board | selectattr('key', 'equalto', 'review') | list else 0 }}</div>
+      <div class="kpi-sub">to decide</div>
+    </a>
+    <a class="kpi" href="/outbox">
+      <div class="kpi-label">Emails sent</div>
+      <div class="kpi-n" id="k-sent">{{ stats.sent }}</div>
+      <div class="kpi-sub" id="k-approved">{{ stats.approved }} approved and waiting</div>
+    </a>
+  </div>
 
-    {% if board %}
-    <div class="board">
-      {% for item in board %}
-      <a class="board-item {{ 'is-' ~ item.tone if item.tone }}" href="{{ item.href }}">
-        <div class="board-n">{{ item.count }}</div>
-        <div class="board-text">
-          <div class="board-label">{{ item.label }}</div>
-          <div class="board-detail">{{ item.detail }}</div>
-        </div>
-        <span class="board-go">{{ item.action }} →</span>
+  <!-- The pipeline, as a bar, so a stage is one click away. -->
+  {% if funnel.total %}
+  <div class="dash-funnel">
+    <div class="funnel" role="img" aria-label="Businesses by pipeline stage" id="dash-funnel">
+      {% for s in funnel.stages %}{% if s.count %}
+      <a class="funnel-seg" href="/crm#col-{{ s.key }}" data-stage="{{ s.key }}"
+         style="--share:{{ '%.4f'|format(s.pct / 100) }};--tone:{{ s.colour }}"
+         title="{{ s.label }} — {{ s.count }}">
+        <span class="funnel-label">{{ s.label }}</span><span class="funnel-n">{{ s.count }}</span>
       </a>
-      {% endfor %}
+      {% endif %}{% endfor %}
     </div>
-    {% else %}
-    <div class="card">
-      <h3>{{ next_step.title }}</h3>
-      <p class="muted" style="margin:0 0 16px">{{ next_step.detail }}</p>
-      <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
-    </div>
-    {% endif %}
-  </section>
+  </div>
+  {% endif %}
 
-  <!-- Live counters -->
-  <section class="section">
-    <div class="grid grid-4">
-      <div class="card stat">
-        <div class="num">{{ stats.total }}</div>
-        <div class="label">Businesses in the database</div>
-        <div class="sub">+{{ stats.added_this_week }} in the last 7 days</div>
+  <div class="dash-grid">
+    <!-- What to do next -->
+    <section class="dash-panel">
+      <div class="dash-panel-head">
+        <h2>What's waiting</h2>
+        <a class="linkish" href="/prospect">Find more</a>
       </div>
-      <div class="card stat">
-        <div class="num">{{ stats.with_email }}</div>
-        <div class="label">Contactable — with an email on file</div>
-        <div class="sub">{{ contactable_pct }}% of the database</div>
+      {% if board %}
+      <div class="board" id="dash-board">
+        {% for item in board %}
+        <a class="board-item {{ 'is-' ~ item.tone if item.tone }}" href="{{ item.href }}">
+          <div class="board-n">{{ item.count }}</div>
+          <div class="board-text">
+            <div class="board-label">{{ item.label }}</div>
+            <div class="board-detail">{{ item.detail }}</div>
+          </div>
+          <span class="board-go">{{ item.action }} →</span>
+        </a>
+        {% endfor %}
       </div>
-      <div class="card stat">
-        <div class="num">{{ stats.by_status.qualified + stats.by_status.new }}</div>
-        <div class="label">Waiting to be worked</div>
-        <div class="sub">Average fit score {{ stats.avg_score }}</div>
+      {% else %}
+      <div class="card">
+        <h3 style="margin-top:0">{{ next_step.title }}</h3>
+        <p class="muted" style="margin:0 0 14px">{{ next_step.detail }}</p>
+        <a class="btn btn-primary" href="{{ next_step.href }}">{{ next_step.action }}</a>
       </div>
-      <div class="card stat">
-        <div class="num">{{ stats.sent }}<span class="unit">sent</span></div>
-        <div class="label">Outreach emails</div>
-        <div class="sub">{{ stats.drafts }} drafts waiting for approval</div>
-      </div>
-    </div>
-  </section>
+      {% endif %}
+    </section>
 
-  <!-- Pipeline -->
-  <section class="section">
-    <div class="section-head">
-      <div>
-        <h2>Pipeline</h2>
+    <!-- What the app is doing, which is the part that shows it is alive -->
+    <section class="dash-panel">
+      <div class="dash-panel-head">
+        <h2>Latest activity</h2>
+        <span class="muted small" id="feed-note">updating</span>
       </div>
-      <a class="btn" href="/businesses">Open the database</a>
-    </div>
-    <div class="pipeline">
-      {% for status, count in stats.by_status.items() %}
-      <a class="stage {{ 'is-hot' if status == 'qualified' and count }}" href="/businesses?status={{ status }}">
-        <div class="n">{{ count }}</div>
-        <div class="s">{{ status }}</div>
-      </a>
-      {% endfor %}
-    </div>
-  </section>
+      <ol class="feed" id="feed">
+        {% for a in activity %}
+        <li class="feed-row" data-key="{{ a.created_at }}|{{ a.business_id }}|{{ a.kind }}">
+          <span class="feed-kind feed-{{ a.kind }}">{{ a.kind }}</span>
+          <span class="feed-what">
+            {% if a.business_id %}<a href="/businesses/{{ a.business_id }}">{{ a.name }}</a> — {% endif %}
+            {{ a.detail }}
+          </span>
+          <time class="feed-when" datetime="{{ a.created_at }}">{{ a.created_at[11:16] }}</time>
+        </li>
+        {% else %}
+        <li class="feed-empty">Nothing has happened yet. Run a sweep and this fills up.</li>
+        {% endfor %}
+      </ol>
+    </section>
 
-  <!-- Best prospects -->
-  <section class="section">
-    <div class="section-head">
-      <div>
-        <h2>Best of the list</h2>
-        <p class="lede">Ranked on contactability, industry fit, and whether they sit in an ACM masthead region.</p>
+    <!-- Who the book is for -->
+    <section class="dash-panel">
+      <div class="dash-panel-head">
+        <h2>Coverage</h2>
+        <a class="linkish" href="/review/align">Align the rest</a>
       </div>
-      <a class="btn" href="/businesses?sort=score">See all</a>
-    </div>
-    {% if top_businesses %}
-    <div class="table-wrap"><div class="table-scroll">
-      <table>
-        <thead>
-          <tr><th>Business</th><th>Industry</th><th>Region</th><th>Contact</th><th>Fit</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          {% for b in top_businesses %}
-          <tr>
-            <td>
-              <a href="/businesses/{{ b.id }}"><span class="name">{{ b.name }}</span></a>
-              <div class="sub">{{ b.domain or '—' }}</div>
-            </td>
-            <td>{{ b.industry or '—' }}</td>
-            <td>{{ b.region or b.state or '—' }}{% if b.suburb and b.suburb != b.region %}<div class="sub">{{ b.suburb }}</div>{% endif %}</td>
-            <td>
-              {% if b.email %}<span class="mono">{{ b.email }}</span>
-              {% else %}<span class="muted small">no email yet</span>{% endif %}
-            </td>
-            <td>{{ score_widget(b.fit_score) }}</td>
-            <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
-            <td><a class="btn btn-sm" href="/businesses/{{ b.id }}">Open</a></td>
-          </tr>
+      <div class="card" style="padding:16px 18px">
+        <h3 style="margin-top:0;font-size:11px">Mastheads</h3>
+        {% if mastheads_by_count %}
+        <div class="row" style="margin-bottom:16px">
+          {% for m in mastheads_by_count[:3] %}
+          <a class="pill" href="/businesses?masthead={{ m.masthead|urlencode }}">{{ masthead_name(m.masthead)|masthead_label }} · {{ m.n }}</a>
           {% endfor %}
-        </tbody>
-      </table>
-    </div></div>
-    {% else %}
-    <div class="table-wrap"><div class="empty">
-      <strong>The database is empty.</strong>
-      Run a search above — or <a href="/prospect">open the prospecting page</a> — to put the first businesses in it.
-    </div></div>
-    {% endif %}
-  </section>
-
-  <!-- How it works -->
-  <section class="section">
-    <h2>How it works</h2>
-    <p class="lede" style="margin-bottom:40px">Four steps, and the database gets better every time you run one.</p>
-    <div class="steps">
-      <div class="step">
-        <div class="num">1</div>
-        <h3>Prospect</h3>
-        <p>Search a trade and a town. Google Places, a CSV you already own, or sample data while you try it out.</p>
-      </div>
-      <div class="step">
-        <div class="num">2</div>
-        <h3>Enrich</h3>
-        <p>It visits each website for an email, a phone number, socials and what the business actually does.</p>
-      </div>
-      <div class="step">
-        <div class="num">3</div>
-        <h3>Score</h3>
-        <p>Everything is ranked 0–100 against your ideal customer profile, so the list sorts itself.</p>
-      </div>
-      <div class="step">
-        <div class="num">4</div>
-        <h3>Reach out</h3>
-        <p>Drafts are written per business, reviewed by a human, and only then sent — with unsubscribe built in.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Recent activity -->
-  <section class="section">
-    <div class="grid grid-2">
-      <div>
-        <div class="section-head"><div><h2>Recent runs</h2></div></div>
-        <div class="table-wrap">
-          {% if runs %}
-          <div class="table-scroll"><table>
-            <thead><tr><th>When</th><th>Source</th><th>Query</th><th>Found</th><th>New</th></tr></thead>
-            <tbody>
-              {% for r in runs %}
-              <tr>
-                <td class="sub">{{ r.started_at[:16].replace('T', ' ') }}</td>
-                <td>{{ r.source }}</td>
-                <td class="sub">{{ r.query.get('industry', '') }} {{ r.query.get('location', '') }}</td>
-                <td>{{ r.found_count }}</td>
-                <td><strong>{{ r.new_count }}</strong></td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table></div>
-          {% else %}
-          <div class="empty">No prospecting runs yet.</div>
-          {% endif %}
         </div>
-      </div>
-      <div>
-        <div class="section-head"><div><h2>Coverage</h2></div></div>
-        <div class="card">
-          <h3>Top regions</h3>
-          {% if stats.top_regions %}
-          <div class="row" style="margin-bottom:20px">
-            {% for r in stats.top_regions %}
-            <a class="pill" href="/businesses?region={{ r.region|urlencode }}">{{ r.region }} · {{ r.n }}</a>
-            {% endfor %}
-          </div>
-          {% else %}<p class="muted small" style="margin-bottom:20px">Nothing yet.</p>{% endif %}
-          <h3>Top industries</h3>
-          {% if stats.top_industries %}
-          <div class="row">
-            {% for i in stats.top_industries %}
-            <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
-            {% endfor %}
-          </div>
-          {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
+        {% else %}<p class="muted small" style="margin-bottom:16px">Nothing aligned yet.</p>{% endif %}
+        <h3 style="font-size:11px">Industries</h3>
+        {% if stats.top_industries %}
+        <div class="row">
+          {% for i in stats.top_industries[:3] %}
+          <a class="pill" href="/businesses?industry={{ i.industry|urlencode }}">{{ i.industry }} · {{ i.n }}</a>
+          {% endfor %}
         </div>
+        {% else %}<p class="muted small">Nothing yet.</p>{% endif %}
       </div>
-    </div>
-  </section>
+    </section>
+
+    <!-- The best of what is in there -->
+    <section class="dash-panel dash-wide">
+      <div class="dash-panel-head">
+        <h2>Best of the list</h2>
+        <a class="linkish" href="/businesses">See all</a>
+      </div>
+      <div class="table-wrap">
+        <div class="table-scroll"><table>
+          <thead><tr><th>Business</th><th>Industry</th><th>Where</th><th>Value</th><th>Fit</th><th>Stage</th></tr></thead>
+          <tbody>
+            {% for b in top_businesses %}
+            <tr>
+              <td><a href="/businesses/{{ b.id }}"><strong>{{ b.name }}</strong></a></td>
+              <td class="sub">{{ b.industry or b.category or '—' }}</td>
+              <td class="sub">{{ b.suburb or b.region or '—' }}</td>
+              <td class="mono">{{ ('$' ~ '{:,.0f}'.format(b.deal_value)) if b.deal_value else '—' }}</td>
+              <td>{{ score_widget(b.fit_score) }}</td>
+              <td><span class="pill status-{{ b.status }}">{{ b.status }}</span></td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="empty">Nothing in the database yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  // The home search bar runs a real prospecting job and then drops the user
-  // on the prospecting page with the results already loaded.
-  document.getElementById('home-search').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('hs-go');
-    const hint = document.getElementById('hs-hint');
-    const body = {
-      source: document.getElementById('hs-source').value,
-      industry: document.getElementById('hs-industry').value.trim(),
-      location: document.getElementById('hs-location').value.trim(),
-      masthead: document.getElementById('hs-masthead').value,
-      limit: 40,
+(function () {
+  // A dashboard that only redraws when somebody presses refresh looks the
+  // same whether the app is busy or asleep. This one asks.
+  var EVERY = 8000;
+  var money = new Intl.NumberFormat('en-AU', {
+    style: 'currency', currency: 'AUD', maximumFractionDigits: 0});
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var lastAt = Date.now();
+
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Paint a number, counting to it when it moves so the change is seen.
+  function setNumber(el, value, isMoney) {
+    if (!el) return;
+    var was = Number(el.dataset.value || el.textContent.replace(/[^0-9.-]/g, '') || 0);
+    var show = function (n) {
+      el.textContent = isMoney ? money.format(Math.round(n)) : String(Math.round(n));
     };
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>';
-    hint.textContent = 'Searching, enriching and scoring — this can take up to a minute.';
-    try {
-      const data = await window.postJSON('/api/prospect/run', body);
-      window.location = '/prospect?run=' + data.run_id;
-    } catch (err) {
-      hint.innerHTML = '<span style="color:var(--danger)">' + err.message + '</span>';
-      btn.disabled = false;
-      btn.textContent = 'Prospect';
-    }
+    el.dataset.value = value;
+    if (was === value) { show(value); return; }
+    el.classList.remove('is-changed');
+    void el.offsetWidth;
+    el.classList.add('is-changed');
+    if (reduce) { show(value); return; }
+    var started = null, from = was, span = 420;
+    (function step(now) {
+      if (started === null) started = now;
+      var through = Math.min(1, (now - started) / span);
+      show(from + (value - from) * (1 - Math.pow(1 - through, 3)));
+      if (through < 1) window.requestAnimationFrame(step);
+    })(performance.now());
+  }
+
+  document.querySelectorAll('[data-money]').forEach(function (el) {
+    var raw = Number(el.textContent.trim() || 0);
+    el.dataset.value = raw;
+    el.textContent = money.format(raw);
   });
 
-  // Typing a location preselects its masthead, so the common case needs no
-  // choosing at all. A deliberate pick is never overwritten: once someone has
-  // chosen a paper themselves, the location box stops touching it.
-  (function () {
-    const location = document.getElementById('hs-location');
-    const picker = document.getElementById('hs-masthead');
-    if (!location || !picker) return;
-    let chosenByHand = false;
-    let timer = null;
+  var agoEl = document.getElementById('live-ago');
+  window.setInterval(function () {
+    var seconds = Math.round((Date.now() - lastAt) / 1000);
+    agoEl.textContent = seconds < 5 ? '· just now' : '· ' + seconds + 's ago';
+  }, 1000);
 
-    picker.addEventListener('change', () => { chosenByHand = true; });
+  function paintFeed(rows) {
+    var list = document.getElementById('feed');
+    var seen = new Set(Array.from(list.querySelectorAll('.feed-row'))
+      .map(function (li) { return li.dataset.key; }));
+    var html = rows.map(function (a) {
+      var key = a.created_at + '|' + a.business_id + '|' + a.kind;
+      var fresh = seen.size && !seen.has(key) ? ' is-fresh' : '';
+      var who = a.business_id
+        ? '<a href="/businesses/' + a.business_id + '">' + esc(a.name) + '</a> — ' : '';
+      return '<li class="feed-row' + fresh + '" data-key="' + esc(key) + '">' +
+        '<span class="feed-kind feed-' + esc(a.kind) + '">' + esc(a.kind) + '</span>' +
+        '<span class="feed-what">' + who + esc(a.detail) + '</span>' +
+        '<time class="feed-when">' + esc((a.created_at || '').slice(11, 16)) + '</time></li>';
+    }).join('');
+    list.innerHTML = html || '<li class="feed-empty">Nothing has happened yet.</li>';
+  }
 
-    location.addEventListener('input', () => {
-      if (chosenByHand) return;
-      window.clearTimeout(timer);
-      timer = window.setTimeout(async () => {
-        const typed = location.value.trim();
-        if (!typed) { picker.value = ''; return; }
-        try {
-          const r = await fetch('/api/masthead/match?location=' + encodeURIComponent(typed));
-          if (!r.ok) return;
-          const m = await r.json();
-          if (!chosenByHand) picker.value = m.site || '';
-        } catch (err) { /* the picker still works by hand */ }
-      }, 350);
+  function paintFunnel(funnel) {
+    var bar = document.getElementById('dash-funnel');
+    if (!bar || !funnel.total) return;
+    funnel.stages.forEach(function (s) {
+      var seg = bar.querySelector('[data-stage="' + s.key + '"]');
+      if (!seg) return;                       // a stage that had nothing on load
+      seg.style.setProperty('--share', (s.pct / 100).toFixed(4));
+      var n = seg.querySelector('.funnel-n');
+      if (n && n.textContent.trim() !== String(s.count)) n.textContent = s.count;
     });
-  })();
+  }
+
+  function paintBoard(board) {
+    var wrap = document.getElementById('dash-board');
+    if (!wrap) return;
+    board.forEach(function (item) {
+      var row = wrap.querySelector('a[href="' + item.href + '"] .board-n');
+      if (row) setNumber(row, item.count, false);
+    });
+  }
+
+  async function refresh() {
+    let data;
+    try {
+      const r = await fetch('/api/dashboard');
+      if (!r.ok) throw new Error(r.status);
+      data = await r.json();
+    } catch (err) {
+      document.getElementById('live-word').textContent = 'Offline';
+      document.querySelector('.live-dot').classList.add('is-out');
+      return;
+    }
+    document.getElementById('live-word').textContent = 'Live';
+    document.querySelector('.live-dot').classList.remove('is-out');
+    lastAt = Date.now();
+
+    setNumber(document.getElementById('k-pipeline'), data.revenue.pipeline.total, true);
+    setNumber(document.getElementById('k-won'), data.revenue.won.total, true);
+    setNumber(document.getElementById('k-total'), data.stats.total, false);
+    setNumber(document.getElementById('k-email'), data.stats.with_email, false);
+    setNumber(document.getElementById('k-sent'), data.stats.sent, false);
+    const review = data.board.find(function (i) { return i.key === 'review'; });
+    setNumber(document.getElementById('k-queue'), review ? review.count : 0, false);
+    document.getElementById('k-approved').textContent =
+      data.stats.approved + ' approved and waiting';
+    paintFeed(data.activity);
+    paintFunnel(data.funnel);
+    paintBoard(data.board);
+  }
+
+  window.setInterval(refresh, EVERY);
+  // Coming back to the tab should not show a stale screen.
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) refresh();
+  });
+})();
 </script>
 {% endblock %}

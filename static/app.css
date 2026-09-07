@@ -895,3 +895,138 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .clearing strong { color: var(--success); font-size: 17px; font-variant-numeric: tabular-nums; }
 .clearing .muted { display: block; margin-top: 3px; font-size: 12.5px; }
 .clearing .btn { flex: none; }
+
+
+/* ---------- The dashboard: one screen, and it moves ---------- */
+.dash { padding-top: 20px; padding-bottom: 28px; }
+.dash-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.dash-title { font-size: 23px; letter-spacing: -0.02em; margin: 2px 0 0; }
+.dash-live {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--text-muted);
+}
+.live-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+  box-shadow: 0 0 0 0 rgba(95,227,168,0.7); animation: live-pulse 2.4s infinite;
+}
+.live-dot.is-out { background: var(--danger); animation: none; }
+@keyframes live-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(95,227,168,0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(95,227,168,0); }
+  100% { box-shadow: 0 0 0 0 rgba(95,227,168,0); }
+}
+
+.kpis {
+  display: grid; gap: 9px; margin-bottom: 11px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.kpi {
+  background: rgba(31,46,92,0.86); border: 1px solid var(--border);
+  border-radius: 12px; padding: 13px 15px; text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.kpi:hover { border-color: var(--border-lit); transform: translateY(-1px); }
+.kpi-label {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+.kpi-n {
+  font-size: 27px; font-weight: 800; letter-spacing: -0.03em; color: var(--white);
+  font-variant-numeric: tabular-nums; margin: 4px 0 2px; line-height: 1.05;
+}
+.kpi-sub { font-size: 11.5px; color: var(--text-muted); }
+.kpi-money { border-color: rgba(53,198,240,0.40); background: rgba(0,154,199,0.13); }
+.kpi-money .kpi-n { color: var(--cyan-bright); }
+.kpi-won { border-color: rgba(95,227,168,0.36); background: rgba(63,214,147,0.10); }
+.kpi-won .kpi-n { color: var(--success); }
+/* A number that just moved says so, briefly. */
+.kpi-n.is-changed, .board-n.is-changed { animation: number-lit 1.1s ease-out; }
+@keyframes number-lit {
+  0%   { text-shadow: 0 0 18px currentColor; }
+  100% { text-shadow: none; }
+}
+
+.dash-funnel { margin-bottom: 12px; }
+.dash-funnel .funnel { height: 38px; margin: 0; }
+
+.dash-grid {
+  display: grid; gap: 11px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 0.85fr);
+  align-items: start;
+}
+.dash-panel { min-width: 0; }
+.dash-panel .board-item { padding: 9px 13px; gap: 12px; }
+.dash-panel .board-n { font-size: 24px; min-width: 42px; }
+.dash-panel .board-detail { font-size: 12px; }
+.dash-wide { grid-column: 1 / -1; }
+.dash-panel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; padding-bottom: 7px; margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.dash-panel-head h2 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
+
+/* The feed. New rows arrive at the top rather than the page redrawing. */
+.feed { list-style: none; margin: 0; padding: 0; max-height: 186px; overflow-y: auto; }
+.feed-row {
+  display: grid; grid-template-columns: 62px minmax(0, 1fr) auto;
+  gap: 9px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 12.5px; color: var(--text-muted);
+}
+.feed-row.is-fresh { animation: feed-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes feed-in {
+  from { opacity: 0; transform: translateY(-6px); background: rgba(0,154,199,0.18); }
+  to   { opacity: 1; transform: none; background: transparent; }
+}
+.feed-kind {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--cyan-soft); background: rgba(0,154,199,0.16);
+  border-radius: 999px; padding: 2px 0; text-align: center;
+}
+.feed-sent, .feed-reviewed { color: var(--success); background: rgba(63,214,147,0.14); }
+.feed-stage { color: var(--warning); background: rgba(255,194,77,0.14); }
+.feed-what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-what a { color: var(--text); text-decoration: none; font-weight: 600; }
+.feed-what a:hover { color: var(--cyan-bright); }
+.feed-when { font-variant-numeric: tabular-nums; font-size: 11px; }
+.feed-empty { color: var(--text-muted); font-size: 12.5px; padding: 12px 0; }
+
+@media (max-width: 1200px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dash-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+  .feed-row.is-fresh, .kpi-n.is-changed, .board-n.is-changed { animation: none; }
+}
+
+/* A price on the card, editable where you are looking at it. */
+.deal-value {
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 700;
+  color: var(--success); flex: none;
+}
+.deal-value:hover { text-decoration: underline; }
+.deal-mast { flex: 1 1 auto; }
+
+/* The dashboard's table is a glance, not a report: five rows, tight, and the
+   Database page is one click away for the rest. */
+.dash-wide table th, .dash-wide table td { padding: 7px 12px; font-size: 13px; }
+.dash-wide .score { min-width: 74px; }
+
+/* On the dashboard the detail line is context, not the message — the label
+   and the number carry that. Two lines, then it stops. */
+.dash-panel .board-detail {
+  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.dash-panel .board-item { align-items: center; }
+.dash-wide table th, .dash-wide table td { padding: 6px 12px; }

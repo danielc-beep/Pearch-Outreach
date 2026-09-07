@@ -164,6 +164,12 @@ ICP = {
 # dropped too. Set PEARCH_MIN_RATING=0 to take everything.
 MIN_PROSPECT_RATING = float(os.getenv("PEARCH_MIN_RATING", "4.0"))
 
+# What a deal is worth when nobody has priced it. Zero means "do not guess",
+# which is the default: an invented pipeline number is worse than a small one.
+# Set it to the average package price and the dashboard will fill in the
+# businesses nobody has got to yet, and say how many it filled in.
+DEFAULT_DEAL_VALUE = float(os.getenv("PEARCH_DEFAULT_DEAL_VALUE", "0"))
+
 # ---------- Regions ----------
 # Postcode ranges → the ACM region a business belongs to. Deliberately coarse:
 # it only needs to be good enough to group prospects for a masthead pitch.

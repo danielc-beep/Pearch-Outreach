@@ -165,8 +165,11 @@ def test_the_footer_without_a_masthead_is_unchanged():
 # ---------- The picker and the endpoint ----------
 
 def test_the_search_bar_offers_the_picker(client):
-    html = client.get("/").text
+    # The quick search bar lives on Prospect now, not the dashboard — the
+    # dashboard is for reading, and searching is prospecting.
+    html = client.get("/prospect").text
     assert 'id="hs-masthead"' in html
+    assert 'id="hs-masthead"' not in client.get("/").text
     assert "The Newcastle Herald" in html
     assert "<optgroup" in html
 

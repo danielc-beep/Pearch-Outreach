@@ -148,6 +148,13 @@
             </select>
           </div>
           <div class="field-block">
+            <label for="set-value">Deal value
+              <span class="muted small">what this one is worth to us</span></label>
+            <input id="set-value" type="number" min="0" step="500"
+                   value="{{ b.deal_value|round|int if b.deal_value else '' }}"
+                   placeholder="e.g. 7500" />
+          </div>
+          <div class="field-block">
             <label for="set-masthead">Masthead</label>
             <select data-search id="set-masthead">
               <option value="">Australian Community Media</option>
@@ -268,11 +275,16 @@
 
   document.getElementById('btn-save').addEventListener('click', async (e) => {
     try {
-      await post('/api/businesses/' + BUSINESS_ID, {
+      const payload = {
         email: document.getElementById('set-email').value.trim(),
         masthead: document.getElementById('set-masthead').value,
         notes: document.getElementById('set-notes').value,
-      });
+      };
+      // An empty box means "nobody has priced it", which is not zero — so it
+      // is left out of the patch rather than sent as a number.
+      const value = document.getElementById('set-value').value.trim();
+      if (value !== '') payload.deal_value = Number(value);
+      await post('/api/businesses/' + BUSINESS_ID, payload);
       window.location.reload();
     } catch (err) { flash(err.message, 'error'); }
   });

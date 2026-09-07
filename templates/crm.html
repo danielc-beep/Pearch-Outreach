@@ -87,6 +87,9 @@
           </p>
           <p class="deal-foot">
             {% if c.masthead %}<span class="deal-mast">{{ masthead_name(c.masthead)|masthead_label }}</span>{% endif %}
+            <button class="deal-value js-value" title="What this one is worth"
+                    data-value="{{ c.deal_value|round|int if c.deal_value else '' }}">{{
+              ('$' ~ '{:,.0f}'.format(c.deal_value)) if c.deal_value else 'add $' }}</button>
             <span class="deal-age" title="Days at this stage">{{ c.days }}d</span>
             {% if col.next %}
             <button class="deal-go js-advance" data-to="{{ col.next }}"
@@ -203,6 +206,28 @@
   pipe.addEventListener('click', (e) => {
     const go = e.target.closest('.js-advance');
     if (go) { e.preventDefault(); place(go.closest('.deal'), go.dataset.to); }
+
+    // Pricing a deal where you are looking at it, rather than opening the
+    // business page to type one number into it.
+    const price = e.target.closest('.js-value');
+    if (price) {
+      e.preventDefault();
+      const card = price.closest('.deal');
+      const typed = window.prompt('What is ' + card.dataset.name + ' worth, in dollars?',
+                                  price.dataset.value || '');
+      if (typed === null) return;
+      const value = Number(String(typed).replace(/[^0-9.]/g, ''));
+      if (!isFinite(value)) { flash('That is not a number.', 'error'); return; }
+      window.postJSON('/api/businesses/' + card.dataset.id, {deal_value: value})
+        .then(function () {
+          price.dataset.value = value ? String(Math.round(value)) : '';
+          price.textContent = value
+            ? '$' + Math.round(value).toLocaleString('en-AU') : 'add $';
+          flash(card.dataset.name + ' valued at $' +
+                Math.round(value).toLocaleString('en-AU') + '.', 'ok');
+        })
+        .catch(function (err) { flash(err.message, 'error'); });
+    }
   });
 
   // ---- Dragging ----
@@ -291,6 +316,8 @@
       '<p class="deal-meta">' + bits.join(' · ') + '</p>' +
       '<p class="deal-foot">' +
       (c.masthead ? '<span class="deal-mast">' + esc(c.masthead) + '</span>' : '') +
+      '<button class="deal-value js-value" data-value="' + (c.value || '') + '">' +
+      (c.value ? '$' + Math.round(c.value).toLocaleString('en-AU') : 'add $') + '</button>' +
       '<span class="deal-age">' + c.days + 'd</span>' +
       (next ? '<button class="deal-go js-advance" data-to="' + next + '">→</button>' : '') +
       '</p></article>';

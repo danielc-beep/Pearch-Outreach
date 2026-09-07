@@ -147,7 +147,8 @@ def column(stage_key: str, offset: int = 0, per_page: int = PAGE,
         days = _age_days(since.get(business_id) or business.get("created_at"))
         limit = stage["stale_after"]
         cards.append({**business, "days": days,
-                      "cold": bool(limit and days >= limit)})
+                      "cold": bool(limit and days >= limit),
+                      "value": business.get("deal_value")})
     return {**stage, "cards": cards, "total": total,
             "shown": offset + len(cards),
             "more": max(0, total - (offset + len(cards)))}
