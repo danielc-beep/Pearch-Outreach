@@ -89,7 +89,8 @@ def test_the_dashboard_shows_the_target(client):
     _won(41000)
     body = client.get("/").text
     assert "of $150,000 this quarter" in body
-    assert "a week from here" in body
+    assert "$109,000 to go" in body            # the gap, which is what it means
+    assert "a week" in body
 
 
 def test_the_endpoint_sets_it(client):
@@ -195,3 +196,40 @@ def test_a_billion_is_arithmetically_honest_even_when_it_is_a_typo(client):
     assert round(progress["expected"]) == 684931507
     assert round(progress["ahead_by"]) == -684922832
     assert round(progress["needed_weekly"]) == 62499458
+
+
+def test_the_headline_is_the_gap_not_the_pace_variance(client):
+    """
+    Reported as wrong twice: a million-dollar target with $9,000 sold has a
+    gap of $991,000. What the headline showed instead was the pace variance —
+    how far off the calendar's straight line the result is — which on a
+    year target in September reads as three-quarters of a million "behind"
+    while the gap is nearly the whole target. Both are true; only one is
+    what the word means.
+    """
+    target.set_target(1_000_000, "year")
+    _won(9000, f"{date.today().year}-02-01T10:00:00+00:00")
+    progress = target.progress()
+    assert progress["short"] == 991000
+    body = client.get("/").text
+    assert "$991,000 to go" in body
+
+
+def test_pace_is_still_there_but_labelled_as_pace(client):
+    target.set_target(1_000_000, "year")
+    _won(9000, f"{date.today().year}-02-01T10:00:00+00:00")
+    body = client.get("/").text
+    assert "pace by" in body
+
+
+def test_the_stats_the_dashboard_asks_for_all_exist(client):
+    """
+    The page printed "undefined approved" because it asked for a key that was
+    never in stats. A missing key is a blank on the server and the word
+    "undefined" in the browser, which is the worse of the two ways to be wrong.
+    """
+    import db as database
+    stats = database.stats()
+    for key in ("total", "with_email", "sent", "approved", "added_this_week"):
+        assert key in stats, key
+    assert "undefined" not in client.get("/").text

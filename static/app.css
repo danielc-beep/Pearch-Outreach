@@ -1150,6 +1150,9 @@ table.bare .sub { color: var(--text-muted); }
   font-size: 17px; font-weight: 800; color: var(--white);
   font-variant-numeric: tabular-nums;
 }
+/* The gap reads first, because it is what the word means. Pace sits under
+   the bar, labelled, where it informs rather than alarms. */
+.target-gap { font-weight: 700; color: var(--cyan-bright); font-variant-numeric: tabular-nums; }
 .target-pace { font-weight: 700; }
 .target-pace.is-ahead { color: var(--success); }
 .target-pace.is-behind { color: var(--warning); }

@@ -33,19 +33,26 @@
     </div>
     <div class="dash-target" id="target">
       {% if target.set %}
+      {# The gap is target minus what has been sold. That is what the word
+         means and it is the number anyone reads first. What was here instead
+         was the pace variance — how far off the calendar's straight line the
+         result is — which is a real figure and a confusing headline: on a
+         million-dollar year in September it reports being three-quarters of
+         a million "behind" while the gap is still the whole target. Pace is
+         still shown, under the bar, where it is labelled as pace. #}
       <div class="target-line">
         <b id="t-won">${{ '{:,.0f}'.format(target.won) }}</b>
         <span class="muted">of ${{ '{:,.0f}'.format(target.amount) }} this {{ target.period }}</span>
-        <span class="target-pace {{ 'is-ahead' if target.ahead_by >= 0 else 'is-behind' }}">
-          {% if target.ahead_by >= 0 %}ahead by{% else %}behind by{% endif %}
-          ${{ '{:,.0f}'.format(target.ahead_by|abs) }}
-        </span>
+        <span class="target-gap">${{ '{:,.0f}'.format(target.short) }} to go</span>
         <button class="linkish" id="edit-target" type="button">edit</button>
       </div>
       <div class="target-bar"><i style="width:{{ [target.pct, 100]|min }}%"></i></div>
       <div class="target-need muted">
         {% if target.days_left %}{{ target.days_left }} days left ·
-        ${{ '{:,.0f}'.format(target.needed_weekly) }} a week from here
+        ${{ '{:,.0f}'.format(target.needed_weekly) }} a week ·
+        <span class="target-pace {{ 'is-ahead' if target.ahead_by >= 0 else 'is-behind' }}">{{
+          'ahead of' if target.ahead_by >= 0 else 'behind' }} pace by
+          ${{ '{:,.0f}'.format(target.ahead_by|abs) }}</span>
         {% else %}Period closes today{% endif %}
       </div>
       {% else %}
@@ -99,7 +106,7 @@
     {% call kpi('won', 'Closed won', revenue.won.total|round|int,
                 revenue.won.count ~ ' signed',
                 trend.series.won_value, trend.change.won_value, money=True, tone='is-won') %}/crm?stage=won{% endcall %}
-    {% call kpi('total', 'Businesses', stats.total, 'in 14 days',
+    {% call kpi('total', 'Businesses', stats.total, stats.added_this_week ~ ' new this week',
                 trend.series.businesses, trend.change.businesses) %}/businesses{% endcall %}
     {% call kpi('email', 'Contactable', stats.with_email, contactable_pct ~ '% of records',
                 trend.series.with_email, trend.change.with_email) %}/businesses?has_email=1{% endcall %}
@@ -373,6 +380,8 @@
     if (data.target && data.target.set) {
       var wonEl = document.getElementById('t-won');
       if (wonEl) setNumber(wonEl, data.target.won, true);
+      var gapEl = document.querySelector('.target-gap');
+      if (gapEl) gapEl.textContent = money.format(data.target.short) + ' to go';
       var bar = document.querySelector('.target-bar i');
       if (bar) bar.style.width = Math.min(100, data.target.pct).toFixed(1) + '%';
     }

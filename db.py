@@ -1386,10 +1386,22 @@ def stats() -> dict[str, Any]:
         "top_regions": top_regions,
         "top_industries": top_industries,
         "avg_score": round(float(avg_score), 1),
-        "drafts": len(list_messages(status="draft", limit=1000)),
-        "sent": len(list_messages(status="sent", limit=1000)),
+        "drafts": _count_messages("draft"),
+        # The dashboard asks for this and there was nothing here to answer
+        # with, so the page printed "undefined approved". A missing key is a
+        # blank on the server and the word "undefined" in the browser, which
+        # is the worse of the two ways to be wrong.
+        "approved": _count_messages("approved"),
+        "sent": _count_messages("sent"),
         "sends_today": sends_today(),
     }
+
+
+def _count_messages(status: str) -> int:
+    """Counted in SQL rather than by fetching a thousand rows and measuring."""
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE status = ?", (status,)).fetchone()
+    return int(row["n"])
 
 
 def iter_all(columns: Iterable[str] = ()) -> Iterator[dict[str, Any]]:
