@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import re
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -154,6 +155,19 @@ CREATE INDEX IF NOT EXISTS idx_trash_batch ON trash(batch);
 """
 
 
+CREATE_MOVES = """
+CREATE TABLE IF NOT EXISTS stage_moves (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    business_id INTEGER NOT NULL,
+    from_stage  TEXT,
+    to_stage    TEXT NOT NULL,
+    moved_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_moves_business ON stage_moves(business_id);
+CREATE INDEX IF NOT EXISTS idx_moves_to ON stage_moves(to_stage);
+"""
+
+
 CREATE_METRICS = """
 CREATE TABLE IF NOT EXISTS metrics_daily (
     day            TEXT PRIMARY KEY,
@@ -185,6 +199,9 @@ MIGRATIONS: list[tuple[str, str]] = [
     # What this one is worth. Null means nobody has said — which is not the
     # same as nothing, so the two are counted separately everywhere.
     ("businesses", "ALTER TABLE businesses ADD COLUMN deal_value REAL"),
+    # When it was won, so revenue can be counted against a period rather than
+    # only ever as a running total.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN won_at TEXT"),
 ]
 
 
@@ -223,6 +240,7 @@ def init_db() -> None:
     conn.executescript(CREATE_TRASH)
     conn.executescript(CREATE_SETTINGS)
     conn.executescript(CREATE_METRICS)
+    conn.executescript(CREATE_MOVES)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -239,6 +257,7 @@ def reset_db() -> None:
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
                   "contacts", "suppressions", "trash", "settings", "metrics_daily",
+                  "stage_moves",
                   "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
@@ -281,7 +300,7 @@ BUSINESS_FIELDS = (
     "industry", "category", "size_band", "rating", "review_count",
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
-    "notes", "website_status", "masthead", "contact_url", "deal_value",
+    "notes", "website_status", "masthead", "contact_url", "deal_value", "won_at",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -479,6 +498,90 @@ def count_without_masthead() -> int:
     return int(row["n"])
 
 
+# ---------- Where deals actually go ----------
+# Every move between stages, as data rather than as a sentence in the
+# activity log. The log was already writing "Moved from Contacted to Replied"
+# and that is readable by a person and miserable to count; this is the same
+# fact in a shape a query can use.
+
+def record_move(business_id: int, from_stage: str, to_stage: str) -> None:
+    with tx() as conn:
+        conn.execute(
+            "INSERT INTO stage_moves (business_id, from_stage, to_stage, moved_at) "
+            "VALUES (?, ?, ?, ?)", (business_id, from_stage or None, to_stage, now()))
+
+
+def backfill_moves() -> int:
+    """
+    Recover the moves already written into the activity log.
+
+    Our own sentences, in a shape we chose, so parsing them is reliable —
+    but only for moves made through the app. A business imported straight
+    into a stage never moved and never will appear here, which is why
+    anything counted from this table has to say what it is counted from.
+    """
+    conn = get_conn()
+    if conn.execute("SELECT 1 FROM stage_moves LIMIT 1").fetchone():
+        return 0
+    labels = {"new": "New", "researching": "Researching", "qualified": "Qualified",
+              "contacted": "Contacted", "replied": "Replied", "won": "Won",
+              "lost": "Lost", "disqualified": "Ruled out"}
+    by_label = {v.lower(): k for k, v in labels.items()}
+    pattern = re.compile(r"Moved from (.+?) to (.+?)\.")
+    found = 0
+    with tx() as c:
+        for row in conn.execute(
+                "SELECT business_id, detail, created_at FROM activities "
+                "WHERE kind = 'stage' ORDER BY id"):
+            match = pattern.search(row["detail"] or "")
+            if not match:
+                continue
+            was = by_label.get(match.group(1).strip().lower())
+            now_at = by_label.get(match.group(2).strip().lower())
+            if not now_at:
+                continue
+            c.execute("INSERT INTO stage_moves (business_id, from_stage, to_stage, moved_at) "
+                      "VALUES (?, ?, ?, ?)", (row["business_id"], was, now_at, row["created_at"]))
+            found += 1
+    return found
+
+
+def reached(stage: str) -> list[int]:
+    """Every business that has ever arrived at this stage."""
+    rows = get_conn().execute(
+        "SELECT DISTINCT business_id FROM stage_moves WHERE to_stage = ?", (stage,)).fetchall()
+    return [int(r["business_id"]) for r in rows]
+
+
+def stage_durations(stage: str) -> list[float]:
+    """
+    Days spent at a stage, for everything that has since left it.
+
+    Anything still sitting there is excluded: counting an unfinished wait as
+    if it were finished drags every average down and makes a stall look fast.
+    """
+    # The next move is the next row for that business, found by id rather than
+    # by clock. Timestamps here are second-precision, so two moves inside one
+    # second read as simultaneous and a comparison on time drops them both.
+    rows = get_conn().execute(
+        "SELECT m.business_id, m.moved_at, "
+        "  (SELECT n.moved_at FROM stage_moves n "
+        "   WHERE n.business_id = m.business_id AND n.id > m.id "
+        "   ORDER BY n.id LIMIT 1) AS left_at "
+        "FROM stage_moves m WHERE m.to_stage = ?", (stage,)).fetchall()
+    out = []
+    for row in rows:
+        if not row["left_at"]:
+            continue
+        try:
+            arrived = datetime.fromisoformat(row["moved_at"])
+            gone = datetime.fromisoformat(row["left_at"])
+        except ValueError:
+            continue
+        out.append(max(0.0, (gone - arrived).total_seconds() / 86400))
+    return out
+
+
 # ---------- Yesterday ----------
 # A number on its own is a point. The same number with a fortnight behind it
 # is a line, and a line answers the question the point cannot: is this going
@@ -550,6 +653,21 @@ def spark(series: list[float], width: float = 100.0, height: float = 22.0) -> st
 # stage the business is standing at.
 
 OPEN_STAGES = ("qualified", "contacted", "replied")
+
+
+def won_between(start: str, end: str) -> float:
+    """
+    Revenue won inside a window.
+
+    Dated by when the deal was actually won. Records won before that date
+    existed fall back to when they were last touched, which is the closest
+    thing to the truth we have for them and is better than dropping them.
+    """
+    row = get_conn().execute(
+        "SELECT COALESCE(SUM(deal_value), 0) AS total FROM businesses "
+        "WHERE status = 'won' AND deal_value IS NOT NULL "
+        "AND DATE(COALESCE(won_at, updated_at)) BETWEEN ? AND ?", (start, end)).fetchone()
+    return float(row["total"] or 0.0)
 
 
 def revenue(default_value: float = 0.0) -> dict[str, Any]:

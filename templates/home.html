@@ -31,6 +31,27 @@
       <div class="eyebrow">Today</div>
       <h1 class="dash-title">Where the book <em>stands</em></h1>
     </div>
+    <div class="dash-target" id="target">
+      {% if target.set %}
+      <div class="target-line">
+        <b id="t-won">${{ '{:,.0f}'.format(target.won) }}</b>
+        <span class="muted">of ${{ '{:,.0f}'.format(target.amount) }} this {{ target.period }}</span>
+        <span class="target-pace {{ 'is-ahead' if target.ahead_by >= 0 else 'is-behind' }}">
+          {% if target.ahead_by >= 0 %}ahead by{% else %}behind by{% endif %}
+          ${{ '{:,.0f}'.format(target.ahead_by|abs) }}
+        </span>
+        <button class="linkish" id="edit-target" type="button">edit</button>
+      </div>
+      <div class="target-bar"><i style="width:{{ [target.pct, 100]|min }}%"></i></div>
+      <div class="target-need muted">
+        {% if target.days_left %}{{ target.days_left }} days left ·
+        ${{ '{:,.0f}'.format(target.needed_weekly) }} a week from here
+        {% else %}Period closes today{% endif %}
+      </div>
+      {% else %}
+      <button class="linkish" id="edit-target" type="button">Set a revenue target →</button>
+      {% endif %}
+    </div>
     <div class="dash-live">
       <span class="live-dot" aria-hidden="true"></span>
       <span id="live-word">Live</span>
@@ -75,6 +96,22 @@
       </a>
       {% endif %}{% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  {% if conversion.based_on %}
+  <div class="convert">
+    {% for c in conversion.stages if c.reached %}
+    <span class="convert-cell">
+      <span class="convert-stage">{{ c.label }}</span>
+      <b class="convert-rate">{{ '{:.0f}'.format(c.rate) }}%</b>
+      {# A median under a day is not a dwell time, it is a rounding artefact —
+         and "0d here" reads as broken rather than as fast. #}
+      <span class="convert-note">went on{% if c.median_days and c.median_days >= 1 %} ·
+        {{ '{:.0f}'.format(c.median_days) }}d here{% endif %}</span>
+    </span>
+    {% endfor %}
+    <span class="convert-basis muted">from {{ conversion.based_on }} that moved through</span>
   </div>
   {% endif %}
 
@@ -298,6 +335,12 @@
     drawSpark('queue', data.trend.series.queue);
     drawSpark('sent', data.trend.series.sent);
 
+    if (data.target && data.target.set) {
+      var wonEl = document.getElementById('t-won');
+      if (wonEl) setNumber(wonEl, data.target.won, true);
+      var bar = document.querySelector('.target-bar i');
+      if (bar) bar.style.width = Math.min(100, data.target.pct).toFixed(1) + '%';
+    }
     paintFeed(data.activity);
     paintWorking(data.running || []);
 
@@ -314,6 +357,25 @@
     (data.board || []).forEach(function (item) {
       var cell = document.querySelector('a[href="' + item.href + '"] .next-n, a[href="' + item.href + '"] .rest-n');
       if (cell) setNumber(cell, item.count, false);
+    });
+  }
+
+  // Setting the target. A prompt is the right amount of ceremony for one
+  // number that changes twice a year.
+  var edit = document.getElementById('edit-target');
+  if (edit) {
+    edit.addEventListener('click', async function () {
+      var amount = window.prompt(
+        'Revenue target for the period, in dollars:', {{ target.amount|round|int }});
+      if (amount === null) return;
+      var period = window.prompt('Per month, quarter or year?', '{{ target.period }}');
+      if (period === null) return;
+      try {
+        await window.postJSON('/api/target', {
+          amount: Number(String(amount).replace(/[^0-9.]/g, '')),
+          period: String(period).trim().toLowerCase()});
+        window.location.reload();
+      } catch (err) { window.alert(err.message); }
     });
   }
 

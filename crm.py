@@ -159,6 +159,53 @@ def board(**filters: Any) -> list[dict[str, Any]]:
     return [column(stage["key"], **filters) for stage in STAGES]
 
 
+def conversion() -> dict[str, Any]:
+    """
+    Where deals actually go, from the record of where they went.
+
+    Of everything that ever reached a stage, how much of it went further.
+    Defined as "went further" rather than "reached the very next one" on
+    purpose: a deal that jumps Qualified straight to Won has not leaked, and
+    counting stage-to-stage would report it as a loss at Contacted and a
+    miracle at Won — which is how the first attempt at this managed to print
+    200%. Measured this way the figure cannot exceed a hundred.
+
+    It counts only businesses that actually moved through the app. Anything
+    imported straight into a stage never moved, so `based_on` says how many
+    the number rests on and the page prints it.
+    """
+    order = [s["key"] for s in STAGES if s["key"] not in ("lost", "disqualified")]
+    beyond = {key: set(order[i + 1:]) for i, key in enumerate(order)}
+
+    ever: dict[str, set[int]] = {key: set(db.reached(key)) for key in order}
+    rows = []
+    for key in order[:-1]:                       # Won has nowhere further to go
+        arrived = ever[key]
+        went_on = {b for later in beyond[key] for b in ever[later]}
+        advanced = arrived & went_on
+        days = db.stage_durations(key)
+        rows.append({
+            **BY_KEY[key],
+            "reached": len(arrived),
+            "advanced": len(advanced),
+            "rate": (100.0 * len(advanced) / len(arrived)) if arrived else None,
+            "median_days": _median(days),
+            "measured": len(days),
+        })
+    return {"stages": rows, "based_on": len({b for s in ever.values() for b in s})}
+
+
+def _median(values: list[float]) -> float | None:
+    """The middle one. A mean is dragged around by the one deal that took a year."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2
+
+
 def move(business_id: int, to_stage: str) -> dict[str, Any]:
     """
     Move one business along, and say so in its history.
@@ -176,7 +223,16 @@ def move(business_id: int, to_stage: str) -> dict[str, Any]:
     if was == to_stage:
         return {"id": business_id, "from": was, "to": to_stage, "changed": False}
 
-    db.update_business(business_id, {"status": to_stage})
+    # Stamp the win, so revenue can be counted against a period rather than
+    # only ever as a running total. Moving it back out clears the date: a deal
+    # that is no longer won was not won in March either.
+    patch: dict[str, Any] = {"status": to_stage}
+    if to_stage == "won":
+        patch["won_at"] = db.now()
+    elif was == "won":
+        patch["won_at"] = None
+    db.update_business(business_id, patch)
+    db.record_move(business_id, was, to_stage)
     db.log_activity(business_id, "stage",
                     f"Moved from {label_for(was)} to {label_for(to_stage)}.")
     return {"id": business_id, "from": was, "to": to_stage, "changed": True}

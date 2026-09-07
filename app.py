@@ -32,6 +32,7 @@ import demo
 import outreach
 import prospect
 import review
+import target
 import worklist
 import backup
 import crm
@@ -99,6 +100,15 @@ if os.getenv("PEARCH_BACKUPS", "1") == "1":
 # fix exists only in the code and every ranking stays sorted by the old rules.
 # Cheap — one pass, writing only the rows whose score actually moves — so it
 # runs on the deploy that carries the change rather than waiting to be asked.
+# The stage moves already written into the activity log, recovered into the
+# table that can count them. Runs once — it stops the moment it finds a row.
+try:
+    _recovered = db.backfill_moves()
+    if _recovered:
+        log.info("recovered %s stage moves from the activity log", _recovered)
+except Exception:
+    log.exception("could not recover stage history")
+
 if os.getenv("PEARCH_RESCORE", "1") == "1" and prospect.scores_are_stale():
     try:
         _result = prospect.rescore_all()
@@ -215,6 +225,8 @@ def home(request: Request) -> HTMLResponse:
         live_source=live,
         default_source=preferred_source(infos),
         board=data["board"],
+        target=data["target"],
+        conversion=data["conversion"],
         next_step=worklist.next_step(bool(stats["total"])),
     )
 
@@ -776,7 +788,23 @@ def _dashboard_payload() -> dict[str, Any]:
     })
     return {"at": db.now(), "stats": stats, "revenue": money, "board": board,
             "funnel": crm.funnel(), "activity": db.recent_activity(8),
-            "trend": db.trend(14), "running": db.running_now(), "queue": queue}
+            "trend": db.trend(14), "running": db.running_now(), "queue": queue,
+            "target": target.progress(), "conversion": crm.conversion()}
+
+
+class TargetIn(BaseModel):
+    amount: float
+    period: str = "quarter"
+
+
+@app.post("/api/target")
+def api_set_target(body: TargetIn) -> JSONResponse:
+    """A target is a decision somebody makes in a meeting, so it is set here."""
+    try:
+        target.set_target(body.amount, body.period)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return JSONResponse(target.progress())
 
 
 @app.get("/api/dashboard")
