@@ -444,3 +444,43 @@ def test_database_is_the_last_thing_in_the_nav(client):
     links = [line for line in nav.splitlines() if "href=" in line]
     assert "/businesses" in links[-1], links[-1]
     assert not any('href="/align"' in line for line in links)
+
+
+# ---------- Finding a masthead among seventy-eight ----------
+
+def _masthead_selects() -> list[tuple[str, str]]:
+    """Every <select> in the templates that renders the masthead list."""
+    import re
+    from pathlib import Path
+    found = []
+    for path in sorted((Path(__file__).resolve().parent.parent / "templates").glob("*.html")):
+        text = path.read_text()
+        for match in re.finditer(r"<select\b[^>]*>", text):
+            after = text[match.end():match.end() + 400]
+            if "masthead_groups" in after:
+                found.append((path.name, match.group(0)))
+    return found
+
+
+def test_every_masthead_dropdown_is_searchable():
+    """
+    Seventy-eight titles is a scroll, and the browser's own type-ahead only
+    matches from the first letter — which is useless when every title starts
+    with "The". A new dropdown that forgets the flag silently goes back to
+    being a scroll.
+    """
+    selects = _masthead_selects()
+    assert len(selects) >= 8, f"expected the masthead pickers to still be there, found {len(selects)}"
+    missing = [f"{name}: {tag}" for name, tag in selects if "data-search" not in tag]
+    assert not missing, "these masthead dropdowns are not searchable: " + "; ".join(missing)
+
+
+def test_the_page_still_carries_a_real_select(client):
+    """
+    The picker is an upgrade, not a replacement. Without JavaScript the page
+    has to stay a working form, and the value the form submits is the
+    select's — so it must still be in the HTML.
+    """
+    body = client.get("/crm").text
+    assert '<select data-search id="cf-masthead"' in body
+    assert 'value="newcastleherald.com.au"' in body

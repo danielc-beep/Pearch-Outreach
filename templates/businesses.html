@@ -213,7 +213,7 @@
       </div>
       <div class="f">
         <label for="f-masthead">Masthead</label>
-        <select id="f-masthead" name="masthead">
+        <select data-search id="f-masthead" name="masthead">
           <option value="">Any</option>
           <option value="none" {{ 'selected' if f.masthead == 'none' }}>Not aligned yet</option>
           {% for group in masthead_groups %}

@@ -160,8 +160,14 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
   max-width: 860px; margin: 0 auto; background: #FFFFFF;
   border: 1px solid rgba(255,255,255,0.28); border-radius: 999px;
   box-shadow: 0 2px 6px rgba(0,0,0,0.28), 0 22px 60px -28px rgba(0,0,0,0.9);
-  overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s;
+  /* Not `overflow: hidden`. The pill needs its corners clipped, but the
+     masthead picker's dropdown lives inside this bar and hiding the overflow
+     cut it off at the bar's own edge. The two ends are rounded directly
+     instead, which clips exactly what needed clipping and nothing else. */
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
+.searchbar > :first-child { border-radius: 999px 0 0 999px; }
+.searchbar > :last-child { border-radius: 0 999px 999px 0; }
 .searchbar:focus-within { border-color: var(--cyan-bright); box-shadow: 0 0 34px -4px var(--cyan-glow); }
 .searchbar .field { flex: 1; display: flex; flex-direction: column; padding: 12px 22px; text-align: left; min-width: 0; }
 .searchbar .field + .field { border-left: 1px solid #E4E9F2; }
@@ -835,3 +841,44 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
   background: rgba(255,194,77,0.16); border: 1px solid rgba(255,194,77,0.34);
   color: var(--warning);
 }
+
+
+/* ---------- Type-to-find on a long dropdown ---------- */
+/* The native select stays in the DOM and stays what the form submits, so it
+   is hidden rather than removed — take it out and every existing handler and
+   every form post that reads it stops working. */
+.picker { position: relative; }
+.picker-native { display: none !important; }
+.picker-input { width: 100%; }
+.picker-list {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; right: 0;
+  margin: 0; padding: 5px; list-style: none;
+  max-height: 300px; overflow-y: auto;
+  background: #101A3E; border: 1px solid var(--border-lit);
+  border-radius: 10px; box-shadow: 0 18px 40px rgba(3,8,22,0.55);
+}
+.picker-group {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.10em;
+  text-transform: uppercase; color: var(--cyan-soft);
+  padding: 8px 9px 4px;
+}
+.picker-option {
+  padding: 7px 9px; border-radius: 7px; cursor: pointer;
+  font-size: 13.5px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.picker-option:hover, .picker-option.is-active { background: rgba(0,154,199,0.24); color: var(--white); }
+.picker-option.is-chosen { color: var(--cyan-bright); font-weight: 600; }
+.picker-none { padding: 10px 9px; font-size: 13px; color: var(--text-muted); }
+
+/* The white search bar on the dashboard has its own ideas about inputs. */
+.searchbar .picker-list {
+  background: #FFFFFF; border-color: rgba(22,34,74,0.16);
+  top: calc(100% + 14px);          /* clear of the bar's own shadow */
+  min-width: 260px;
+}
+.searchbar .picker-option { color: #16224A; }
+.searchbar .picker-option:hover, .searchbar .picker-option.is-active {
+  background: rgba(0,154,199,0.14); color: #0D1636;
+}
+.searchbar .picker-group { color: #5A6E92; }

@@ -32,7 +32,7 @@
 
       <div class="field-block">
         <label for="tr-masthead">Masthead</label>
-        <select id="tr-masthead">
+        <select data-search id="tr-masthead">
           {% for t in patches %}
           <option value="{{ t.site }}" data-home="{{ home_location(t.site) }}">
             {{ t.name|masthead_label }} — {{ home_location(t.site) }}
@@ -80,7 +80,7 @@
         <div id="source-fields"></div>
         <div class="field-block">
           <label for="pf-masthead">Masthead these prospects are pitched from</label>
-          <select id="pf-masthead" name="masthead">
+          <select data-search id="pf-masthead" name="masthead">
             <option value="">Australian Community Media</option>
             {% for group in masthead_groups %}
             <optgroup label="{{ group.state }}">

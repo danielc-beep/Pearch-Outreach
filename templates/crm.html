@@ -14,7 +14,7 @@
       <form class="filters" method="get" action="/crm" style="margin:0">
         <div class="f">
           <label for="cf-masthead">Masthead</label>
-          <select id="cf-masthead" name="masthead" onchange="this.form.submit()">
+          <select data-search id="cf-masthead" name="masthead" onchange="this.form.submit()">
             <option value="">Every masthead</option>
             {% for group in masthead_groups %}
             <optgroup label="{{ group.state }}">

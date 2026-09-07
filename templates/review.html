@@ -39,7 +39,7 @@
       </div>
       <div class="f">
         <label for="rq-masthead">Masthead</label>
-        <select id="rq-masthead" name="masthead">
+        <select data-search id="rq-masthead" name="masthead">
           <option value="">Any</option>
           {% for group in masthead_groups %}
           <optgroup label="{{ group.state }}">
