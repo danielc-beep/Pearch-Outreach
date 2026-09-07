@@ -735,29 +735,48 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 
 /* The board. Horizontal scroll is correct here — every CRM does it, and the
    alternative is eight columns too narrow to hold a business name. */
+/* Every stage on screen at once. A kanban you have to scroll sideways hides
+   the two things it exists to show — where the work is piling up, and what
+   is missing entirely — because the empty columns are always the ones off
+   the edge. Eight equal tracks that shrink to fit, and the card is built to
+   survive the width. Below 900px there is no honest way to fit eight, so it
+   goes back to scrolling. */
 .pipe {
-  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr);
-  gap: 12px; align-items: start;
-  overflow-x: auto; padding: 4px 24px 28px; scroll-snap-type: x proximity;
+  display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px; align-items: start;
+  /* Out of the page's measure. Everything else on the site is a column of
+     text and wants the 1240px limit; a board wants the screen. Trapped
+     inside it, eight columns are 134px wide on a 1920 monitor with four
+     hundred pixels of empty margin on either side. */
+  width: calc(100vw - 48px);
+  margin-left: calc(50% - 50vw + 24px);
+  padding: 4px 0 28px;
+}
+@media (max-width: 900px) {
+  .pipe {
+    grid-template-columns: none; grid-auto-flow: column;
+    grid-auto-columns: minmax(200px, 82vw);
+    overflow-x: auto; padding-inline: 16px; scroll-snap-type: x proximity;
+  }
 }
 .pipe-col {
-  scroll-snap-align: start;
+  scroll-snap-align: start; min-width: 0;
   background: rgba(16,26,62,0.62); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px; transition: background 0.15s, border-color 0.15s;
 }
 .pipe-col.is-over { background: rgba(0,154,199,0.16); border-color: var(--cyan); }
 .pipe-col.is-lit { border-color: var(--cyan-bright); }
 .pipe-col-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  padding: 2px 4px 9px; border-bottom: 2px solid var(--tone); margin-bottom: 9px;
+  display: flex; align-items: center; justify-content: space-between; gap: 5px;
+  padding: 2px 2px 8px; border-bottom: 2px solid var(--tone); margin-bottom: 9px;
 }
 .pipe-col-name {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text);
 }
 .pipe-col-n {
   font-variant-numeric: tabular-nums; font-weight: 700; color: var(--white);
-  background: rgba(255,255,255,0.09); border-radius: 999px; padding: 1px 9px; font-size: 12px;
+  background: rgba(255,255,255,0.09); border-radius: 999px; padding: 1px 7px; font-size: 11px;
 }
 .pipe-col-n.is-bumped { animation: count-bump 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes count-bump {
@@ -775,7 +794,7 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 
 .deal {
   background: var(--ink-raised); border: 1px solid var(--border);
-  border-radius: 10px; padding: 9px 11px; cursor: grab;
+  border-radius: 10px; padding: 8px 9px; cursor: grab; min-width: 0;
   transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s, opacity 0.15s;
 }
 .deal:hover { transform: translateY(-1px); border-color: rgba(53,198,240,0.55); box-shadow: var(--shadow); }
@@ -789,15 +808,27 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 /* Amber down the edge, not a full amber card: it is a nudge, not an alarm. */
 .deal.is-cold { border-left: 3px solid var(--warning); }
 .deal.is-cold .deal-age { color: var(--warning); }
-.deal-name { display: block; font-weight: 600; color: var(--white); text-decoration: none; font-size: 13.5px; }
+.deal-name {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; font-weight: 600; color: var(--white); text-decoration: none;
+  font-size: 12.5px; line-height: 1.25;
+}
 .deal-name:hover { color: var(--cyan-bright); }
-.deal-meta { margin: 3px 0 7px; font-size: 11.5px; color: var(--text-muted); }
-.deal-foot { margin: 0; display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-muted); }
-.deal-mast { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.deal-meta {
+  margin: 3px 0 5px; font-size: 10.5px; color: var(--text-muted);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.deal-foot { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-muted); }
+/* Its own line now. Four things on one row cannot survive a column narrow
+   enough that eight of them fit on a screen. */
+.deal-mast {
+  margin: 0 0 4px; font-size: 10px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .deal-age { font-variant-numeric: tabular-nums; }
 .deal-go {
-  margin-left: auto; flex: none; cursor: pointer;
-  width: 22px; height: 22px; border-radius: 6px; padding: 0;
+  flex: none; cursor: pointer;
+  width: 20px; height: 20px; border-radius: 6px; padding: 0;
   background: rgba(0,154,199,0.20); border: 1px solid rgba(53,198,240,0.36);
   color: var(--cyan-soft); font: inherit; line-height: 1;
   opacity: 0; transition: opacity 0.15s, background 0.15s;

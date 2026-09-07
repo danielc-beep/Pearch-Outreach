@@ -85,8 +85,10 @@
             {{ c.industry or c.category or '—' }}{% if c.suburb %} · {{ c.suburb }}{% endif %}
             {% if c.rating %} · {{ c.rating }}★{% endif %}
           </p>
+          {% if c.masthead %}
+          <p class="deal-mast">{{ masthead_name(c.masthead)|masthead_label }}</p>
+          {% endif %}
           <p class="deal-foot">
-            {% if c.masthead %}<span class="deal-mast">{{ masthead_name(c.masthead)|masthead_label }}</span>{% endif %}
             <button class="deal-value js-value" title="What this one is worth"
                     data-value="{{ c.deal_value|round|int if c.deal_value else '' }}">{{
               ('$' ~ '{:,.0f}'.format(c.deal_value)) if c.deal_value else 'add $' }}</button>
@@ -102,7 +104,7 @@
       </div>
       {% if col.more %}
       <button class="pipe-more js-more" data-stage="{{ col.key }}" data-offset="{{ col.shown }}">
-        Show {{ col.more if col.more < 24 else 24 }} more
+        Show {{ col.more if col.more < 20 else 20 }} more
       </button>
       {% elif not col.cards %}
       <p class="pipe-empty">Nothing here</p>
@@ -299,7 +301,7 @@
         .forEach((c) => drop.insertAdjacentHTML('beforeend', cardHTML(c, col.dataset.next)));
       col.dataset.total = data.total;        // the server is the authority
       more.dataset.offset = data.shown;
-      if (data.more) more.textContent = 'Show ' + Math.min(24, data.more) + ' more';
+      if (data.more) more.textContent = 'Show ' + Math.min(20, data.more) + ' more';
       else more.remove();
       recount();
     } catch (err) { flash(esc(err.message), 'error'); }
@@ -314,8 +316,8 @@
       ' data-id="' + c.id + '" data-name="' + esc(c.name) + '" tabindex="0">' +
       '<a class="deal-name" href="/businesses/' + c.id + '">' + esc(c.name) + '</a>' +
       '<p class="deal-meta">' + bits.join(' · ') + '</p>' +
+      (c.masthead ? '<p class="deal-mast">' + esc(c.masthead) + '</p>' : '') +
       '<p class="deal-foot">' +
-      (c.masthead ? '<span class="deal-mast">' + esc(c.masthead) + '</span>' : '') +
       '<button class="deal-value js-value" data-value="' + (c.value || '') + '">' +
       (c.value ? '$' + Math.round(c.value).toLocaleString('en-AU') : 'add $') + '</button>' +
       '<span class="deal-age">' + c.days + 'd</span>' +

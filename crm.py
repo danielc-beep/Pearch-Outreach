@@ -67,10 +67,12 @@ for _stage in STAGES:
 # The five that are a sequence, as opposed to the three that are an ending.
 WORKING = [s["key"] for s in STAGES if s["next"]] + ["won"]
 
-# How many cards a column loads at once. A stage holding four hundred is
-# common early on and rendering all of them costs a second of layout for rows
-# nobody scrolls to; the column says what it is holding and loads more on ask.
-PAGE = 24
+# How many cards a column shows at once. A stage holding four hundred is
+# common early on, and a column that renders all of them is neither readable
+# nor quick. Twenty is about a screen of cards: enough to work through, few
+# enough to see the shape of. The column header always says the real total,
+# and the rest arrive twenty at a time on ask.
+PAGE = 20
 
 # A card older than its stage's threshold is cold. Thresholds live on the
 # stages because they are not the same everywhere: a fortnight in Contacted is

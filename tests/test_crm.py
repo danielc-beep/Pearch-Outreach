@@ -254,7 +254,7 @@ def test_a_big_column_loads_a_page_at_a_time(client):
     _seed({"new": 60})
     body = client.get("/crm").text
     assert body.count('class="deal ') + body.count('class="deal is-cold') <= crm.PAGE + 2
-    assert "Show 24 more" in body
+    assert f"Show {crm.PAGE} more" in body
 
 
 def test_the_column_endpoint_returns_the_next_page(client):
@@ -273,3 +273,31 @@ def test_the_column_endpoint_refuses_an_invented_stage(client):
 
 def test_the_campaigns_page_is_gone(client):
     assert client.get("/campaigns").status_code == 404
+
+
+def test_a_column_never_renders_more_than_a_screenful(client):
+    """
+    Four hundred cards in one column is neither readable nor quick, and the
+    two things a board exists to show — where work is piling up and what is
+    missing — are not in the four hundredth card.
+    """
+    _seed({"new": 200})
+    body = client.get("/crm").text
+    assert body.count('class="deal ') + body.count('class="deal is-cold') <= crm.PAGE
+    assert crm.PAGE == 20
+
+
+def test_the_header_still_says_the_real_total(client):
+    """Showing twenty must not mean claiming there are twenty."""
+    _seed({"new": 200})
+    body = client.get("/crm").text
+    column = body.split('id="col-new"')[1].split("</header>")[0]
+    assert ">200<" in column
+
+
+def test_every_stage_is_a_column_so_none_is_off_the_edge(client):
+    _seed({"new": 1})
+    body = client.get("/crm").text
+    for stage in crm.STAGES:
+        assert f'id="col-{stage["key"]}"' in body, stage["key"]
+    assert len(crm.STAGES) == 8
