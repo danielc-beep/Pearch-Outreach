@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Newsreader:ital,wght@1,400;1,500&family=Caveat:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/app.css" />
+  <link rel="stylesheet" href="{{ asset('app.css') }}" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
 </head>
 <body>
@@ -56,8 +56,8 @@
       </div>
     </div>
   </footer>
-  <script src="/static/fairy-lights.js" defer></script>
-  <script src="/static/app.js"></script>
+  <script src="{{ asset('fairy-lights.js') }}" defer></script>
+  <script src="{{ asset('app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

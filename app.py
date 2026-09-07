@@ -12,6 +12,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import hashlib
 import logging
 import os
 from typing import Any
@@ -105,7 +106,26 @@ if os.getenv("PEARCH_RESCORE", "1") == "1" and prospect.scores_are_stale():
     except Exception:                      # never let it stop the app booting
         log.exception("could not rescore on start")
 
+def asset(name: str) -> str:
+    """
+    A stylesheet or script URL with the file's own fingerprint on it.
+
+    Without this the browser is entitled to keep serving the copy it already
+    has, and it does: a CSS fix shipped to the server and the page carried on
+    looking broken, which is indistinguishable from not having fixed it. The
+    hash changes only when the file does, so a deploy that touches nothing
+    keeps the cached copy and one that touches the stylesheet cannot.
+    """
+    path = STATIC_DIR / name
+    try:
+        stamp = hashlib.sha256(path.read_bytes()).hexdigest()[:10]
+    except OSError:                        # missing file: let it 404 honestly
+        return f"/static/{name}"
+    return f"/static/{name}?v={stamp}"
+
+
 templates.env.globals.update(
+    asset=asset,
     score_widget=score_widget,
     app_name=APP_NAME,
     tagline=APP_TAGLINE,

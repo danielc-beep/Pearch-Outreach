@@ -205,3 +205,55 @@ def test_no_two_components_lay_out_the_same_class_name():
         "these class names have their layout set by more than one rule block: "
         + "; ".join(f"{name} (lines {', '.join(map(str, sorted(set(lines))))})"
                     for name, lines in sorted(clashes.items())))
+
+
+# ---------- A fix that reaches the browser ----------
+
+def test_the_stylesheet_carries_its_own_fingerprint(client):
+    """
+    Without a version on the URL the browser keeps the copy it already has,
+    and a CSS fix that shipped to the server leaves the page looking broken —
+    which from the outside is indistinguishable from not having fixed it.
+    """
+    import re
+    body = client.get("/").text
+    match = re.search(r'href="/static/app\.css\?v=([0-9a-f]{10})"', body)
+    assert match, "app.css is linked without a fingerprint"
+
+
+def test_every_script_carries_one_too(client):
+    import re
+    body = client.get("/").text
+    for name in ("app.js", "fairy-lights.js"):
+        assert re.search(rf'src="/static/{re.escape(name)}\?v=[0-9a-f]{{10}}"', body), name
+
+
+def test_the_sign_in_page_gets_the_same_treatment(monkeypatch):
+    """It is the first page anyone loads, so it is the first one to go stale."""
+    import importlib
+    import auth, config, app as app_module
+    from fastapi.testclient import TestClient
+    monkeypatch.setenv("PEARCH_PASSWORD", "s3cret")
+    importlib.reload(config); importlib.reload(auth); importlib.reload(app_module)
+    body = TestClient(app_module.app).get("/login").text
+    assert "/static/app.css?v=" in body
+    monkeypatch.delenv("PEARCH_PASSWORD", raising=False)
+    importlib.reload(config); importlib.reload(auth); importlib.reload(app_module)
+
+
+def test_the_fingerprint_follows_the_file(tmp_path, monkeypatch):
+    import app as app_module
+    first = app_module.asset("app.css")
+    css = app_module.STATIC_DIR / "app.css"
+    original = css.read_bytes()
+    try:
+        css.write_bytes(original + b"\n/* a change */\n")
+        assert app_module.asset("app.css") != first
+    finally:
+        css.write_bytes(original)
+    assert app_module.asset("app.css") == first
+
+
+def test_a_missing_asset_does_not_break_the_page():
+    import app as app_module
+    assert app_module.asset("not-here.css") == "/static/not-here.css"
