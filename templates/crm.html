@@ -67,16 +67,16 @@
   <div id="flash" class="crm-flash"></div>
 
   {% if funnel.total %}
-  <div class="board" id="board">
+  <div class="pipe" id="pipe-board">
     {% for col in columns %}
-    <section class="board-col" id="col-{{ col.key }}" data-stage="{{ col.key }}"
+    <section class="pipe-col" id="col-{{ col.key }}" data-stage="{{ col.key }}"
              data-next="{{ col.next }}" data-total="{{ col.total }}"
              aria-label="{{ col.label }}">
-      <header class="board-col-head" style="--tone:{{ col.colour }}">
-        <span class="board-col-name">{{ col.label }}</span>
-        <span class="board-col-n js-count">{{ col.total }}</span>
+      <header class="pipe-col-head" style="--tone:{{ col.colour }}">
+        <span class="pipe-col-name">{{ col.label }}</span>
+        <span class="pipe-col-n js-count">{{ col.total }}</span>
       </header>
-      <div class="board-drop js-drop">
+      <div class="pipe-drop js-drop">
         {% for c in col.cards %}
         <article class="deal {{ 'is-cold' if c.cold }}" draggable="true"
                  data-id="{{ c.id }}" data-name="{{ c.name }}" tabindex="0">
@@ -98,11 +98,11 @@
         {% endfor %}
       </div>
       {% if col.more %}
-      <button class="board-more js-more" data-stage="{{ col.key }}" data-offset="{{ col.shown }}">
+      <button class="pipe-more js-more" data-stage="{{ col.key }}" data-offset="{{ col.shown }}">
         Show {{ col.more if col.more < 24 else 24 }} more
       </button>
       {% elif not col.cards %}
-      <p class="board-empty">Nothing here</p>
+      <p class="pipe-empty">Nothing here</p>
       {% endif %}
     </section>
     {% endfor %}
@@ -121,8 +121,8 @@
 {% block scripts %}
 <script>
 (function () {
-  const board = document.getElementById('board');
-  if (!board) return;
+  const pipe = document.getElementById("pipe-board");
+  if (!pipe) return;
   const flashEl = document.getElementById('flash');
   const query = new URLSearchParams(window.location.search);
   const filters = {masthead: query.get('masthead') || '', industry: query.get('industry') || ''};
@@ -139,7 +139,7 @@
   }
 
   const label = (stage) => {
-    const col = board.querySelector('[data-stage="' + stage + '"] .board-col-name');
+    const col = pipe.querySelector('[data-stage="' + stage + '"] .pipe-col-name');
     return col ? col.textContent.trim() : stage;
   };
 
@@ -148,7 +148,7 @@
   // moves out of a paged column: the server's offset has not moved with it,
   // so the arithmetic loses one every time.
   function recount() {
-    board.querySelectorAll('.board-col').forEach((col) => {
+    pipe.querySelectorAll('.pipe-col').forEach((col) => {
       const shown = col.querySelectorAll('.deal').length;
       const more = col.querySelector('.js-more');
       const cell = col.querySelector('.js-count');
@@ -159,10 +159,10 @@
         void cell.offsetWidth;              // restart the animation
         cell.classList.add('is-bumped');
       }
-      col.querySelector('.board-empty')?.remove();
+      col.querySelector('.pipe-empty')?.remove();
       if (!shown && !more) {
         const p = document.createElement('p');
-        p.className = 'board-empty';
+        p.className = 'pipe-empty';
         p.textContent = 'Nothing here';
         col.appendChild(p);
       }
@@ -170,14 +170,14 @@
   }
 
   const bump = (stage, by) => {
-    const col = board.querySelector('[data-stage="' + stage + '"]');
+    const col = pipe.querySelector('[data-stage="' + stage + '"]');
     col.dataset.total = Math.max(0, Number(col.dataset.total || 0) + by);
   };
 
   // ---- Moving a card ----
   async function place(card, stage, {quiet = false} = {}) {
-    const from = card.closest('.board-col').dataset.stage;
-    const drop = board.querySelector('[data-stage="' + stage + '"] .js-drop');
+    const from = card.closest('.pipe-col').dataset.stage;
+    const drop = pipe.querySelector('[data-stage="' + stage + '"] .js-drop');
     if (!drop || from === stage) return;
     drop.prepend(card);
     card.classList.remove('is-cold');
@@ -192,37 +192,37 @@
       flash(esc(card.dataset.name) + ' moved to ' + esc(label(stage)) +
             '. <button class="linkish js-undo" type="button">Undo</button>', 'ok');
     } catch (err) {
-      // Put it back where it came from rather than leaving the board lying.
-      board.querySelector('[data-stage="' + from + '"] .js-drop').prepend(card);
+      // Put it back where it came from rather than leaving the pipe lying.
+      pipe.querySelector('[data-stage="' + from + '"] .js-drop').prepend(card);
       bump(stage, -1); bump(from, +1);
       recount();
       flash(esc(err.message), 'error');
     }
   }
 
-  board.addEventListener('click', (e) => {
+  pipe.addEventListener('click', (e) => {
     const go = e.target.closest('.js-advance');
     if (go) { e.preventDefault(); place(go.closest('.deal'), go.dataset.to); }
   });
 
   // ---- Dragging ----
   let dragging = null;
-  board.addEventListener('dragstart', (e) => {
+  pipe.addEventListener('dragstart', (e) => {
     const card = e.target.closest('.deal');
     if (!card) return;
     dragging = card;
     card.classList.add('is-dragging');
-    board.classList.add('is-dragging-any');
+    pipe.classList.add('is-dragging-any');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', card.dataset.id);
   });
-  board.addEventListener('dragend', () => {
+  pipe.addEventListener('dragend', () => {
     dragging?.classList.remove('is-dragging');
-    board.classList.remove('is-dragging-any');
-    board.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
+    pipe.classList.remove('is-dragging-any');
+    pipe.querySelectorAll('.is-over').forEach((el) => el.classList.remove('is-over'));
     dragging = null;
   });
-  board.querySelectorAll('.board-col').forEach((col) => {
+  pipe.querySelectorAll('.pipe-col').forEach((col) => {
     col.addEventListener('dragover', (e) => {
       if (!dragging) return;
       e.preventDefault();                       // without this, no drop fires
@@ -239,12 +239,12 @@
     });
   });
 
-  // ---- Keyboard: a board you cannot drag on is still a board ----
-  const ORDER = [...board.querySelectorAll('.board-col')].map((c) => c.dataset.stage);
-  board.addEventListener('keydown', (e) => {
+  // ---- Keyboard: a pipe you cannot drag on is still a pipe ----
+  const ORDER = [...pipe.querySelectorAll('.pipe-col')].map((c) => c.dataset.stage);
+  pipe.addEventListener('keydown', (e) => {
     const card = e.target.closest('.deal');
     if (!card || e.target.tagName === 'A' || e.target.tagName === 'BUTTON') return;
-    const at = ORDER.indexOf(card.closest('.board-col').dataset.stage);
+    const at = ORDER.indexOf(card.closest('.pipe-col').dataset.stage);
     let to = null;
     if (e.key === 'ArrowRight' && at < ORDER.length - 1) to = ORDER[at + 1];
     if (e.key === 'ArrowLeft' && at > 0) to = ORDER[at - 1];
@@ -255,7 +255,7 @@
   });
 
   // ---- Loading the rest of a column ----
-  board.addEventListener('click', async (e) => {
+  pipe.addEventListener('click', async (e) => {
     const more = e.target.closest('.js-more');
     if (!more) return;
     more.disabled = true;
@@ -263,7 +263,7 @@
     const params = new URLSearchParams({stage: stage, offset: more.dataset.offset, ...filters});
     try {
       const data = await (await fetch('/api/crm/column?' + params)).json();
-      const col = board.querySelector('[data-stage="' + stage + '"]');
+      const col = pipe.querySelector('[data-stage="' + stage + '"]');
       const drop = col.querySelector('.js-drop');
       // A card that moved out of this column shifted everything behind it, so
       // the next page by offset can hand back one already on screen. Skip it
@@ -300,9 +300,9 @@
   document.querySelectorAll('[data-stage]').forEach((el) => {
     if (!el.classList.contains('funnel-seg') && !el.classList.contains('funnel-key-item')) return;
     el.addEventListener('mouseenter', () =>
-      board.querySelector('#col-' + el.dataset.stage)?.classList.add('is-lit'));
+      pipe.querySelector('#col-' + el.dataset.stage)?.classList.add('is-lit'));
     el.addEventListener('mouseleave', () =>
-      board.querySelector('#col-' + el.dataset.stage)?.classList.remove('is-lit'));
+      pipe.querySelector('#col-' + el.dataset.stage)?.classList.remove('is-lit'));
   });
 
 })();

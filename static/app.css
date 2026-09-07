@@ -690,7 +690,7 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 
 
-/* ---------- The pipeline: a bar, then a board ---------- */
+/* ---------- The pipeline: a bar, then a board of its own ---------- */
 /* One proportional bar in stage order. It reads the same at 99/1 as it does
    at an even spread, which a pie of eight slices does not. */
 .funnel {
@@ -729,43 +729,43 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 
 /* The board. Horizontal scroll is correct here — every CRM does it, and the
    alternative is eight columns too narrow to hold a business name. */
-.board {
+.pipe {
   display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr);
   gap: 12px; align-items: start;
   overflow-x: auto; padding: 4px 24px 28px; scroll-snap-type: x proximity;
 }
-.board-col {
+.pipe-col {
   scroll-snap-align: start;
   background: rgba(16,26,62,0.62); border: 1px solid var(--border);
   border-radius: 12px; padding: 10px; transition: background 0.15s, border-color 0.15s;
 }
-.board-col.is-over { background: rgba(0,154,199,0.16); border-color: var(--cyan); }
-.board-col.is-lit { border-color: var(--cyan-bright); }
-.board-col-head {
+.pipe-col.is-over { background: rgba(0,154,199,0.16); border-color: var(--cyan); }
+.pipe-col.is-lit { border-color: var(--cyan-bright); }
+.pipe-col-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 2px 4px 9px; border-bottom: 2px solid var(--tone); margin-bottom: 9px;
 }
-.board-col-name {
+.pipe-col-name {
   font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text);
 }
-.board-col-n {
+.pipe-col-n {
   font-variant-numeric: tabular-nums; font-weight: 700; color: var(--white);
   background: rgba(255,255,255,0.09); border-radius: 999px; padding: 1px 9px; font-size: 12px;
 }
-.board-col-n.is-bumped { animation: count-bump 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.pipe-col-n.is-bumped { animation: count-bump 0.42s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @keyframes count-bump {
   0% { transform: scale(1); background: var(--cyan); color: #04121F; }
   100% { transform: scale(1); }
 }
-.board-drop { display: flex; flex-direction: column; gap: 8px; min-height: 56px; }
-.board-empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 14px 0 6px; margin: 0; }
-.board-more {
+.pipe-drop { display: flex; flex-direction: column; gap: 8px; min-height: 56px; }
+.pipe-empty { color: var(--text-muted); font-size: 12px; text-align: center; padding: 14px 0 6px; margin: 0; }
+.pipe-more {
   width: 100%; margin-top: 9px; padding: 7px; cursor: pointer;
   background: rgba(255,255,255,0.05); border: 1px dashed var(--border);
   border-radius: 8px; color: var(--cyan-bright); font: inherit; font-size: 12px;
 }
-.board-more:hover { background: rgba(0,154,199,0.14); }
+.pipe-more:hover { background: rgba(0,154,199,0.14); }
 
 .deal {
   background: var(--ink-raised); border: 1px solid var(--border);
@@ -801,14 +801,14 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 
 /* Dragging over a board full of cards: everything not being dragged recedes,
    so the column you are aiming at is the thing you can see. */
-.board.is-dragging-any .deal:not(.is-dragging) { opacity: 0.55; }
+.pipe.is-dragging-any .deal:not(.is-dragging) { opacity: 0.55; }
 
 @media (max-width: 760px) {
-  .board { grid-auto-columns: minmax(200px, 82vw); padding-inline: 16px; }
+  .pipe { grid-auto-columns: minmax(200px, 82vw); padding-inline: 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .funnel-seg, .deal, .board-col { transition: none; }
-  .deal.is-landed, .board-col-n.is-bumped { animation: none; }
+  .funnel-seg, .deal, .pipe-col { transition: none; }
+  .deal.is-landed, .pipe-col-n.is-bumped { animation: none; }
 }
 
 

@@ -153,3 +153,55 @@ def test_none_of_it_moves_under_reduced_motion(client):
     assert "@media (prefers-reduced-motion: reduce)" in tail
     assert "animation: none !important;" in tail
     assert "prefers-reduced-motion" in client.get("/static/app.js").text
+
+
+# ---------- One name, one layout ----------
+
+def _classes_that_set_display(css: str) -> dict[str, list[int]]:
+    """
+    Top-level rules that set `display` on a bare class, and where.
+
+    Two blocks refining the same class is ordinary CSS — a base rule and a
+    later one adding a transition or a border. Two blocks each deciding what
+    a class's *layout* is means two components are fighting over one name,
+    and the loser is whichever the browser reads first.
+    """
+    import re
+    from collections import defaultdict
+    seen = defaultdict(list)
+    depth = 0
+    names: list[str] = []
+    start_line = 0
+    for number, line in enumerate(css.splitlines(), 1):
+        stripped = line.strip()
+        if depth == 0 and "{" in stripped and not stripped.startswith(("/*", "*", "@")):
+            names = [m.group(1) for m in
+                     (re.fullmatch(r"\.([a-zA-Z0-9_-]+)", sel.strip())
+                      for sel in stripped.split("{")[0].split(","))
+                     if m]
+            start_line = number
+        if names and depth <= 1 and re.search(r"(^|[;{\s])display\s*:", stripped):
+            for name in names:
+                seen[name].append(start_line)
+            names = []
+        depth += stripped.count("{") - stripped.count("}")
+        if depth == 0:
+            names = []
+    return seen
+
+
+def test_no_two_components_lay_out_the_same_class_name():
+    """
+    The CRM's kanban was given `.board`, which the dashboard's work board
+    already owned — one said `display: flex`, the other `display: grid`. The
+    later rule won everywhere and turned the work board into four narrow
+    columns wrapping one word per line, on the live site and in no test.
+    """
+    from pathlib import Path
+    css = Path(__file__).resolve().parent.parent / "static" / "app.css"
+    clashes = {name: lines for name, lines in _classes_that_set_display(css.read_text()).items()
+               if len(set(lines)) > 1}
+    assert not clashes, (
+        "these class names have their layout set by more than one rule block: "
+        + "; ".join(f"{name} (lines {', '.join(map(str, sorted(set(lines))))})"
+                    for name, lines in sorted(clashes.items())))
