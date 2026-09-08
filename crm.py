@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import db
+from config import DEFAULT_DEAL_VALUE
 
 # key, label, what it means, colour, where it goes next
 STAGES: list[dict[str, Any]] = [
@@ -101,7 +102,7 @@ def _age_days(stamp: str | None) -> int:
     return max(0, (datetime.now(timezone.utc) - when).days)
 
 
-def funnel() -> dict[str, Any]:
+def funnel(**filters: Any) -> dict[str, Any]:
     """
     The pipeline as a pipeline: one bar, in stage order, plus what falls out.
 
@@ -113,7 +114,7 @@ def funnel() -> dict[str, Any]:
     12/12/12, and the number that actually matters — how many survive each
     step — has nowhere to live on a pie at all.
     """
-    counts = db.stats()["by_status"]
+    counts = db.status_counts(**filters)
     working = [s for s in STAGES if s["key"] not in ("lost", "disqualified")]
     live = sum(int(counts.get(s["key"], 0)) for s in working)
     total = sum(int(counts.get(s["key"], 0)) for s in STAGES)
@@ -127,7 +128,7 @@ def funnel() -> dict[str, Any]:
         # attempt cheerfully reported 200%, which is worse than no number.
         # This is the one that is both true and worth acting on: of the ones
         # sitting here, how many have sat too long.
-        cold = (db.count_stale_in_stage(stage["key"], stage["stale_after"])
+        cold = (db.count_stale_in_stage(stage["key"], stage["stale_after"], **filters)
                 if stage["stale_after"] and count else 0)
         rows.append({**stage, "count": count, "cold": cold,
                      "pct": (100.0 * count / live) if live else 0.0})
@@ -154,6 +155,32 @@ def column(stage_key: str, offset: int = 0, per_page: int = PAGE,
     return {**stage, "cards": cards, "total": total,
             "shown": offset + len(cards),
             "more": max(0, total - (offset + len(cards)))}
+
+
+def summary(**filters: Any) -> dict[str, Any]:
+    """
+    What this slice of the board is worth, and how much of it is moving.
+
+    On an unfiltered board it is the whole database, which the dashboard
+    already says. Its reason to exist is the filtered one: pick a masthead and
+    this is that masthead's book — prospects, open pipeline, signed revenue —
+    without doing the arithmetic in your head from eight column headers.
+    """
+    counts = db.status_counts(**filters)
+    money = db.revenue(DEFAULT_DEAL_VALUE, **filters)
+    working = sum(counts.get(s["key"], 0) for s in STAGES if s["key"] in WORKING)
+    cold = sum(db.count_stale_in_stage(s["key"], s["stale_after"], **filters)
+               for s in STAGES if s["stale_after"] and counts.get(s["key"]))
+    return {
+        "total": sum(counts.values()),
+        "working": working,
+        "cold": cold,
+        "pipeline": money["pipeline"]["total"],
+        "pipeline_count": money["pipeline"]["count"],
+        "unpriced": money["pipeline"]["unpriced"],
+        "won": money["won"]["total"],
+        "won_count": money["won"]["count"],
+    }
 
 
 def board(**filters: Any) -> list[dict[str, Any]]:

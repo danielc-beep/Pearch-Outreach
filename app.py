@@ -37,6 +37,7 @@ import worklist
 import backup
 import crm
 import coach
+import coverage
 import sources
 import auth
 from auth import PasswordMiddleware
@@ -549,6 +550,18 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
     )
 
 
+@app.get("/mastheads", response_class=HTMLResponse)
+def coverage_page(request: Request) -> HTMLResponse:
+    """
+    The network as a map: all 78 titles and what each one's book is worth.
+
+    The empty ones are the reason it exists, so they are on screen with the
+    rest rather than filtered out of it.
+    """
+    return page(request, "coverage.html", nav="mastheads",
+                board=coverage.board(), next_up=coverage.next_to_sweep())
+
+
 @app.get("/crm", response_class=HTMLResponse)
 def crm_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
     """
@@ -559,7 +572,9 @@ def crm_page(request: Request, masthead: str = "", industry: str = "") -> HTMLRe
     return page(
         request, "crm.html",
         nav="crm",
-        funnel=crm.funnel(),
+        funnel=crm.funnel(**where),
+        summary=crm.summary(**where),
+        title_for=mastheads.name_for,
         columns=crm.board(**where),
         stages=crm.STAGES,
         f={"masthead": masthead, "industry": industry},

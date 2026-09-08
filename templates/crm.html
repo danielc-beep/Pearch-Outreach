@@ -6,10 +6,12 @@
   <section class="section" style="margin-top:36px">
     <div class="section-head">
       <div>
-        <div class="eyebrow">Pipeline</div>
-        <h2>Where everything is <em>sitting</em></h2>
+        <div class="eyebrow">{{ 'Pipeline · ' ~ title_for(f.masthead)|masthead_label if f.masthead else 'Pipeline' }}</div>
+        <h2>{% if f.masthead %}The <em>{{ title_for(f.masthead)|masthead_label }}</em> book{% else %}Where everything is <em>sitting</em>{% endif %}</h2>
         <p class="lede">Drag a card to move a business along, or use the arrow on it.
-          Anything that has sat too long turns amber.</p>
+          Anything that has sat too long turns amber.
+          {%- if f.masthead %} Everything on this screen — the bar, the columns and the
+          totals — is {{ title_for(f.masthead)|masthead_label }} only.{% endif %}</p>
       </div>
       <form class="filters" method="get" action="/crm" style="margin:0">
         <div class="f">
@@ -37,6 +39,27 @@
     </div>
 
     {% if funnel.total %}
+    <div class="crm-sum">
+      <span class="crm-sum-cell">
+        <b>{{ '{:,}'.format(summary.working) }}</b>
+        <span>{{ 'in play' if not f.masthead else 'in play here' }}</span>
+      </span>
+      <span class="crm-sum-cell">
+        <b>${{ '{:,.0f}'.format(summary.pipeline) }}</b>
+        <span>open pipeline{% if summary.unpriced %} · {{ summary.unpriced }} unpriced{% endif %}</span>
+      </span>
+      <span class="crm-sum-cell is-won">
+        <b>${{ '{:,.0f}'.format(summary.won) }}</b>
+        <span>signed · {{ summary.won_count }} deal{{ '' if summary.won_count == 1 else 's' }}</span>
+      </span>
+      {% if summary.cold %}
+      <span class="crm-sum-cell is-cold">
+        <b>{{ summary.cold }}</b>
+        <span>sitting too long</span>
+      </span>
+      {% endif %}
+      {% if f.masthead %}<a class="linkish crm-sum-all" href="/crm{{ '?industry=' ~ f.industry|urlencode if f.industry }}">Every masthead →</a>{% endif %}
+    </div>
     <div class="funnel" role="img" aria-label="Businesses by pipeline stage">
       {% for s in funnel.stages %}{% if s.count %}
       <a class="funnel-seg" href="#col-{{ s.key }}" data-stage="{{ s.key }}"
@@ -114,10 +137,21 @@
   </div>
   {% else %}
   <div class="wrap"><div class="card">
+    {% if f.masthead or f.industry %}
+    {# An empty filtered board is not an empty database, and saying so sends
+       people off to prospect when all they did was pick the wrong filter. #}
+    <h3>Nothing here yet</h3>
+    <p class="muted" style="margin:0 0 16px">
+      No businesses match{% if f.masthead %} {{ title_for(f.masthead)|masthead_label }}{% endif %}{% if f.industry %}{{ ' and' if f.masthead }} {{ f.industry }}{% endif %}.
+      There may be plenty under everything else.</p>
+    <a class="btn btn-primary" href="/crm">Every masthead</a>
+    <a class="btn" href="/prospect?masthead={{ f.masthead|urlencode }}">Sweep this patch</a>
+    {% else %}
     <h3>Nothing in the pipeline yet</h3>
     <p class="muted" style="margin:0 0 16px">Sweep a masthead's patch and it fills in a
       couple of minutes. Everything found starts at New.</p>
     <a class="btn btn-primary" href="/prospect">Find businesses</a>
+    {% endif %}
   </div></div>
   {% endif %}
 </div>

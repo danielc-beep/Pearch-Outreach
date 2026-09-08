@@ -670,7 +670,7 @@ def won_between(start: str, end: str) -> float:
     return float(row["total"] or 0.0)
 
 
-def revenue(default_value: float = 0.0) -> dict[str, Any]:
+def revenue(default_value: float = 0.0, **filters: Any) -> dict[str, Any]:
     """
     Pipeline and closed-won, plus how much of it is guesswork.
 
@@ -680,13 +680,17 @@ def revenue(default_value: float = 0.0) -> dict[str, Any]:
     """
     conn = get_conn()
     marks = ", ".join("?" for _ in OPEN_STAGES)
+    # Whatever else is being filtered on — one masthead, one trade — narrows
+    # the money the same way it narrows the board above it.
+    extra, extra_args = _where(**filters)
+    extra = extra.replace("WHERE ", "AND ", 1)
 
     def totals(clause: str, args: list[Any]) -> dict[str, Any]:
         row = conn.execute(
             f"SELECT COUNT(*) AS n, "
             f"       SUM(CASE WHEN deal_value IS NOT NULL THEN 1 ELSE 0 END) AS priced, "
             f"       COALESCE(SUM(deal_value), 0) AS total "
-            f"FROM businesses WHERE {clause}", args).fetchone()
+            f"FROM businesses WHERE {clause} {extra}", [*args, *extra_args]).fetchone()
         priced = int(row["priced"] or 0)
         unpriced = int(row["n"]) - priced
         return {"count": int(row["n"]), "priced": priced, "unpriced": unpriced,
@@ -748,6 +752,33 @@ def industry_performance(min_base: int = 5, limit: int = 8) -> list[dict[str, An
     out.sort(key=lambda r: (r["revenue"], r["won"], r["reached_out"], r["prospects"]),
              reverse=True)
     return out[:limit]
+
+
+def masthead_performance() -> list[dict[str, Any]]:
+    """
+    Every masthead's book, in one query: prospects, pitched, replied, won.
+
+    Keyed by site so the caller can join it onto the full list of 78 titles.
+    The ones missing from this result are the point of the exercise — a
+    masthead with no row is a patch nobody has swept.
+    """
+    marks = ", ".join("?" for _ in REACHED_OUT)
+    rows = get_conn().execute(
+        f"SELECT COALESCE(masthead, '') AS site, "
+        f"  COUNT(*) AS prospects, "
+        f"  SUM(CASE WHEN email IS NOT NULL AND email != '' THEN 1 ELSE 0 END) AS contactable, "
+        f"  SUM(CASE WHEN status IN ({marks}) THEN 1 ELSE 0 END) AS pitched, "
+        f"  SUM(CASE WHEN status IN ('replied','won') THEN 1 ELSE 0 END) AS replied, "
+        f"  SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) AS won, "
+        f"  COALESCE(SUM(CASE WHEN status = 'won' THEN deal_value END), 0) AS revenue, "
+        f"  COALESCE(SUM(CASE WHEN status IN ('qualified','contacted','replied') "
+        f"                    THEN deal_value END), 0) AS pipeline "
+        f"FROM businesses GROUP BY COALESCE(masthead, '')", list(REACHED_OUT)).fetchall()
+    return [{"site": r["site"], "prospects": int(r["prospects"]),
+             "contactable": int(r["contactable"]), "pitched": int(r["pitched"]),
+             "replied": int(r["replied"]), "won": int(r["won"]),
+             "revenue": float(r["revenue"] or 0), "pipeline": float(r["pipeline"] or 0)}
+            for r in rows]
 
 
 def masthead_counts() -> list[dict[str, Any]]:
@@ -878,7 +909,17 @@ def delete_business(business_id: int, reason: str = "deleted by hand") -> str:
     return batch
 
 
-def list_businesses(
+# The filters every screen shares. Pulled out of list_businesses so the
+# aggregates can be asked the same question the list is: a CRM board filtered
+# to one masthead whose funnel still counted the whole database was reporting
+# two different truths on one screen.
+
+FILTERS = ("q", "status", "region", "state", "industry", "source", "has_email",
+           "has_website", "website_status", "masthead", "needs_review",
+           "needs_draft", "min_score", "min_rating")
+
+
+def _where(
     q: str = "",
     status: str = "",
     region: str = "",
@@ -893,11 +934,8 @@ def list_businesses(
     needs_draft: bool = False,
     min_score: int = 0,
     min_rating: float = 0.0,
-    sort: str = "score",
-    limit: int = 50,
-    offset: int = 0,
-) -> tuple[list[dict[str, Any]], int]:
-    """Filtered, sorted page of businesses plus the total matching count."""
+) -> tuple[str, list[Any]]:
+    """The WHERE clause for a set of filters, and the arguments to go with it."""
     where: list[str] = []
     args: list[Any] = []
     if q:
@@ -973,7 +1011,18 @@ def list_businesses(
         where.append("rating IS NOT NULL AND rating >= ?")
         args.append(min_rating)
 
-    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    return (f"WHERE {' AND '.join(where)}" if where else ""), args
+
+
+def list_businesses(
+    sort: str = "score",
+    limit: int = 50,
+    offset: int = 0,
+    **filters: Any,
+) -> tuple[list[dict[str, Any]], int]:
+    """Filtered, sorted page of businesses plus the total matching count."""
+    clause, args = _where(**filters)
+
     order = {
         "score": "fit_score DESC, id DESC",
         "name": "name COLLATE NOCASE ASC",
@@ -1282,7 +1331,23 @@ def list_activities(business_id: int, limit: int = 25) -> list[dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def count_stale_in_stage(status: str, days: int) -> int:
+def status_counts(**filters: Any) -> dict[str, int]:
+    """
+    How many sit at each stage, under whatever filters are in force.
+
+    stats() answers this for the whole database, which is the wrong answer on
+    a board filtered to one masthead: the columns showed that masthead and the
+    funnel above them showed everything, so one screen carried two truths.
+    """
+    clause, args = _where(**filters)
+    rows = get_conn().execute(
+        f"SELECT status, COUNT(*) AS n FROM businesses {clause} GROUP BY status", args
+    ).fetchall()
+    got = {r["status"]: int(r["n"]) for r in rows}
+    return {stage: got.get(stage, 0) for stage in STATUSES}
+
+
+def count_stale_in_stage(status: str, days: int, **filters: Any) -> int:
     """
     How many at this stage have been sitting there longer than `days`.
 
@@ -1290,12 +1355,14 @@ def count_stale_in_stage(status: str, days: int) -> int:
     the day the record was created when it has never moved — a business that
     has been New since the day it was found has been New since that day.
     """
+    clause, args = _where(status=status, **filters)
     row = get_conn().execute(
-        "SELECT COUNT(*) AS n FROM businesses b WHERE b.status = ? AND "
+        f"SELECT COUNT(*) AS n FROM businesses b {clause} "
+        f"{'AND' if clause else 'WHERE'} "
         "COALESCE((SELECT MAX(a.created_at) FROM activities a "
         "          WHERE a.business_id = b.id AND a.kind = 'stage'), b.created_at) "
         "<= datetime('now', ?)",
-        (status, f"-{int(days)} days"),
+        [*args, f"-{int(days)} days"],
     ).fetchone()
     return int(row["n"])
 

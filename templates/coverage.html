@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Masthead coverage — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Coverage</div>
+        <h2>All {{ board.totals.titles }} <em>mastheads</em></h2>
+        <p class="lede">Every ACM title, shaded by how far its book has got. The pale
+          ones are patches nobody has swept — that is the point of the board, not a gap
+          in it. Click a masthead for its pipeline, or sweep its patch.</p>
+      </div>
+    </div>
+
+    <div class="cov-sum">
+      <span class="cov-sum-cell"><b>{{ board.totals.earning }}</b><span>earning</span></span>
+      <span class="cov-sum-cell"><b>{{ board.totals.working }}</b><span>worked</span></span>
+      <span class="cov-sum-cell is-quiet"><b>{{ board.totals.untouched }}</b><span>untouched</span></span>
+      <span class="cov-sum-cell"><b>{{ '{:,}'.format(board.totals.prospects) }}</b><span>prospects placed</span></span>
+      <span class="cov-sum-cell is-won"><b>${{ '{:,.0f}'.format(board.totals.revenue) }}</b><span>signed</span></span>
+      {% if board.totals.unaligned %}
+      <a class="cov-sum-cell is-warn" href="/review/align">
+        <b>{{ board.totals.unaligned }}</b><span>not aligned to any title →</span></a>
+      {% endif %}
+    </div>
+
+    <ul class="cov-key">
+      {% for b in board.bands %}
+      <li class="cov-key-item"><span class="cov-chip is-{{ b.key }}"></span>
+        <b>{{ b.label }}</b> {{ b.blurb }}</li>
+      {% endfor %}
+    </ul>
+
+    {% if next_up %}
+    <div class="cov-next">
+      <span class="cov-next-head">Nearest patches to sweep</span>
+      {% for t in next_up %}
+      <a class="pill" href="/prospect?masthead={{ t.site|urlencode }}">{{ t.name|masthead_label }} · {{ t.patch }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% for group in board.groups %}
+    <div class="cov-state">
+      <h3 class="cov-state-head">
+        {{ group.state }}
+        <span class="muted small">{{ group.titles|length }} titles ·
+          {{ '{:,}'.format(group.prospects) }} prospects{% if group.revenue %} ·
+          ${{ '{:,.0f}'.format(group.revenue) }} signed{% endif %}</span>
+      </h3>
+      <div class="cov-grid">
+        {% for t in group.titles %}
+        <a class="cov-tile is-{{ t.band }}" href="/crm?masthead={{ t.site|urlencode }}"
+           title="{{ t.name }} — {{ t.prospects }} prospects, {{ t.pitched }} pitched, {{ t.won }} won">
+          <span class="cov-name">{{ t.name|masthead_label }}</span>
+          <span class="cov-figures">
+            <b>{{ t.prospects }}</b>
+            <span class="cov-sub">{% if t.won %}{{ t.won }} won · ${{ '{:,.0f}'.format(t.revenue) }}{% elif t.pitched %}{{ t.pitched }} pitched{% elif t.prospects %}none pitched{% else %}none found{% endif %}</span>
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

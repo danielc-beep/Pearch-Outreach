@@ -1258,6 +1258,115 @@ table.bare .sub { color: var(--text-muted); }
 }
 
 
+/* ---------- Masthead coverage ---------- */
+/* One quantity in four steps — how far a masthead's book has got — so it is
+   shaded along a single cyan ramp rather than four unrelated colours. The
+   four fills are monotonic in lightness over the page's ink, and white text
+   clears 4.5:1 on the brightest of them (5.5:1).
+   "Untouched" is not a fifth colour: it is no fill and a dashed edge, which
+   separates the two states that matter most — nobody has swept this patch
+   versus we have and nothing is out — by form rather than by hue. The first
+   attempt used grey against cyan there and the validator was blunt about it:
+   ΔE 9.2 in normal vision, closer still for a protanope.
+   No tile relies on its shade alone: every one prints its own numbers, and
+   the key names all four bands. */
+.cov-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 28px;
+  margin: 4px 0 16px; padding-bottom: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.cov-sum-cell { display: flex; align-items: baseline; gap: 7px; text-decoration: none; }
+.cov-sum-cell b {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--white); font-variant-numeric: tabular-nums;
+}
+.cov-sum-cell span { font-size: 12px; color: var(--text-muted); }
+.cov-sum-cell.is-won b { color: var(--success); }
+.cov-sum-cell.is-quiet b { color: var(--text-muted); }
+.cov-sum-cell.is-warn b { color: var(--warning); }
+.cov-sum-cell.is-warn:hover span { color: var(--cyan-bright); }
+
+.cov-key { list-style: none; display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0 0 16px; padding: 0; }
+.cov-key-item { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 7px; }
+.cov-key-item b { color: var(--text); font-weight: 650; }
+.cov-chip { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+.cov-chip.is-untouched { background: transparent; border: 1px dashed rgba(255,255,255,0.30); }
+.cov-chip.is-found     { background: rgba(0,154,199,0.16); border: 1px solid rgba(0,154,199,0.45); }
+.cov-chip.is-working   { background: rgba(0,154,199,0.38); border: 1px solid rgba(53,198,240,0.55); }
+.cov-chip.is-earning   { background: rgba(0,154,199,0.62); border: 1px solid var(--cyan-bright); }
+
+.cov-next {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+  margin: 0 0 22px; padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.cov-next-head {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); margin-right: 4px;
+}
+
+.cov-state { margin-bottom: 26px; }
+.cov-state-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  font-size: 13px; margin: 0 0 10px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.cov-grid {
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+}
+.cov-tile {
+  display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
+  min-height: 74px; padding: 10px 12px; border-radius: 10px; text-decoration: none;
+  background: rgba(0,154,199,0.16); border: 1px solid rgba(0,154,199,0.45);
+  transition: transform 0.14s, border-color 0.14s;
+}
+.cov-tile:hover { transform: translateY(-2px); border-color: var(--cyan-bright); }
+.cov-tile.is-untouched {
+  background: transparent; border: 1px dashed rgba(255,255,255,0.16);
+}
+.cov-tile.is-working { background: rgba(0,154,199,0.38); border-color: rgba(53,198,240,0.55); }
+.cov-tile.is-earning { background: rgba(0,154,199,0.62); border-color: var(--cyan-bright); }
+.cov-name {
+  font-size: 12.5px; font-weight: 650; color: var(--white); line-height: 1.25;
+}
+.cov-tile.is-untouched .cov-name { color: var(--text-muted); font-weight: 500; }
+.cov-figures { display: flex; align-items: baseline; gap: 8px; }
+.cov-figures b {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+  color: var(--white); font-variant-numeric: tabular-nums;
+}
+.cov-tile.is-untouched .cov-figures b { color: rgba(255,255,255,0.28); }
+/* Light enough to clear 4.5:1 on the brightest tile in the ramp. */
+.cov-sub { font-size: 11px; color: #DCE9F7; }
+.cov-tile.is-untouched .cov-sub { color: var(--text-muted); }
+.cov-tile.is-earning .cov-sub { color: var(--white); }
+
+@media (max-width: 560px) {
+  .cov-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cov-tile:hover { transform: none; }
+}
+
+/* ---------- The board's own totals ---------- */
+/* On an unfiltered board this repeats the dashboard. Its reason to exist is
+   the filtered one: pick a masthead and this is that masthead's book. */
+.crm-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 28px;
+  margin: 0 0 14px; padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.crm-sum-cell { display: flex; align-items: baseline; gap: 7px; }
+.crm-sum-cell b {
+  font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--white); font-variant-numeric: tabular-nums;
+}
+.crm-sum-cell span { font-size: 12px; color: var(--text-muted); }
+.crm-sum-cell.is-won b { color: var(--success); }
+.crm-sum-cell.is-cold b { color: var(--warning); }
+.crm-sum-all { margin-left: auto; font-size: 12.5px; }
+
 /* ---------- The number to hit ---------- */
 /* In the head row, where it costs no height and reads before anything else.
    A dashboard of absolutes reports; a target turns each of them into a
