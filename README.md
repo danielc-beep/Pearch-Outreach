@@ -202,6 +202,28 @@ otherwise; the box pre-fills with the middle of what you have already priced.
 Deals carrying a real figure are never overwritten by it, and the count of
 unpriced ones is stated beside every total that leans on it.
 
+## What the client is paying for
+
+A client's twelve months starts the day their content goes live, so a piece
+sitting on a desk is a term that has not begun. `/revenue/delivery` tracks it:
+brief → writing → with the desk → published, and **publishing sets the go-live
+date** and starts the clock. There is nothing to type twice, and a second piece
+never moves a renewal date that is already set.
+
+Then, each month, a rep files the Pearch report on the client's own page:
+citations, notes, and the file itself. That is the evidence the renewal rests
+on — a renewal conversation with nothing on file but an invoice is a hard one.
+One report per client per month, replaced rather than duplicated, so a
+corrected upload leaves one row rather than two and a question.
+
+Reps are a name typed in a box, not accounts. The app has one shared login, so
+a name is an honest record of who did the work where a login would be a claim
+the app cannot back up.
+
+Uploaded files live beside the database and are **not** inside a snapshot. The
+backups page says so and prints the folder — a snapshot records that a report
+exists and what it said, not the file.
+
 Underneath is the client book. A won deal with no go-live date is the top row,
 not a hidden one — that is a client whose content nobody has published. A
 renewal starts the day the current term ends, so renewing early or late does

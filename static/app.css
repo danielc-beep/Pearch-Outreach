@@ -1408,6 +1408,69 @@ table.bare .sub { color: var(--text-muted); }
 .rev-up { color: var(--success); }
 .rev-down { color: var(--danger); }
 
+/* ---------- Delivery ---------- */
+/* The content stages are a pipeline, so they shade along one ramp from "not
+   started" to "live" rather than taking four unrelated colours, and each
+   carries its own word. */
+.del-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 26px;
+  margin: 4px 0 16px; padding-bottom: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.del-cell { display: flex; align-items: baseline; gap: 7px; }
+.del-cell b {
+  font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--white); font-variant-numeric: tabular-nums;
+}
+.del-cell span { font-size: 12px; color: var(--text-muted); }
+.del-cell.is-warn b { color: var(--warning); }
+.del-cell.is-quiet b { color: var(--text-muted); }
+
+.del-stage {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+  color: var(--text-muted); background: rgba(255,255,255,0.07);
+}
+.del-stage.is-brief       { color: var(--text-muted); background: rgba(255,255,255,0.07); }
+.del-stage.is-writing     { color: var(--cyan-soft); background: rgba(0,154,199,0.16); }
+.del-stage.is-with_editor { color: var(--warning); background: rgba(255,194,77,0.15); }
+.del-stage.is-published   { color: var(--success); background: rgba(63,214,147,0.13); }
+table.bare tr.is-stale td:first-child { box-shadow: inset 2px 0 0 var(--warning); }
+
+.del-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; }
+.del-piece, .del-report {
+  border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px;
+  background: var(--surface); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+}
+.del-piece-head { display: flex; align-items: center; gap: 9px; flex-basis: 100%; }
+.del-piece b, .del-report b { color: var(--white); font-size: 13px; flex-basis: 100%; }
+.del-piece a, .del-report a { font-size: 12px; }
+.del-cites {
+  font-size: 11px; font-weight: 700; color: var(--success);
+  background: rgba(63,214,147,0.13); border-radius: 999px; padding: 2px 9px;
+}
+.del-notes {
+  flex-basis: 100%; margin: 2px 0 0; font-size: 12px; color: var(--text-muted);
+  line-height: 1.45;
+}
+
+#brief-form, #report-form { display: grid; gap: 8px; }
+.del-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.del-fields label, .del-file {
+  display: flex; flex-direction: column; gap: 3px; font-size: 11.5px;
+  color: var(--text-muted); flex: 1; min-width: 110px;
+}
+#brief-form input, #report-form input, #report-form textarea {
+  font: inherit; font-size: 13px; color: var(--text);
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 9px; padding: 7px 10px; width: 100%;
+}
+#brief-form input:focus, #report-form input:focus, #report-form textarea:focus {
+  outline: none; border-color: var(--border-lit);
+}
+#report-form input[type=file] { padding: 6px; font-size: 12px; }
+#brief-form button, #report-form button { justify-self: start; }
+
 /* ---------- The client book ---------- */
 /* One axis — how soon somebody has to do something — so the states run along
    one ramp from urgent to quiet, each with its own word beside it. */
@@ -1422,10 +1485,10 @@ table.bare .sub { color: var(--text-muted); }
 .ren-state.is-soon     { color: var(--cyan-soft); background: rgba(0,154,199,0.16); }
 .ren-state.is-running  { color: var(--success); background: rgba(63,214,147,0.13); }
 table.renewals td { vertical-align: top; }
-/* Only the sub-line inside a cell, never a cell that happens to carry the
-   class — matching those turned every td into a block and stacked the whole
-   table into one column. */
-table.renewals td > .sub { display: block; font-size: 11.5px; }
+/* A sub-line under the thing it belongs to, in any of these tables. Only
+   inside a cell, never a cell that happens to carry the class — matching
+   those turned every td into a block and stacked the table into one column. */
+table.bare td > .sub { display: block; font-size: 11.5px; margin-top: 1px; }
 .ren-do { white-space: nowrap; }
 .ren-do .btn { margin-left: 4px; }
 

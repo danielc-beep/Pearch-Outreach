@@ -20,6 +20,7 @@ import db
 import review
 import followup as _followup
 import renewals as _renewals
+import delivery as _delivery
 from config import MIN_PROSPECT_RATING
 
 
@@ -72,6 +73,18 @@ def board() -> list[dict[str, Any]]:
               "The content has not been published, so their twelve months has not "
               "started and nothing is being delivered.",
               "Set the date", "/revenue#renewals", "warn"),
+        # A piece sitting on a desk is a term that has not started, and a
+        # month with no report is a renewal with nothing behind it.
+        _item("content", _delivery.board()["stale"],
+              "pieces sitting too long",
+              "Written up but not published. Until it goes live the client's twelve "
+              "months has not started and they are paying for nothing.",
+              "Open delivery", "/revenue/delivery", "warn"),
+        _item("reports", _delivery.count_outstanding(),
+              "clients owed a report",
+              "Every live client gets the Pearch report each month. It is the evidence "
+              "the renewal conversation rests on.",
+              "File them", "/revenue/delivery"),
         _item("renewals", book["counts"].get("overdue", 0)
               + book["counts"].get("imminent", 0),
               "up for renewal",

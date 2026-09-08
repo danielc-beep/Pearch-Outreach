@@ -206,6 +206,72 @@
         </div>
         {% endif %}
 
+        {% if is_client %}
+        <div class="card" id="content">
+          <h3>Content</h3>
+          <p class="help" style="margin-top:0">Their twelve months starts the day this
+            publishes, so publishing it here sets the go-live date. Nothing to type twice.</p>
+          {% if pieces %}
+          <ul class="del-list">
+            {% for p in pieces %}
+            <li class="del-piece">
+              <div class="del-piece-head">
+                <span class="del-stage is-{{ p.stage }}">{{ p.stage_label }}</span>
+                <span class="muted small">{{ p.days }}d{% if p.owner %} · {{ p.owner }}{% endif %}</span>
+              </div>
+              <b>{{ p.angle or 'No angle written down' }}</b>
+              {% if p.url %}<a class="linkish" href="{{ p.url }}" rel="noopener"
+                               target="_blank">{{ p.url|truncate(52) }}</a>{% endif %}
+              {% if p.next %}
+              <button class="btn btn-sm js-advance" data-id="{{ p.id }}"
+                      data-stage="{{ p.next }}" data-publish="{{ '1' if p.next == 'published' else '' }}">
+                Move to {{ p.next_label }}</button>
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form id="brief-form" autocomplete="off">
+            <input id="brief-angle" type="text" placeholder="The angle — what is it about?">
+            <input id="brief-owner" type="text" placeholder="Who is writing it">
+            <button class="btn btn-sm btn-primary" type="submit">Open a brief</button>
+          </form>
+        </div>
+
+        <div class="card" id="reports">
+          <h3>Monthly reports</h3>
+          <p class="help" style="margin-top:0">The Pearch report each month, on the record.
+            This is what the renewal conversation rests on.</p>
+          {% if reports %}
+          <ul class="del-list">
+            {% for r in reports %}
+            <li class="del-report">
+              <b>{{ period_label(r.period) }}</b>
+              {% if r.citations is not none %}<span class="del-cites">{{ r.citations }} citation{{ '' if r.citations == 1 else 's' }}</span>{% endif %}
+              {% if r.owner %}<span class="muted small">{{ r.owner }}</span>{% endif %}
+              {% if r.file_name %}
+              <a class="linkish" href="/api/reports/{{ r.id }}/file">{{ r.file_name }}</a>
+              {% endif %}
+              {% if r.notes %}<p class="del-notes">{{ r.notes }}</p>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          <form id="report-form" enctype="multipart/form-data" autocomplete="off">
+            <div class="del-fields">
+              <label>Month<input type="month" id="rep-period" value="{{ this_period }}" required></label>
+              <label>Filed by<input type="text" id="rep-owner" placeholder="Your name"></label>
+              <label>Citations<input type="number" id="rep-cites" min="0" placeholder="0"></label>
+            </div>
+            <textarea id="rep-notes" rows="2" placeholder="What the month showed"></textarea>
+            <label class="del-file">Pearch report
+              <input type="file" id="rep-file"
+                     accept=".pdf,.png,.jpg,.jpeg,.csv,.xlsx,.docx,.pptx"></label>
+            <button class="btn btn-sm btn-primary" type="submit">File the report</button>
+          </form>
+        </div>
+        {% endif %}
+
         <div class="card">
           <h3>They wrote back</h3>
           <p class="help" style="margin-top:0">Paste what they said. It moves them to
@@ -235,6 +301,52 @@
 {% block scripts %}
 <script>
   const BUSINESS_ID = {{ b.id }};
+
+  // The content, and the report on it each month.
+  document.querySelectorAll('.js-advance').forEach((b) => {
+    b.addEventListener('click', async () => {
+      const body = {stage: b.dataset.stage};
+      if (b.dataset.publish) {
+        const url = window.prompt('Where did it publish? Paste the link.');
+        if (!url) return;
+        body.url = url.trim();
+      }
+      try {
+        await window.postJSON(`/api/content/${b.dataset.id}/move`, body);
+        window.location.reload();
+      } catch (err) { flash(err.message, 'warn'); }
+    });
+  });
+
+  const briefForm = document.getElementById('brief-form');
+  if (briefForm) briefForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      await window.postJSON('/api/content', {
+        business_id: BUSINESS_ID,
+        angle: document.getElementById('brief-angle').value,
+        owner: document.getElementById('brief-owner').value});
+      window.location.reload();
+    } catch (err) { flash(err.message, 'warn'); }
+  });
+
+  const reportForm = document.getElementById('report-form');
+  if (reportForm) reportForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    // Multipart, because the file is the point of it.
+    const data = new FormData();
+    data.append('period', document.getElementById('rep-period').value);
+    data.append('owner', document.getElementById('rep-owner').value);
+    data.append('citations', document.getElementById('rep-cites').value);
+    data.append('notes', document.getElementById('rep-notes').value);
+    const picked = document.getElementById('rep-file').files[0];
+    if (picked) data.append('file', picked);
+    const res = await fetch(`/api/reports/${BUSINESS_ID}`, {method: 'POST', body: data});
+    if (res.ok) { window.location.reload(); return; }
+    let why = 'That did not save.';
+    try { why = (await res.json()).detail || why; } catch (err) { /* keep the default */ }
+    flash(why, 'warn');
+  });
   document.getElementById('reply-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const box = document.getElementById('reply-text');

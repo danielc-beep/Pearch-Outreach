@@ -17,6 +17,14 @@
     <div id="flash"></div>
 
     <div class="notice notice-warn">
+      <strong>A snapshot holds the database, not the uploaded files.</strong>
+      Pearch reports filed against a client are separate files sitting beside the
+      database in <code>{{ uploads_dir }}</code>{% if upload_count %} — {{ upload_count }}
+      of them, {{ upload_size }}{% endif %}. A snapshot records that a report exists and
+      what it said; it does not contain the file. Copy that folder too.
+    </div>
+
+    <div class="notice notice-warn">
       <strong>A snapshot on this disk is not an off-site backup.</strong>
       It protects against a bad purge or a wrong import. If the disk itself goes,
       the snapshots go with it — so download one now and again, and keep it somewhere else.

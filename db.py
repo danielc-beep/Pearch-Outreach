@@ -188,6 +188,42 @@ CREATE INDEX IF NOT EXISTS idx_contracts_signed ON contracts(signed_at);
 """
 
 
+CREATE_CONTENT = """
+CREATE TABLE IF NOT EXISTS content (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    business_id  INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    stage        TEXT NOT NULL DEFAULT 'brief',
+    angle        TEXT,
+    owner        TEXT,
+    url          TEXT,
+    published_at TEXT,
+    notes        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_content_business ON content(business_id);
+CREATE INDEX IF NOT EXISTS idx_content_stage ON content(stage);
+"""
+
+
+CREATE_REPORTS = """
+CREATE TABLE IF NOT EXISTS reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT NOT NULL,
+    business_id  INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    period       TEXT NOT NULL,
+    owner        TEXT,
+    citations    INTEGER,
+    notes        TEXT,
+    file_name    TEXT,
+    file_path    TEXT,
+    file_bytes   INTEGER,
+    UNIQUE (business_id, period)
+);
+CREATE INDEX IF NOT EXISTS idx_reports_period ON reports(period);
+"""
+
+
 CREATE_INBOUND = """
 CREATE TABLE IF NOT EXISTS inbound (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -297,6 +333,8 @@ def init_db() -> None:
     conn.executescript(CREATE_MOVES)
     conn.executescript(CREATE_INBOUND)
     conn.executescript(CREATE_CONTRACTS)
+    conn.executescript(CREATE_CONTENT)
+    conn.executescript(CREATE_REPORTS)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -313,7 +351,7 @@ def reset_db() -> None:
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
                   "contacts", "suppressions", "trash", "settings", "metrics_daily",
-                  "stage_moves", "inbound", "contracts",
+                  "stage_moves", "inbound", "contracts", "content", "reports",
                   "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
@@ -1588,6 +1626,109 @@ def backfill_contracts() -> int:
     if made:
         log.info("wrote %s contract rows from existing won businesses", made)
     return made
+
+
+# ---------- The content a client is paying for ----------
+
+def content_for(business_id: int) -> list[dict[str, Any]]:
+    rows = get_conn().execute(
+        "SELECT * FROM content WHERE business_id = ? ORDER BY id DESC", (business_id,)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def add_content(business_id: int, data: dict[str, Any]) -> int:
+    fields = ("stage", "angle", "owner", "url", "published_at", "notes")
+    row = {k: data.get(k) for k in fields if k in data}
+    row["business_id"] = business_id
+    row["created_at"] = row["updated_at"] = now()
+    row.setdefault("stage", "brief")
+    cols = ", ".join(row)
+    with tx() as conn:
+        cur = conn.execute(f"INSERT INTO content ({cols}) "
+                           f"VALUES ({', '.join('?' for _ in row)})", list(row.values()))
+        return int(cur.lastrowid)
+
+
+def update_content(content_id: int, data: dict[str, Any]) -> None:
+    fields = ("stage", "angle", "owner", "url", "published_at", "notes")
+    row = {k: v for k, v in data.items() if k in fields}
+    if not row:
+        return
+    row["updated_at"] = now()
+    sets = ", ".join(f"{k} = ?" for k in row)
+    with tx() as conn:
+        conn.execute(f"UPDATE content SET {sets} WHERE id = ?", [*row.values(), content_id])
+
+
+def get_content(content_id: int) -> dict[str, Any] | None:
+    return row_to_dict(get_conn().execute(
+        "SELECT * FROM content WHERE id = ?", (content_id,)).fetchone())
+
+
+def content_in_flight() -> list[dict[str, Any]]:
+    """Every piece not yet published, oldest first — the ones holding a term up."""
+    rows = get_conn().execute(
+        "SELECT c.*, b.name AS business_name, b.masthead FROM content c "
+        "JOIN businesses b ON b.id = c.business_id "
+        "WHERE c.stage != 'published' ORDER BY c.created_at ASC").fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+# ---------- What was reported to the client, month by month ----------
+
+def reports_for(business_id: int) -> list[dict[str, Any]]:
+    rows = get_conn().execute(
+        "SELECT * FROM reports WHERE business_id = ? ORDER BY period DESC", (business_id,)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def get_report(report_id: int) -> dict[str, Any] | None:
+    return row_to_dict(get_conn().execute(
+        "SELECT * FROM reports WHERE id = ?", (report_id,)).fetchone())
+
+
+def save_report(business_id: int, period: str, data: dict[str, Any]) -> int:
+    """
+    One report per client per month, replaced rather than duplicated.
+
+    A rep who uploads a corrected file should end up with the corrected file,
+    not with two rows and a question about which is right.
+    """
+    fields = ("owner", "citations", "notes", "file_name", "file_path", "file_bytes")
+    row = {k: data.get(k) for k in fields if k in data}
+    existing = get_conn().execute(
+        "SELECT id FROM reports WHERE business_id = ? AND period = ?",
+        (business_id, period)).fetchone()
+    if existing:
+        if row:
+            sets = ", ".join(f"{k} = ?" for k in row)
+            with tx() as conn:
+                conn.execute(f"UPDATE reports SET {sets} WHERE id = ?",
+                             [*row.values(), int(existing["id"])])
+        return int(existing["id"])
+    row.update({"business_id": business_id, "period": period, "created_at": now()})
+    cols = ", ".join(row)
+    with tx() as conn:
+        cur = conn.execute(f"INSERT INTO reports ({cols}) "
+                           f"VALUES ({', '.join('?' for _ in row)})", list(row.values()))
+        return int(cur.lastrowid)
+
+
+def delete_report(report_id: int) -> dict[str, Any] | None:
+    report = get_report(report_id)
+    if report:
+        with tx() as conn:
+            conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
+    return report
+
+
+def reports_in_period(period: str) -> dict[int, dict[str, Any]]:
+    """Which clients already have a report for this month, keyed by business."""
+    rows = get_conn().execute(
+        "SELECT * FROM reports WHERE period = ?", (period,)).fetchall()
+    return {int(r["business_id"]): row_to_dict(r) for r in rows}
 
 
 # ---------- Following up ----------

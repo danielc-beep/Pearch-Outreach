@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Delivery — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  {% include "_subtabs.html" %}
+
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Content</div>
+        <h2>What is still to publish</h2>
+        <p class="lede">A client's twelve months starts the day their content goes live,
+          so a piece sitting on a desk is a term that has not begun. Publishing one here
+          sets the go-live date and starts the clock — there is nothing to type twice.</p>
+      </div>
+    </div>
+
+    <div class="del-sum">
+      {% for s in stages if s.key != 'published' %}
+      <span class="del-cell"><b>{{ board.counts[s.key] }}</b><span>{{ s.label|lower }}</span></span>
+      {% endfor %}
+      {% if board.stale %}
+      <span class="del-cell is-warn"><b>{{ board.stale }}</b><span>sitting too long</span></span>
+      {% endif %}
+    </div>
+
+    {% if board.pieces %}
+    <div class="bare-scroll">
+      <table class="bare">
+        <thead><tr><th>Client</th><th>Angle</th><th>With</th><th>Stage</th>
+          <th class="n">Waiting</th><th></th></tr></thead>
+        <tbody>
+          {% for p in board.pieces %}
+          <tr class="{{ 'is-stale' if p.stale }}">
+            <td><a href="/businesses/{{ p.business_id }}"><strong>{{ p.business_name }}</strong></a>
+              <span class="sub">{{ masthead_name(p.masthead)|masthead_label }}</span></td>
+            <td class="sub">{{ p.angle or '—' }}</td>
+            <td class="sub">{{ p.owner or '—' }}</td>
+            <td><span class="del-stage is-{{ p.stage }}">{{ p.stage_label }}</span></td>
+            <td class="n sub {{ 'rev-down' if p.stale }}">{{ p.days }}d</td>
+            <td><a class="btn btn-sm" href="/businesses/{{ p.business_id }}#content">Open</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty"><strong>Nothing waiting to publish.</strong>
+      A brief opens from a client's own page the moment they sign.</div>
+    {% endif %}
+  </section>
+
+  <section class="section" style="margin-top:14px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Monthly reports</div>
+        <h2>{{ due.label }}</h2>
+        <p class="lede">Every live client gets a Pearch report each month, filed on their
+          record. It is the evidence the renewal rests on — a renewal conversation with
+          nothing on file but an invoice is a hard one.</p>
+      </div>
+      <form method="get" action="/revenue/delivery" style="margin:0">
+        <input type="month" name="period" value="{{ due.period }}"
+               onchange="this.form.submit()" max="{{ this_period }}">
+      </form>
+    </div>
+
+    <div class="del-sum">
+      <span class="del-cell"><b>{{ due.done }}</b><span>filed</span></span>
+      {% if due.outstanding %}
+      <span class="del-cell is-warn"><b>{{ due.outstanding }}</b><span>still to do</span></span>
+      {% endif %}
+      <span class="del-cell is-quiet"><b>{{ due.total }}</b><span>live clients</span></span>
+    </div>
+
+    {% if due.clients %}
+    <div class="bare-scroll">
+      <table class="bare">
+        <thead><tr><th>Client</th><th>Masthead</th><th>Report</th><th>Filed by</th>
+          <th class="n">Citations</th><th></th></tr></thead>
+        <tbody>
+          {% for c in due.clients %}
+          <tr class="{{ '' if c.has_report else 'is-stale' }}">
+            <td><a href="/businesses/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+              <span class="sub">renews {{ c.state.due or '—' }}</span></td>
+            <td class="sub">{{ masthead_name(c.masthead)|masthead_label }}</td>
+            <td>
+              {% if c.has_report %}
+              <span class="del-stage is-published">Filed</span>
+              {% if c.report.file_name %}
+              <a class="linkish" href="/api/reports/{{ c.report.id }}/file">{{ c.report.file_name }}</a>
+              {% endif %}
+              {% else %}
+              <span class="del-stage is-brief">Not yet</span>
+              {% endif %}
+            </td>
+            <td class="sub">{{ c.report.owner if c.has_report else '' or '—' }}</td>
+            <td class="n sub">{{ c.report.citations if c.has_report and c.report.citations is not none else '—' }}</td>
+            <td><a class="btn btn-sm {{ 'btn-primary' if not c.has_report }}"
+                   href="/businesses/{{ c.id }}#reports">{{ 'Update' if c.has_report else 'File it' }}</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty"><strong>No live clients yet.</strong>
+      A client appears here once their content has published.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

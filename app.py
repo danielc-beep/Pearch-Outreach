@@ -19,7 +19,7 @@ import os
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse,
                                StreamingResponse)
 from fastapi.staticfiles import StaticFiles
@@ -42,6 +42,7 @@ import coverage
 import replies
 import followup
 import renewals
+import delivery
 import revenue as revenue_year
 import sources
 import auth
@@ -482,6 +483,13 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
         contacts=db.list_contacts(business_id),
         messages=db.list_messages(business_id=business_id),
         activities=db.list_activities(business_id),
+        # A won business is a client, and a client has a delivery record.
+        is_client=business["status"] == "won",
+        pieces=delivery.pieces_for(business_id),
+        reports=db.reports_for(business_id),
+        stages=delivery.STAGES,
+        this_period=delivery.this_period(),
+        period_label=delivery.period_label,
     )
 
 
@@ -790,6 +798,9 @@ def backups_page(request: Request) -> HTMLResponse:
     return page(
         request, "backups.html", nav="",
         backups=backup.listing(),
+        uploads_dir=str(delivery.UPLOAD_DIR),
+        upload_count=delivery.uploads_held()["count"],
+        upload_size=delivery.uploads_held()["size"],
         batches=db.trash_batches(),
         keep=backup.KEEP,
         trash_days=db.TRASH_KEEPS_DAYS,
@@ -1038,11 +1049,20 @@ def api_set_followup_schedule(body: ScheduleIn) -> JSONResponse:
 
 # ---------- Revenue and renewals ----------
 
+def _revenue_tabs() -> list[dict[str, Any]]:
+    return [
+        {"key": "overview", "label": "The year", "href": "/revenue"},
+        {"key": "delivery", "label": "Delivery", "href": "/revenue/delivery",
+         "count": delivery.count_outstanding(), "tone": "warn"},
+    ]
+
+
 @app.get("/revenue", response_class=HTMLResponse)
 def revenue_page(request: Request, year: int = 0) -> HTMLResponse:
     """The year against last year, and the client book underneath it."""
     data = revenue_year.year(year or None)
-    return page(request, "revenue.html", nav="revenue",
+    return page(request, "revenue.html", nav="revenue", tab="overview",
+                subtabs=_revenue_tabs(), subtab_label="Revenue",
                 y=data, c=revenue_year.chart(data), book=renewals.book(),
                 unpriced=db.revenue(revenue_year.default_value())["pipeline"],
                 deal_value=revenue_year.default_value(),
@@ -1172,6 +1192,107 @@ def mastheads_moved(request: Request) -> RedirectResponse:
 @app.get("/businesses")
 def businesses_moved(request: Request) -> RedirectResponse:
     return _moved(request, "/admin/database")
+
+
+# ---------- What the client is paying for ----------
+
+@app.get("/revenue/delivery", response_class=HTMLResponse)
+def delivery_page(request: Request, period: str = "") -> HTMLResponse:
+    """The content still to publish, and the reports still to file."""
+    return page(request, "delivery.html", nav="revenue", tab="delivery",
+                subtabs=_revenue_tabs(), subtab_label="Revenue",
+                board=delivery.board(), stages=delivery.STAGES,
+                due=delivery.due(period), this_period=delivery.this_period())
+
+
+class BriefIn(BaseModel):
+    business_id: int
+    angle: str = ""
+    owner: str = ""
+    notes: str = ""
+
+
+@app.post("/api/content")
+def api_start_content(body: BriefIn) -> JSONResponse:
+    got = delivery.start(body.business_id, body.angle, body.owner, body.notes)
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
+
+
+class ContentMove(BaseModel):
+    stage: str
+    url: str = ""
+    when: str = ""
+
+
+@app.post("/api/content/{content_id}/move")
+def api_move_content(content_id: int, body: ContentMove) -> JSONResponse:
+    """Advancing to published starts the client's twelve months."""
+    try:
+        got = delivery.move(content_id, body.stage, body.url, body.when)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not got:
+        raise HTTPException(status_code=404, detail="No such piece")
+    return JSONResponse(got)
+
+
+@app.post("/api/reports/{business_id}")
+async def api_save_report(
+    business_id: int,
+    period: str = Form(...),
+    owner: str = Form(""),
+    citations: str = Form(""),
+    notes: str = Form(""),
+    file: UploadFile | None = File(None),
+) -> JSONResponse:
+    """
+    This month's report on a client, with the Pearch file if one came with it.
+
+    Multipart rather than JSON because a file is the point of it.
+    """
+    upload = None
+    if file is not None and file.filename:
+        blob = await file.read()
+        upload = (file.filename, blob)
+    try:
+        got = delivery.save(business_id, period, owner,
+                            int(citations) if citations.strip().isdigit() else None,
+                            notes, upload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
+
+
+@app.get("/api/reports/{report_id}/file")
+def api_report_file(report_id: int) -> FileResponse:
+    """
+    Hand back an uploaded report.
+
+    Always as an attachment and always with the type the extension allowed:
+    a file somebody uploaded should never be something a browser will run.
+    """
+    report = db.get_report(report_id)
+    found = delivery.resolve_file(report) if report else None
+    if not found:
+        raise HTTPException(status_code=404, detail="No file on that report")
+    path, media_type = found
+    return FileResponse(
+        path, media_type=media_type, filename=report["file_name"],
+        headers={"Content-Disposition":
+                 f'attachment; filename="{report["file_name"]}"',
+                 "X-Content-Type-Options": "nosniff"})
+
+
+@app.post("/api/reports/{report_id}/delete")
+def api_delete_report(report_id: int) -> JSONResponse:
+    gone = db.delete_report(report_id)
+    if not gone:
+        raise HTTPException(status_code=404, detail="No such report")
+    return JSONResponse({"deleted": report_id})
 
 
 @app.get("/health")
