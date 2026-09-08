@@ -7,6 +7,8 @@ and that every one of them links somewhere that starts the work.
 """
 from __future__ import annotations
 
+import pytest
+
 import db
 import outreach
 import prospect
@@ -325,7 +327,28 @@ def test_the_deal_value_gap_only_shows_when_something_is_unpriced(client):
     assert "deal_value" not in _keys()
 
 
-def test_the_backup_gap_waits_until_there_is_something_to_lose(client):
+@pytest.fixture
+def no_backups(tmp_path, monkeypatch):
+    """
+    A backups folder of this test's own.
+
+    Other tests trip the automatic snapshot that runs before a bulk delete,
+    and it lands in the folder the whole suite shares — so run in order these
+    saw a fresh backup and no gap, while passing perfectly well alone.
+    """
+    import backup
+    monkeypatch.setattr(backup, "BACKUP_DIR", tmp_path / "backups")
+    return tmp_path / "backups"
+
+
+@pytest.fixture
+def no_uploads(tmp_path, monkeypatch):
+    import delivery
+    monkeypatch.setattr(delivery, "UPLOAD_DIR", tmp_path / "uploads")
+    return tmp_path / "uploads"
+
+
+def test_the_backup_gap_waits_until_there_is_something_to_lose(client, no_backups, no_uploads):
     import db
     import worklist
     assert "backup" not in _keys()
@@ -335,7 +358,7 @@ def test_the_backup_gap_waits_until_there_is_something_to_lose(client):
     assert "one file on one disk" in gap["why"]
 
 
-def test_it_says_the_uploaded_files_are_not_in_the_snapshot_either(client):
+def test_it_says_the_uploaded_files_are_not_in_the_snapshot_either(client, no_backups, no_uploads):
     import db
     import delivery
     import worklist
