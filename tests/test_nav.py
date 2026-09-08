@@ -119,3 +119,19 @@ def test_no_page_still_links_at_the_old_addresses(client):
                               r'(?:/align)?)["\'?#]', path.read_text()):
             stale.append(f"{path.name}: {hit}")
     assert not stale, stale
+
+
+def test_the_bars_scroll_rather_than_pushing_the_page_sideways():
+    """
+    Four sections do not fit across a phone.
+
+    Admin gained two more when the tabs were merged, and a flex row that
+    cannot fit widens the page rather than admitting it — every Admin screen
+    scrolled horizontally at 390px while passing every other test. Both bars
+    scroll now, and the peek of the next tab is what says there is more.
+    """
+    from pathlib import Path
+    css = (Path(__file__).resolve().parent.parent / "static" / "app.css").read_text()
+    bar = css.split(".subtabs {")[1].split("}")[0]
+    assert "overflow-x: auto" in bar, bar
+    assert ".subtab { white-space: nowrap; flex: none; }" in css

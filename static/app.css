@@ -825,10 +825,17 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 
 
 /* ---------- The two halves of Review ---------- */
+/* Four sections do not fit across a phone, and a flex row that cannot fit
+   pushes the whole page sideways rather than admitting it. The bar scrolls
+   instead — the rule underneath still runs the full width, so it reads as one
+   bar with more to the right rather than as a broken edge. */
 .subtabs {
   display: flex; gap: 4px; margin: 30px 0 -14px;
   border-bottom: 1px solid rgba(255,255,255,0.10); padding-bottom: 0;
+  overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
 }
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab { white-space: nowrap; flex: none; }
 .subtab {
   padding: 9px 15px; text-decoration: none; color: var(--text-muted);
   font-size: 13.5px; font-weight: 600; border-bottom: 2px solid transparent;
