@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Replies — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Inbox</div>
+        <h2>What came <em>back</em></h2>
+        <p class="lede">A reply moves a business to Replied on its own. An out-of-office
+          does not — it is filed and changes nothing. Anyone asking to be removed is
+          suppressed and ruled out without waiting for a decision.</p>
+      </div>
+    </div>
+
+    {% if not inbound_on %}
+    <div class="notice notice-warn">
+      <strong>Replies are not being collected automatically.</strong>
+      Set <code>PEARCH_INBOUND_SECRET</code> and point your mail forwarder at
+      <code>/api/inbound/mail</code> with that secret in an
+      <code>X-Pearch-Secret</code> header. Until then, paste a reply in from the
+      business's own page and it will do the same thing.
+    </div>
+    {% endif %}
+
+    <h3>Nobody could place these{% if unmatched %} · {{ unmatched|length }}{% endif %}</h3>
+    <p class="help" style="margin-top:0">Replies from an address we do not hold. Attach one
+      to a business and it takes effect as though it had arrived matched.</p>
+
+    {% if unmatched %}
+    <ul class="reply-list">
+      {% for r in unmatched %}
+      <li class="reply" data-id="{{ r.id }}">
+        <div class="reply-head">
+          <b>{{ r.from_name or r.from_email }}</b>
+          <span class="muted small">{{ r.from_email }}</span>
+          <span class="reply-kind is-{{ r.kind }}">{{ r.kind }}</span>
+          <time class="muted small">{{ r.received_at or r.created_at }}</time>
+        </div>
+        {% if r.subject %}<div class="reply-subject">{{ r.subject }}</div>{% endif %}
+        <p class="reply-body">{{ (r.body or '')[:400] }}</p>
+        <form class="reply-attach" autocomplete="off">
+          <input type="search" placeholder="Attach to a business — type a name"
+                 class="reply-find" data-id="{{ r.id }}">
+          <div class="reply-hits" hidden></div>
+          <button class="btn btn-sm js-dismiss" type="button" data-id="{{ r.id }}">Not one of ours</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="empty"><strong>Nothing waiting.</strong>
+      Every reply so far has found its business.</div>
+    {% endif %}
+
+    <h3 style="margin-top:30px">Everything that has come back</h3>
+    {% if recent %}
+    <div class="bare-scroll">
+      <table class="bare">
+        <thead><tr><th>When</th><th>From</th><th>Business</th><th>Kind</th><th>What they said</th></tr></thead>
+        <tbody>
+          {% for r in recent %}
+          <tr>
+            <td class="sub">{{ (r.received_at or r.created_at)[:16] }}</td>
+            <td>{{ r.from_email }}</td>
+            <td>{% if r.business_id %}<a href="/businesses/{{ r.business_id }}">{{ r.business_name }}</a>{% else %}<span class="sub">unmatched</span>{% endif %}</td>
+            <td><span class="reply-kind is-{{ r.kind }}">{{ r.kind }}</span></td>
+            <td class="sub">{{ (r.body or '')[:120] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty"><strong>No replies yet.</strong>
+      Nothing has been sent, so there is nothing to answer.</div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Attaching a reply is a search-then-pick, not a dropdown of 427 names.
+  document.querySelectorAll('.reply-find').forEach(function (box) {
+    var hits = box.parentElement.querySelector('.reply-hits');
+    var timer = null;
+    box.addEventListener('input', function () {
+      window.clearTimeout(timer);
+      var q = box.value.trim();
+      if (q.length < 2) { hits.hidden = true; return; }
+      timer = window.setTimeout(async function () {
+        var res = await fetch('/api/businesses/search?q=' + encodeURIComponent(q));
+        if (!res.ok) return;
+        var found = (await res.json()).results || [];
+        hits.innerHTML = found.map(function (b) {
+          return '<button type="button" class="reply-hit" data-business="' + b.id + '">' +
+                 b.name + (b.suburb ? ' <span class="sub">' + b.suburb + '</span>' : '') +
+                 '</button>';
+        }).join('') || '<span class="sub">Nothing matching.</span>';
+        hits.hidden = false;
+      }, 200);
+    });
+    hits.addEventListener('click', async function (e) {
+      var hit = e.target.closest('.reply-hit');
+      if (!hit) return;
+      try {
+        await window.postJSON('/api/replies/' + box.dataset.id + '/attach',
+                              {business_id: Number(hit.dataset.business)});
+        window.location.reload();
+      } catch (err) { hits.innerHTML = '<span class="sub">' + err.message + '</span>'; }
+    });
+  });
+
+  document.querySelectorAll('.js-dismiss').forEach(function (btn) {
+    btn.addEventListener('click', async function () {
+      await window.postJSON('/api/replies/' + btn.dataset.id + '/dismiss', {});
+      btn.closest('.reply').remove();
+    });
+  });
+})();
+</script>
+{% endblock %}

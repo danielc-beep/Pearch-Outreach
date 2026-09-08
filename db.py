@@ -168,6 +168,26 @@ CREATE INDEX IF NOT EXISTS idx_moves_to ON stage_moves(to_stage);
 """
 
 
+CREATE_INBOUND = """
+CREATE TABLE IF NOT EXISTS inbound (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at   TEXT NOT NULL,
+    received_at  TEXT,
+    from_email   TEXT NOT NULL,
+    from_name    TEXT,
+    subject      TEXT,
+    body         TEXT,
+    kind         TEXT NOT NULL DEFAULT 'human',
+    business_id  INTEGER REFERENCES businesses(id) ON DELETE SET NULL,
+    matched_on   TEXT,
+    message_id   INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    handled      INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_inbound_business ON inbound(business_id);
+CREATE INDEX IF NOT EXISTS idx_inbound_handled ON inbound(handled);
+"""
+
+
 CREATE_METRICS = """
 CREATE TABLE IF NOT EXISTS metrics_daily (
     day            TEXT PRIMARY KEY,
@@ -241,6 +261,7 @@ def init_db() -> None:
     conn.executescript(CREATE_SETTINGS)
     conn.executescript(CREATE_METRICS)
     conn.executescript(CREATE_MOVES)
+    conn.executescript(CREATE_INBOUND)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -257,7 +278,7 @@ def reset_db() -> None:
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
                   "contacts", "suppressions", "trash", "settings", "metrics_daily",
-                  "stage_moves",
+                  "stage_moves", "inbound",
                   "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
@@ -1384,6 +1405,102 @@ def stage_since(business_ids: list[int]) -> dict[int, str]:
         business_ids,
     ).fetchall()
     return {int(r["business_id"]): r["at"] for r in rows}
+
+
+# ---------- Replies that came back ----------
+
+def record_inbound(data: dict[str, Any]) -> int:
+    """Store one inbound email, matched or not. Nothing arriving is dropped."""
+    fields = ("received_at", "from_email", "from_name", "subject", "body",
+              "kind", "business_id", "matched_on", "message_id", "handled")
+    row = {k: data.get(k) for k in fields if k in data}
+    row["created_at"] = now()
+    row.setdefault("kind", "human")
+    row.setdefault("handled", 0)
+    columns = ", ".join(row)
+    marks = ", ".join("?" for _ in row)
+    with tx() as conn:
+        cur = conn.execute(f"INSERT INTO inbound ({columns}) VALUES ({marks})",
+                           list(row.values()))
+        return int(cur.lastrowid)
+
+
+def list_inbound(limit: int = 100, unmatched_only: bool = False,
+                 business_id: int | None = None) -> list[dict[str, Any]]:
+    where, args = [], []
+    if unmatched_only:
+        where.append("i.business_id IS NULL AND i.handled = 0")
+    if business_id is not None:
+        where.append("i.business_id = ?")
+        args.append(business_id)
+    clause = f"WHERE {' AND '.join(where)}" if where else ""
+    rows = get_conn().execute(
+        f"SELECT i.*, b.name AS business_name FROM inbound i "
+        f"LEFT JOIN businesses b ON b.id = i.business_id {clause} "
+        f"ORDER BY i.id DESC LIMIT ?", [*args, limit]).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def count_unmatched_inbound() -> int:
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM inbound WHERE business_id IS NULL AND handled = 0"
+    ).fetchone()
+    return int(row["n"])
+
+
+def get_inbound(inbound_id: int) -> dict[str, Any] | None:
+    return row_to_dict(get_conn().execute(
+        "SELECT * FROM inbound WHERE id = ?", (inbound_id,)).fetchone())
+
+
+def update_inbound(inbound_id: int, data: dict[str, Any]) -> None:
+    if not data:
+        return
+    sets = ", ".join(f"{k} = ?" for k in data)
+    with tx() as conn:
+        conn.execute(f"UPDATE inbound SET {sets} WHERE id = ?",
+                     [*data.values(), inbound_id])
+
+
+def business_by_email(email: str) -> dict[str, Any] | None:
+    """The business that owns an address, either its own or a contact's."""
+    email = (email or "").strip().lower()
+    if not email:
+        return None
+    row = get_conn().execute(
+        "SELECT * FROM businesses WHERE LOWER(email) = ? ORDER BY id LIMIT 1", (email,)
+    ).fetchone()
+    if row:
+        return row_to_dict(row)
+    row = get_conn().execute(
+        "SELECT b.* FROM businesses b JOIN contacts c ON c.business_id = b.id "
+        "WHERE LOWER(c.email) = ? ORDER BY b.id LIMIT 1", (email,)).fetchone()
+    return row_to_dict(row)
+
+
+def businesses_by_domain(domain: str) -> list[dict[str, Any]]:
+    """
+    Everyone at a domain, most recently emailed first.
+
+    A reply often comes from a different person at the same company than the
+    one we wrote to, so the domain is the second-best signal after the address
+    itself. Ordering by who we actually wrote to keeps the guess honest when
+    several records share a domain.
+    """
+    domain = (domain or "").strip().lower()
+    if not domain:
+        return []
+    rows = get_conn().execute(
+        "SELECT * FROM businesses WHERE LOWER(domain) = ? "
+        "   OR LOWER(SUBSTR(email, INSTR(email, '@') + 1)) = ? "
+        "ORDER BY last_contacted_at DESC NULLS LAST, id DESC", (domain, domain)).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def last_message_to(business_id: int) -> dict[str, Any] | None:
+    return row_to_dict(get_conn().execute(
+        "SELECT * FROM messages WHERE business_id = ? AND status = 'sent' "
+        "ORDER BY id DESC LIMIT 1", (business_id,)).fetchone())
 
 
 # ---------- Suppressions ----------

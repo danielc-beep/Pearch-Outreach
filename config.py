@@ -106,6 +106,12 @@ SENDER_IDENTITY = os.getenv(
 )
 UNSUBSCRIBE_URL = os.getenv("PEARCH_UNSUBSCRIBE_URL", "")  # falls back to the app's own /unsubscribe
 
+# ---------- Replies coming back ----------
+# The webhook that carries replies into the app is a public URL, so it is shut
+# unless a secret is set: without one there is nothing to check a caller
+# against, and an open endpoint would let anybody move a business to Replied.
+INBOUND_SECRET = os.getenv("PEARCH_INBOUND_SECRET", "").strip()
+
 # Belt and braces: a daily cap on sends so a bad loop can't blast a list.
 DAILY_SEND_CAP = int(os.getenv("PEARCH_DAILY_SEND_CAP", "50"))
 

@@ -13,6 +13,7 @@ import csv
 import io
 import json
 import hashlib
+import hmac
 import logging
 import os
 from typing import Any
@@ -38,11 +39,12 @@ import backup
 import crm
 import coach
 import coverage
+import replies
 import sources
 import auth
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, APP_USERNAME,
-                    DEFAULT_DEAL_VALUE,
+                    DEFAULT_DEAL_VALUE, INBOUND_SECRET,
                     DB_PATH, DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
@@ -856,6 +858,84 @@ def api_coach_suggestions(force: bool = False) -> JSONResponse:
 def api_coach_ask(turn: CoachTurn) -> JSONResponse:
     """The sounding board: a question answered against the live pipeline."""
     return JSONResponse(coach.ask(turn.question, turn.history))
+
+
+# ---------- Replies coming back ----------
+
+@app.post("/api/inbound/mail")
+async def api_inbound_mail(request: Request) -> JSONResponse:
+    """
+    One inbound email, from whatever is forwarding them.
+
+    Public by necessity — a mail provider cannot sign in — so it is closed
+    unless PEARCH_INBOUND_SECRET is set, and every call must carry it. The
+    comparison is constant-time: this endpoint can move a business to Replied
+    and suppress an address, which is worth guessing at.
+    """
+    if not INBOUND_SECRET:
+        raise HTTPException(status_code=503,
+                            detail="Inbound mail is off. Set PEARCH_INBOUND_SECRET.")
+    given = (request.headers.get("x-pearch-secret")
+             or request.query_params.get("secret") or "")
+    if not hmac.compare_digest(given, INBOUND_SECRET):
+        raise HTTPException(status_code=401, detail="Bad or missing secret")
+    try:
+        payload = await request.json()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Body must be JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Body must be a JSON object")
+    return JSONResponse(replies.receive(payload))
+
+
+@app.get("/api/businesses/search")
+def api_business_search(q: str, limit: int = 8) -> JSONResponse:
+    """Name-matching for the places that attach something to a business."""
+    rows, _ = db.list_businesses(q=q.strip(), sort="name", limit=max(1, min(limit, 25)))
+    return JSONResponse({"results": [
+        {"id": b["id"], "name": b["name"], "suburb": b.get("suburb") or b.get("region") or "",
+         "status": b["status"]} for b in rows]})
+
+
+@app.get("/replies", response_class=HTMLResponse)
+def replies_page(request: Request) -> HTMLResponse:
+    """Everything that has come back, and the ones nobody could place."""
+    return page(request, "replies.html", nav="replies",
+                unmatched=db.list_inbound(limit=100, unmatched_only=True),
+                recent=db.list_inbound(limit=40),
+                inbound_on=bool(INBOUND_SECRET))
+
+
+class AttachIn(BaseModel):
+    business_id: int
+
+
+@app.post("/api/replies/{inbound_id}/attach")
+def api_attach_reply(inbound_id: int, body: AttachIn) -> JSONResponse:
+    got = replies.attach(inbound_id, body.business_id)
+    if not got:
+        raise HTTPException(status_code=404, detail="No such reply or business")
+    return JSONResponse(got)
+
+
+@app.post("/api/replies/{inbound_id}/dismiss")
+def api_dismiss_reply(inbound_id: int) -> JSONResponse:
+    replies.dismiss(inbound_id)
+    return JSONResponse({"dismissed": inbound_id})
+
+
+class HandReply(BaseModel):
+    text: str
+    from_email: str = ""
+
+
+@app.post("/api/businesses/{business_id}/reply")
+def api_reply_by_hand(business_id: int, body: HandReply) -> JSONResponse:
+    """Paste in a reply that arrived somewhere this app cannot see."""
+    got = replies.log_by_hand(business_id, body.text, body.from_email)
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
 
 
 @app.get("/health")

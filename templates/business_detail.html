@@ -207,6 +207,18 @@
         {% endif %}
 
         <div class="card">
+          <h3>They wrote back</h3>
+          <p class="help" style="margin-top:0">Paste what they said. It moves them to
+            Replied — or, if they asked to be left alone, suppresses them and rules them
+            out. An out-of-office is filed and changes nothing.</p>
+          <form id="reply-form" autocomplete="off">
+            <textarea id="reply-text" rows="3"
+                      placeholder="Thanks for getting in touch — can we talk Thursday?"></textarea>
+            <button class="btn btn-primary btn-sm" type="submit">Log the reply</button>
+          </form>
+        </div>
+
+        <div class="card">
           <h3>Timeline</h3>
           <ul class="timeline">
             {% for a in activities %}
@@ -223,6 +235,18 @@
 {% block scripts %}
 <script>
   const BUSINESS_ID = {{ b.id }};
+  document.getElementById('reply-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const box = document.getElementById('reply-text');
+    const text = box.value.trim();
+    if (!text) return;
+    try {
+      const got = await window.postJSON(`/api/businesses/${BUSINESS_ID}/reply`, {text});
+      box.value = '';
+      flash(`Logged. They are now <strong>${got.status}</strong>.`, 'ok');
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (err) { flash(err.message, 'warn'); }
+  });
   const flash = (msg, kind) => {
     document.getElementById('flash').innerHTML =
       '<div class="notice notice-' + (kind || 'info') + '">' + msg + '</div>';

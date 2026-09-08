@@ -58,7 +58,16 @@ def board() -> list[dict[str, Any]]:
             backup_note = (f"The newest backup is {int(stale)} days old, and it is on the "
                            "same disk as the database it protects.")
 
+    unplaced = db.count_unmatched_inbound()
+
     items = [
+        # Above the replies themselves: a reply nobody could place is a reply
+        # nobody has read, and it is not counted in the number underneath.
+        _item("unplaced", unplaced,
+              "replies nobody could place",
+              "They came from an address we do not hold, so no business has moved. "
+              "Attach one and it takes effect as though it had arrived matched.",
+              "Open the inbox", "/replies", "hot"),
         _item("replied", replied,
               "replied to an email",
               "Someone answered. That is the point of all of this, and it goes cold fastest.",

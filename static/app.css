@@ -1258,6 +1258,58 @@ table.bare .sub { color: var(--text-muted); }
 }
 
 
+/* ---------- Replies ---------- */
+.reply-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
+.reply {
+  border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+  background: var(--surface);
+}
+.reply-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.reply-head b { color: var(--white); }
+.reply-subject { margin-top: 5px; font-size: 13px; color: var(--text); font-weight: 600; }
+.reply-body {
+  margin: 5px 0 10px; font-size: 12.5px; color: var(--text-muted); line-height: 1.5;
+  white-space: pre-wrap;
+}
+/* Three states, not three series: reserved status colours, each with its own
+   word beside it so the colour is never carrying the meaning alone. */
+.reply-kind {
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  border-radius: 999px; padding: 2px 8px;
+  color: var(--cyan-soft); background: rgba(0,154,199,0.16);
+}
+.reply-kind.is-human  { color: var(--success); background: rgba(63,214,147,0.14); }
+.reply-kind.is-auto   { color: var(--text-muted); background: rgba(255,255,255,0.07); }
+.reply-kind.is-optout { color: var(--danger); background: rgba(255,145,134,0.14); }
+
+.reply-attach { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; position: relative; }
+.reply-find {
+  flex: 1; min-width: 220px; font: inherit; font-size: 12.5px; color: var(--text);
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 9px; padding: 7px 11px;
+}
+.reply-find:focus { outline: none; border-color: var(--border-lit); }
+.reply-hits {
+  position: absolute; top: 100%; left: 0; z-index: 20; margin-top: 4px;
+  min-width: 260px; max-height: 220px; overflow-y: auto;
+  background: var(--ink-panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 4px; box-shadow: var(--shadow);
+}
+.reply-hits[hidden] { display: none; }
+.reply-hit {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 12.5px;
+  color: var(--text); background: none; border: 0; border-radius: 7px;
+  padding: 6px 9px; cursor: pointer;
+}
+.reply-hit:hover { background: var(--cyan-dim); color: var(--white); }
+
+#reply-form textarea {
+  width: 100%; font: inherit; font-size: 13px; color: var(--text);
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 10px; padding: 9px 11px; margin-bottom: 8px; resize: vertical;
+}
+#reply-form textarea:focus { outline: none; border-color: var(--border-lit); }
+
 /* ---------- Masthead coverage ---------- */
 /* One quantity in four steps — how far a masthead's book has got — so it is
    shaded along a single cyan ramp rather than four unrelated colours. The

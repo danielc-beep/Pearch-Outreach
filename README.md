@@ -50,6 +50,7 @@ required; each key just switches on more of the app.
 | `PEARCH_DRAFT_MODEL` | Which model drafts (default `claude-opus-5`) |
 | `PEARCH_DRAFT_EFFORT` | How hard it thinks: `low`–`max` (default `medium`) |
 | `RESEND_API_KEY` + `PEARCH_SEND_ENABLED=1` | Actually sending email |
+| `PEARCH_INBOUND_SECRET` | Replies coming back in through `/api/inbound/mail` |
 | `ABR_GUID` | ABN / legal entity lookup against the Australian Business Register |
 | `PEARCH_DB_PATH` | Where the SQLite file lives (use a mounted disk in production) |
 
@@ -76,6 +77,8 @@ to work for recipients clicking through from an email.
 | `/review` | The queue: one business at a time, and the masthead alignment tab |
 | `/crm` | The kanban board — drag a deal from one stage to the next |
 | `/addresses` | The ones with a website but no email, for going looking |
+| `/mastheads` | All 78 ACM titles, shaded by how far each one's book has got |
+| `/replies` | Everything that came back, and the ones nobody could place |
 | `/outbox` | Drafts waiting for approval, approved messages waiting to send, sent history |
 | `/suppressions` | Everyone permanently excluded from outreach |
 | `/unsubscribe` | The public unsubscribe page linked from every email |
