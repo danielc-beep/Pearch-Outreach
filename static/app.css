@@ -561,9 +561,17 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .score .bar i { transform-origin: left center; animation: score-fill 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 
 /* Cards and rows enter with a short stagger. The delays are set inline by
-   app.js, which is also what keeps this to one paint. */
+   app.js, which is also what keeps this to one paint.
+   `backwards` rather than `both`, and it matters more than it looks. `both`
+   holds the last keyframe forever, and "transform: none" held by an animation
+   computes to an identity matrix rather than to nothing — which makes every
+   animated row a stacking context for the life of the page. The masthead
+   picker's dropdown then had its z-index trapped inside its own row, and the
+   rows underneath painted straight over the top of it. `backwards` styles the
+   element before the animation and lets it go afterwards, which looks
+   identical and leaves no transform behind. */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.js-enter { animation: rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.js-enter { animation: rise 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }
 
 /* The review queue's decision has a direction: approved goes right, ruled
    out goes left. Pressing a key should have a consequence you can see. */
@@ -861,6 +869,11 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
    is hidden rather than removed — take it out and every existing handler and
    every form post that reads it stops working. */
 .picker { position: relative; }
+/* A row holding an open dropdown outranks the rows below it. The stacking
+   context above is fixed at the source, but any future one — an opacity, a
+   filter, a will-change — would trap the list again, and a dropdown you
+   cannot see is a worse bug than a duplicated rule is a smell. */
+.has-picker-open { position: relative; z-index: 60; }
 .picker-native { display: none !important; }
 .picker-input { width: 100%; }
 .picker-list {

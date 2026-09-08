@@ -212,14 +212,21 @@ document.addEventListener('DOMContentLoaded', () => {
       active = -1;
     }
 
+    // The row, card or cell the picker sits in. Marked while the list is
+    // open so it outranks its neighbours, because a list that renders behind
+    // the next row is indistinguishable from one that never opened.
+    var holder = wrap.closest('.address-row, .align-row, tr, .card, .f') || wrap;
+
     function open() {
       render(input.value === currentLabel() ? '' : input.value);
       list.hidden = false;
+      holder.classList.add('has-picker-open');
       input.setAttribute('aria-expanded', 'true');
     }
 
     function close() {
       list.hidden = true;
+      holder.classList.remove('has-picker-open');
       input.setAttribute('aria-expanded', 'false');
       showChosen();                      // never leave a half-typed name showing
     }
@@ -230,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
       select.selectedIndex = item.index;
       input.value = item.label;
       list.hidden = true;
+      holder.classList.remove('has-picker-open');
       input.setAttribute('aria-expanded', 'false');
       // The page's own handlers listen to the select, not to this.
       select.dispatchEvent(new Event('change', {bubbles: true}));

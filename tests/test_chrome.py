@@ -304,3 +304,33 @@ def test_the_stylesheet_carries_nothing_no_page_uses():
                       "next component to trip over: "
                       + ", ".join(f".{n} (line {l})" for n, l in sorted(dead.items(),
                                                                        key=lambda kv: kv[1])))
+
+
+def test_the_entrance_animation_leaves_no_transform_behind():
+    """
+    `both` holds the last keyframe forever, and a held "transform: none"
+    computes to an identity matrix rather than to nothing — which makes every
+    animated row a stacking context for the life of the page.
+
+    The masthead picker's dropdown then had its z-index trapped inside its own
+    row, and the rows underneath painted over the top of it. On the align
+    screen that made the list look like it had never opened. `backwards`
+    styles the element before the animation and lets go afterwards, which
+    looks identical and leaves the row an ordinary box.
+    """
+    from pathlib import Path
+    css = (Path(__file__).resolve().parent.parent / "static" / "app.css").read_text()
+    rule = next(line for line in css.splitlines() if line.startswith(".js-enter {"))
+    assert "backwards" in rule, rule
+    assert " both;" not in rule, rule
+
+
+def test_an_open_dropdown_outranks_the_rows_under_it():
+    """A list that renders behind the next row never opened, as far as anyone can tell."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    css = (root / "static" / "app.css").read_text()
+    js = (root / "static" / "app.js").read_text()
+    assert ".has-picker-open { position: relative; z-index: 60; }" in css
+    assert "holder.classList.add('has-picker-open')" in js
+    assert "holder.classList.remove('has-picker-open')" in js
