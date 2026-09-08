@@ -193,7 +193,7 @@
       </ol>
     </section>
 
-    <section class="dash-col coach" id="coach">
+    <section class="dash-col dash-tall coach" id="coach">
       <div class="col-head">
         <h2>Coach</h2>
         <span class="coach-source" id="coach-source" data-source="{{ coach.source }}">{{ 'thinking…' if coach_live else 'from your figures' }}</span>
@@ -209,6 +209,18 @@
       </ol>
 
       <div class="coach-chat" id="coach-chat" hidden></div>
+
+      <!-- The room the suggestions leave over, spent on teaching what the box
+           underneath is for. Goes the moment there is a conversation to show
+           instead. -->
+      <div class="coach-starters" id="coach-starters">
+        <span class="coach-starters-head">Or ask</span>
+        {% for q in ["What should I do first today?",
+                     "Which trades should I prospect next?",
+                     "What is stopping me hitting the target?"] %}
+        <button class="coach-starter" type="button">{{ q }}</button>
+        {% endfor %}
+      </div>
 
       <form class="coach-ask" id="coach-ask" autocomplete="off">
         <input id="coach-q" type="text" maxlength="2000"
@@ -537,11 +549,23 @@
       return div;
     }
 
+    var starters = document.getElementById('coach-starters');
+    if (starters) {
+      starters.querySelectorAll('.coach-starter').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+          box.value = chip.textContent.trim();
+          form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(
+            new Event('submit', {cancelable: true}));
+        });
+      });
+    }
+
     form.addEventListener('submit', async function (e) {
       e.preventDefault();
       var question = box.value.trim();
       if (!question) return;
       box.value = '';
+      if (starters) starters.hidden = true;
       bubble('you', question);
       var waiting = bubble('coach', 'Thinking…', true);
       try {

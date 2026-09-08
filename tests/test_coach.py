@@ -306,3 +306,37 @@ def test_a_long_question_is_cut_rather_than_refused(client):
             coach.ask("x" * 9000)
             sent = client_cls.return_value.messages.create.call_args.kwargs
     assert len(sent["messages"][-1]["content"]) == coach.MAX_QUESTION
+
+
+# ---------- Where it sits on the page ----------
+# Laid out flat, the coach was half again as tall as the two columns beside
+# it and the page ended in a wedge of empty blue. These pin the arrangement
+# that fixed it, because it is one CSS edit away from coming back.
+
+CSS = (__import__("pathlib").Path(__file__).resolve().parent.parent / "static" / "app.css").read_text()
+
+
+def test_the_coach_runs_down_the_full_height_of_the_grid(client):
+    body = client.get("/").text
+    assert 'class="dash-col dash-tall coach"' in body
+    assert ".dash-tall { grid-column: 3; grid-row: 1 / span 2;" in CSS
+
+
+def test_the_trades_table_fills_the_space_the_coach_casts(client):
+    """It used to span every column, which left the shortfall under it."""
+    assert ".dash-wide { grid-column: 1 / 3; }" in CSS
+
+
+def test_the_composer_sits_on_the_floor_of_the_column(client):
+    assert ".coach-ask { display: flex; gap: 6px; margin-top: auto; }" in CSS
+
+
+def test_the_transcript_can_actually_be_hidden(client):
+    """The class sets display, which beats the browser's own rule for [hidden]."""
+    assert ".coach-chat[hidden] { display: none; }" in CSS
+
+
+def test_the_starters_fill_the_room_the_three_leave_over(client):
+    body = client.get("/").text
+    assert body.count('class="coach-starter"') == 3
+    assert "What should I do first today?" in body

@@ -1018,12 +1018,19 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .dash-funnel { margin-bottom: 16px; }
 .dash-funnel .funnel { height: 34px; margin: 0; }
 
+/* Three columns, two rows, and the coach standing down the right of both.
+   Laid out flat, the coach was half again as tall as the two columns beside
+   it, so the page ended in a wedge of empty blue under "What's waiting" and
+   a table pushed below the fold. Giving the coach the full height and
+   tucking the trades table into the space it was casting means nothing is
+   left hanging and the whole dashboard lands on one screen. */
 .dash-grid {
-  display: grid; gap: 12px 30px; align-items: start;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr) minmax(0, 1.1fr);
+  display: grid; gap: 14px 30px; align-items: start;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.95fr);
 }
 .dash-col { min-width: 0; }
-.dash-wide { grid-column: 1 / -1; }
+.dash-wide { grid-column: 1 / 3; }
+.dash-tall { grid-column: 3; grid-row: 1 / span 2; align-self: stretch; }
 .col-head {
   display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   padding-bottom: 6px; margin-bottom: 10px;
@@ -1103,7 +1110,9 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 .coach-source[data-source="claude"] { color: var(--cyan-soft); }
 
-.coach-list { list-style: none; margin: 0 0 10px; padding: 0; counter-reset: coach; }
+.coach { display: flex; flex-direction: column; }
+.coach-list { list-style: none; margin: 0 0 10px; padding: 0; counter-reset: coach;
+              flex: 0 0 auto; }
 .coach-item {
   position: relative; counter-increment: coach;
   padding: 9px 0 10px 26px;
@@ -1132,9 +1141,11 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .coach-item a { font-size: 12px; }
 
 .coach-chat {
-  max-height: 220px; overflow-y: auto; margin-bottom: 8px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-bottom: 8px;
   padding: 2px 0; display: flex; flex-direction: column; gap: 7px;
 }
+/* The class sets display, which beats the browser's rule for [hidden]. */
+.coach-chat[hidden] { display: none; }
 .coach-turn {
   font-size: 12.5px; line-height: 1.45; border-radius: 11px; padding: 8px 11px;
   max-width: 92%; white-space: pre-wrap; animation: rise 0.28s cubic-bezier(0.2,0.8,0.2,1) both;
@@ -1150,7 +1161,28 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .coach-turn.is-pending { color: var(--text-muted); animation: coach-wait 1.1s ease-in-out infinite; }
 @keyframes coach-wait { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
 
-.coach-ask { display: flex; gap: 6px; }
+/* Quiet enough not to compete with the three numbered suggestions, present
+   enough to say the box below it is a conversation rather than a search. */
+.coach-starters {
+  flex: 1 1 auto; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 4px; padding: 2px 0 8px;
+}
+.coach-starters[hidden] { display: none; }
+.coach-starters-head {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 1px;
+}
+.coach-starter {
+  font: inherit; font-size: 11.5px; line-height: 1.35; text-align: left; cursor: pointer;
+  color: var(--cyan-soft); background: rgba(0,154,199,0.10);
+  border: 1px solid rgba(53,198,240,0.24); border-radius: 999px; padding: 3px 10px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.coach-starter:hover { background: rgba(0,154,199,0.22); border-color: var(--border-lit); }
+
+/* Pinned to the bottom of the column whether or not there is a transcript
+   above it, so the box does not float in the middle of the empty space. */
+.coach-ask { display: flex; gap: 6px; margin-top: auto; }
 .coach-ask input {
   flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--text);
   background: var(--surface); border: 1px solid var(--border);
@@ -1189,12 +1221,36 @@ table.bare .sub { color: var(--text-muted); }
 @media (max-width: 1200px) {
   .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stat-cell:nth-child(3n+1) { border-left: 0; padding-left: 0; }
+  /* Two columns cannot carry a third one down their side, so the coach goes
+     back to being a band and the table goes back to being full width. */
   .dash-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .dash-wide, .dash-tall { grid-column: 1 / -1; grid-row: auto; }
+  .coach-ask { margin-top: 0; }
+  .coach-chat { max-height: 220px; }
+  /* No column height to fill, so the chips stop being useful padding. */
+  .coach-starters { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  /* Across the full width the three read as three, side by side. Stacked,
+     each one is a single line of text with half a screen of nothing after it. */
+  .coach-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 26px; }
+  .coach-item { border-bottom: 0; padding-bottom: 4px; }
+  .coach-item + .coach-item {
+    border-left: 1px solid rgba(255,255,255,0.09); padding-left: 46px;
+  }
+  .coach-item + .coach-item::before { left: 20px; }
+  .coach-item + .coach-item::after { left: 32px; }
 }
 @media (max-width: 720px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat-cell:nth-child(odd) { border-left: 0; padding-left: 0; }
   .dash-grid { grid-template-columns: minmax(0, 1fr); }
+  /* One column has no width to spread three across, so they stack again. */
+  .coach-list { display: block; }
+  .coach-item, .coach-item + .coach-item {
+    border-bottom: 1px solid rgba(255,255,255,0.07); border-left: 0;
+    padding: 9px 0 10px 26px;
+  }
+  .coach-item + .coach-item::before { left: 0; }
+  .coach-item + .coach-item::after { left: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .live-dot, .working-bar { animation: none; }

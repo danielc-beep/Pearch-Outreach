@@ -104,6 +104,12 @@ Advice is cached against a fingerprint of the figures that would change it, so
 the page can poll without spending a model call on an afternoon where nothing
 happened.
 
+It runs down the full height of the dashboard grid, with the trades table
+tucked into the space beside it. Laid out flat the coach was half again as
+tall as the columns next to it, which left a wedge of empty blue under
+"What's waiting" and pushed the table below the fold; this way the three
+columns finish level and the whole dashboard lands on one screen.
+
 ## Prospecting sources
 
 Sources live in `sources/` and are registered in `sources/__init__.py`. Each
