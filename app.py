@@ -1317,6 +1317,12 @@ def health() -> dict[str, Any]:
             "anthropic": bool(ANTHROPIC_API_KEY),
             "sending": SEND_ENABLED,
         },
+        # The handful of things nobody inside the app can fix, because they
+        # live in a hosting console or on somebody's laptop. Read by the
+        # morning brief, which is the one place this app is seen without
+        # anybody opening it. Plain about the state, quiet about the remedy —
+        # this endpoint is public.
+        "needs_you": worklist.setup_gaps(),
     }
 
 

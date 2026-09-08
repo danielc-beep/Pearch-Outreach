@@ -154,6 +154,79 @@ def board() -> list[dict[str, Any]]:
     return [i for i in items if i]
 
 
+def setup_gaps() -> list[dict[str, str]]:
+    """
+    What needs a person outside the app, rather than work inside it.
+
+    board() is the day's work: replies to answer, queues to clear, content to
+    publish. This is the other list — the handful of things nobody in the app
+    can do because they live in a hosting console or on somebody's laptop. It
+    is what the morning brief reads, since that is the one place Dan sees the
+    app without opening it.
+
+    Deliberately plain about the state and quiet about the remedy: this is
+    served on a public health endpoint, so it says a thing is off, not which
+    environment variable turns it on.
+    """
+    import backup
+    import delivery
+    import revenue
+    import sources
+    from config import ANTHROPIC_API_KEY, INBOUND_SECRET, SEND_ENABLED
+
+    gaps: list[dict[str, str]] = []
+
+    def add(key: str, title: str, why: str, where: str) -> None:
+        gaps.append({"key": key, "title": title, "why": why, "where": where})
+
+    if not any(s.available for s in sources.all_sources() if s.key != "csv"):
+        add("prospecting", "Nothing is configured to search with",
+            "No new businesses can be found until a prospecting source is set up.",
+            "/prospect")
+
+    if not SEND_ENABLED:
+        approved = db.stats()["approved"]
+        add("sending", "Sending is off",
+            (f"{approved} approved email{'' if approved == 1 else 's'} "
+             f"{'is' if approved == 1 else 'are'} waiting in the outbox and cannot go."
+             if approved else "Approved emails will stay in the outbox."),
+            "/emails/outbox")
+
+    if not INBOUND_SECRET:
+        add("inbound", "Replies are not collected automatically",
+            "A reply or a bounce only counts when somebody types it in by hand, and "
+            "a bounced address keeps collecting follow-ups.",
+            "/emails/inbox")
+
+    money = db.revenue(revenue.default_value())["pipeline"]
+    if not revenue.default_value() and money["unpriced"]:
+        add("deal_value", "Unpriced deals count as nothing",
+            f"{money['unpriced']} of {money['count']} open deals have no figure on them, "
+            f"so the pipeline number is only the deals somebody has priced.",
+            "/revenue")
+
+    if not ANTHROPIC_API_KEY:
+        add("coach", "The coach cannot answer questions",
+            "Its three suggestions still work — they are arithmetic on your own "
+            "figures — but the chat needs a key.",
+            "/")
+
+    if db.stats()["total"] >= 20:
+        age = backup.age_in_days()
+        held = delivery.uploads_held()
+        extra = (f" The {held['count']} uploaded report files are not in a snapshot either."
+                 if held["count"] else "")
+        if age is None:
+            add("backup", "No backup has ever been taken",
+                "Everything here lives in one file on one disk." + extra, "/backups")
+        elif age >= 7:
+            add("backup", f"The newest backup is {int(age)} days old",
+                "And it is on the same disk as the database it protects." + extra,
+                "/backups")
+
+    return gaps
+
+
 def next_step(has_businesses: bool) -> dict[str, str]:
     """
     The single sentence shown when there is nothing waiting.

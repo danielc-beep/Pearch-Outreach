@@ -275,3 +275,102 @@ def test_an_empty_board_still_says_what_to_do(client):
     assert 'class="steps-window"' not in html
     assert "Next steps" in html
     assert "Find businesses" in html, "the empty state still points somewhere"
+
+
+# ---------- What needs a person outside the app ----------
+# board() is the day's work. This is the other list: the handful of things
+# nobody in the app can do, because they live in a hosting console or on
+# somebody's laptop. The morning brief reads it off /health.
+
+def _keys(client=None):
+    import worklist
+    return [g["key"] for g in worklist.setup_gaps()]
+
+
+def test_it_names_what_only_the_operator_can_fix(client):
+    from unittest.mock import patch
+    import worklist
+    with patch.object(worklist, "db", worklist.db):
+        keys = _keys()
+    assert "sending" in keys and "inbound" in keys
+
+
+def test_a_gap_goes_away_once_it_is_closed(client):
+    import app
+    from unittest.mock import patch
+    with patch.object(app, "SEND_ENABLED", True):
+        # config is read inside the function, so patch where it is read
+        import config
+        with patch.object(config, "SEND_ENABLED", True):
+            assert "sending" not in _keys()
+
+
+def test_it_counts_the_emails_the_switch_is_holding(client):
+    import db
+    import worklist
+    business_id = db.insert_business({"name": "Ready", "status": "qualified"})
+    db.insert_message({"business_id": business_id, "to_email": "a@b.com",
+                       "subject": "S", "body": "B", "status": "approved"})
+    sending = next(g for g in worklist.setup_gaps() if g["key"] == "sending")
+    assert "1 approved email is waiting" in sending["why"]
+
+
+def test_the_deal_value_gap_only_shows_when_something_is_unpriced(client):
+    import db
+    import revenue
+    assert "deal_value" not in _keys(), "nothing open, nothing to price"
+    db.insert_business({"name": "Open", "status": "qualified"})
+    assert "deal_value" in _keys()
+    revenue.set_default_value(9000)
+    assert "deal_value" not in _keys()
+
+
+def test_the_backup_gap_waits_until_there_is_something_to_lose(client):
+    import db
+    import worklist
+    assert "backup" not in _keys()
+    for i in range(20):
+        db.insert_business({"name": f"B{i}"})
+    gap = next(g for g in worklist.setup_gaps() if g["key"] == "backup")
+    assert "one file on one disk" in gap["why"]
+
+
+def test_it_says_the_uploaded_files_are_not_in_the_snapshot_either(client):
+    import db
+    import delivery
+    import worklist
+    for i in range(20):
+        db.insert_business({"name": f"B{i}"})
+    business_id = db.insert_business({"name": "Client", "status": "won"})
+    delivery.save(business_id, "2026-09", upload=("Pearch.pdf", b"%PDF-1.4 x"))
+    gap = next(g for g in worklist.setup_gaps() if g["key"] == "backup")
+    assert "not in a snapshot either" in gap["why"]
+
+
+def test_every_gap_points_at_the_screen_that_fixes_it(client):
+    import worklist
+    for gap in worklist.setup_gaps():
+        assert gap["where"].startswith("/"), gap
+        assert client.get(gap["where"]).status_code == 200, gap
+
+
+def test_it_never_names_an_environment_variable(client):
+    """The health endpoint is public. It says a thing is off, not how to switch it on."""
+    import worklist
+    for gap in worklist.setup_gaps():
+        blob = f"{gap['title']} {gap['why']}"
+        assert "PEARCH_" not in blob and "_API_KEY" not in blob, gap
+        assert "=" not in blob, gap
+
+
+def test_health_carries_the_list(client):
+    got = client.get("/health").json()
+    assert isinstance(got["needs_you"], list)
+    assert {"key", "title", "why", "where"} <= set(got["needs_you"][0])
+
+
+def test_health_leaks_no_business_names(client):
+    """It is public, so it reports the state of the app and nothing about the book."""
+    import db
+    db.insert_business({"name": "Very Distinctive Plumbing", "status": "qualified"})
+    assert "Very Distinctive" not in client.get("/health").text

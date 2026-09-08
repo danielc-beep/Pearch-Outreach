@@ -81,6 +81,16 @@ because several of the old nine were pairs.
 | Revenue | The year · Delivery | The year against last year, the client book, and what is still to publish |
 | Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 
+`/health` is public and unauthenticated. Alongside liveness it carries
+`needs_you` — the handful of things nobody inside the app can fix, because
+they live in a hosting console or on somebody's laptop: no prospecting
+source, sending off, replies not being collected, unpriced deals counting as
+nothing, a stale or missing backup. Dan's morning brief reads it, which is
+the one place this app gets seen without anybody opening it. It is
+deliberately plain about the state and quiet about the remedy — it says a
+thing is off, never which environment variable turns it on — and it carries
+no business names.
+
 Off the nav but linked where they are needed: `/businesses/{id}` (one business),
 `/addresses` (the ones with a website but no email), `/followups`,
 `/suppressions`, `/backups`, `/unsubscribe`.
