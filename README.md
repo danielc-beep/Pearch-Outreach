@@ -75,8 +75,8 @@ Six tabs. Two of them have sections, because four of the old nine were pairs.
 | --- | --- | --- |
 | Dashboard | — | Target, revenue, pipeline, next steps, and the coach |
 | Prospect | — | Pick a source, run a search, see what came back |
-| Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 | CRM | — | The kanban board — drag a deal from one stage to the next |
+| Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 | Emails | Outbox · Inbox | Drafts waiting to go, and everything that came back |
 | Revenue | — | The year against last year, and the client book |
 
