@@ -36,7 +36,7 @@
           <b>{{ r.from_name or r.from_email }}</b>
           <span class="muted small">{{ r.from_email }}</span>
           <span class="reply-kind is-{{ r.kind }}">{{ r.kind }}</span>
-          <time class="muted small">{{ r.received_at or r.created_at }}</time>
+          <time class="muted small">{{ (r.received_at or r.created_at)[:16].replace('T', ' ') }}</time>
         </div>
         {% if r.subject %}<div class="reply-subject">{{ r.subject }}</div>{% endif %}
         <p class="reply-body">{{ (r.body or '')[:400] }}</p>
@@ -62,7 +62,7 @@
         <tbody>
           {% for r in recent %}
           <tr>
-            <td class="sub">{{ (r.received_at or r.created_at)[:16] }}</td>
+            <td class="sub">{{ (r.received_at or r.created_at)[:16].replace('T', ' ') }}</td>
             <td>{{ r.from_email }}</td>
             <td>{% if r.business_id %}<a href="/businesses/{{ r.business_id }}">{{ r.business_name }}</a>{% else %}<span class="sub">unmatched</span>{% endif %}</td>
             <td><span class="reply-kind is-{{ r.kind }}">{{ r.kind }}</span></td>

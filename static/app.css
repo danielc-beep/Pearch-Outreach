@@ -1258,6 +1258,31 @@ table.bare .sub { color: var(--text-muted); }
 }
 
 
+/* ---------- Follow-ups ---------- */
+.fu-schedule {
+  border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px;
+  background: var(--surface); margin-bottom: 16px;
+}
+.fu-schedule-head {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-muted); display: block; margin-bottom: 9px;
+}
+#fu-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
+.fu-step { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); }
+.fu-step b { color: var(--white); font-weight: 650; min-width: 66px; }
+.fu-step input {
+  width: 62px; font: inherit; font-size: 13px; color: var(--text); text-align: center;
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px 8px; font-variant-numeric: tabular-nums;
+}
+.fu-step input:focus { outline: none; border-color: var(--border-lit); }
+.fu-schedule .help { margin: 10px 0 0; }
+.fu-badge {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--cyan-soft); background: rgba(0,154,199,0.16);
+  border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+}
+
 /* ---------- Replies ---------- */
 .reply-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 10px; }
 .reply {

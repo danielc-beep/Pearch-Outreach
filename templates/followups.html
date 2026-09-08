@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Follow-ups — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Second and third touches</div>
+        <h2>Who is owed <em>another email</em></h2>
+        <p class="lede">Most replies to cold outreach arrive on the second or third
+          email, not the first. This writes them; it never sends them. They land in the
+          outbox as drafts beside everything else and go out the same way.</p>
+      </div>
+      {% if due %}
+      <button class="btn btn-primary" id="draft-all">Draft all {{ due|length }}</button>
+      {% endif %}
+    </div>
+
+    <div id="flash"></div>
+
+    <div class="fu-schedule">
+      <span class="fu-schedule-head">Schedule</span>
+      <form id="fu-form" autocomplete="off">
+        {% for s in steps %}
+        <label class="fu-step">
+          <b>{{ s.label }}</b>
+          <input type="number" name="{{ s.step }}" value="{{ s.after_days }}" min="1" max="90">
+          <span>days after the last email</span>
+        </label>
+        {% endfor %}
+        <button class="btn btn-sm" type="submit">Save</button>
+      </form>
+      <p class="help">It stops after {{ last_step - 1 }} follow-ups. It also stops the
+        moment anyone writes back — a human reply anywhere on the record takes a business
+        out of this list, whatever its stage says.</p>
+    </div>
+
+    {% if waiting %}
+    <div class="notice">
+      <strong>{{ waiting }} follow-up{{ '' if waiting == 1 else 's' }} already drafted</strong>
+      and waiting for approval. <a href="/outbox?status=draft">Open the outbox →</a>
+    </div>
+    {% endif %}
+
+    {% if due %}
+    <div class="bare-scroll">
+      <table class="bare">
+        <thead><tr>
+          <th>Business</th><th>Masthead</th><th>Touch</th>
+          <th>Last emailed</th><th class="n">Value</th>
+        </tr></thead>
+        <tbody>
+          {% for b in due %}
+          <tr>
+            <td><a href="/businesses/{{ b.id }}"><strong>{{ b.name }}</strong></a>
+              <span class="sub">{{ b.suburb or b.region or '' }}</span></td>
+            <td class="sub">{{ masthead_name(b.masthead)|masthead_label }}</td>
+            <td><span class="fu-badge">{{ b.step_label }}</span></td>
+            <td class="sub">{{ (b.last_sent_at or '')[:10] }}</td>
+            <td class="n sub">{{ '${:,.0f}'.format(b.deal_value) if b.deal_value else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <strong>Nobody is owed one.</strong>
+      Either nothing has been emailed yet, or everyone emailed is inside the waiting
+      period, has already been followed up, or has written back.
+    </div>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const flash = (msg, kind) => {
+    document.getElementById('flash').innerHTML =
+      '<div class="notice notice-' + (kind || 'info') + '">' + msg + '</div>';
+  };
+
+  const button = document.getElementById('draft-all');
+  if (button) {
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      button.textContent = 'Writing…';
+      try {
+        const got = await window.postJSON('/api/followups/draft', {limit: 100});
+        const n = got.drafted.length;
+        flash(n
+          ? `Wrote ${n} follow-up${n === 1 ? '' : 's'}. They are in the outbox waiting for
+             approval — nothing has been sent. <a href="/outbox?status=draft">Open it →</a>`
+          : 'Nothing to write.', n ? 'ok' : 'info');
+        if (got.skipped.length) {
+          flash(document.getElementById('flash').innerHTML +
+            '<div class="notice notice-warn">Skipped ' + got.skipped.length + ': ' +
+            got.skipped.map(s => s.name + ' (' + s.why + ')').join('; ') + '</div>');
+        }
+        window.setTimeout(() => window.location.reload(), 2500);
+      } catch (err) {
+        flash(err.message, 'warn');
+        button.disabled = false;
+        button.textContent = 'Draft them';
+      }
+    });
+  }
+
+  document.getElementById('fu-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const days = {};
+    e.target.querySelectorAll('input[type=number]').forEach(i => days[i.name] = Number(i.value));
+    try {
+      await window.postJSON('/api/followups/schedule', {days});
+      window.location.reload();
+    } catch (err) { flash(err.message, 'warn'); }
+  });
+})();
+</script>
+{% endblock %}

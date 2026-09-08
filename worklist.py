@@ -18,6 +18,7 @@ from typing import Any
 import backup
 import db
 import review
+import followup as _followup
 from config import MIN_PROSPECT_RATING
 
 
@@ -83,6 +84,17 @@ def board() -> list[dict[str, Any]]:
               "waiting for a decision",
               "Read the business and its email, then approve it or rule it out.",
               "Work the queue", "/review"),
+        # Written and waiting. Separate from the pitch queue because a
+        # follow-up needs nothing researched — it is read and approved.
+        _item("followup", db.followups_waiting(),
+              "follow-ups drafted",
+              "Second and third emails, written and waiting for approval.",
+              "Read them", "/outbox?status=draft"),
+        _item("owed", len(_followup.due(200)),
+              "owed another email",
+              "Emailed once, no answer, and past the waiting period. Most replies "
+              "come from the second or third touch.",
+              "Draft them", "/followups"),
         _item("send", approved,
               "approved and ready to send",
               "Reviewed, drafted and signed off. Nothing is stopping these but the sending.",

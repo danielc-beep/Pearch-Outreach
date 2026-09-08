@@ -658,8 +658,12 @@ def warnings(message: dict[str, Any]) -> list[str]:
     if _local_parts(to_email) & set(ROLE_PREFIXES):
         notes.append(f"{to_email} is a shared address, not a person.")
 
-    seen = db.recent_send_to_domain(domain, DUPLICATE_WINDOW_DAYS,
-                                   ignore_message_id=message.get("id"))
+    # A follow-up is a deliberate second email to the same firm, so the
+    # duplicate guard would fire on every one of them. Warning about the thing
+    # you asked for teaches people to ignore warnings.
+    seen = (None if int(message.get("step") or 1) > 1
+            else db.recent_send_to_domain(domain, DUPLICATE_WINDOW_DAYS,
+                                          ignore_message_id=message.get("id")))
     if seen:
         when = (seen.get("sent_at") or "")[:10]
         notes.append(

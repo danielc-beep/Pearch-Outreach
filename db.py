@@ -222,6 +222,10 @@ MIGRATIONS: list[tuple[str, str]] = [
     # When it was won, so revenue can be counted against a period rather than
     # only ever as a running total.
     ("businesses", "ALTER TABLE businesses ADD COLUMN won_at TEXT"),
+    # Which touch this message is: 1 is the pitch, 2 and 3 are the follow-ups.
+    # A number rather than a flag because "is this a follow-up" stops being the
+    # question the moment there is more than one of them.
+    ("messages", "ALTER TABLE messages ADD COLUMN step INTEGER NOT NULL DEFAULT 1"),
 ]
 
 
@@ -1253,7 +1257,7 @@ def recent_runs(limit: int = 10) -> list[dict[str, Any]]:
 
 def insert_message(data: dict[str, Any]) -> int:
     fields = ("business_id", "contact_id", "campaign_id", "to_email",
-              "subject", "body", "status", "sent_at", "provider_id", "error")
+              "subject", "body", "status", "sent_at", "provider_id", "error", "step")
     payload = {k: data.get(k) for k in fields if k in data}
     payload.setdefault("status", "draft")
     cols = list(payload)
@@ -1405,6 +1409,62 @@ def stage_since(business_ids: list[int]) -> dict[int, str]:
         business_ids,
     ).fetchall()
     return {int(r["business_id"]): r["at"] for r in rows}
+
+
+# ---------- Following up ----------
+
+def sent_count(business_id: int) -> int:
+    """How many emails have actually gone to this business."""
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE business_id = ? AND status = 'sent'",
+        (business_id,)).fetchone()
+    return int(row["n"])
+
+
+def due_for_followup(step: int, after_days: int, limit: int = 50) -> list[dict[str, Any]]:
+    """
+    Businesses owed touch `step`, whose last email went out `after_days` ago.
+
+    Everything about "owed" is in the SQL rather than in a Python filter over
+    a page of rows: a follow-up run that silently skipped people because the
+    first fifty were ineligible would be the kind of bug nobody notices for a
+    month.
+    """
+    rows = get_conn().execute(
+        """
+        SELECT b.*, m.sent_at AS last_sent_at, m.subject AS last_subject,
+               m.body AS last_body, m.id AS last_message_id, m.to_email AS last_to
+        FROM businesses b
+        JOIN messages m ON m.id = (
+            SELECT id FROM messages WHERE business_id = b.id AND status = 'sent'
+            ORDER BY id DESC LIMIT 1)
+        WHERE b.status = 'contacted'
+          AND b.do_not_contact = 0
+          AND b.email IS NOT NULL AND b.email != ''
+          AND m.sent_at <= datetime('now', ?)
+          -- Exactly step-1 emails have gone, so touch 2 follows one and only one.
+          AND (SELECT COUNT(*) FROM messages WHERE business_id = b.id
+                 AND status = 'sent') = ?
+          -- Nothing already written for this touch, approved or waiting.
+          AND NOT EXISTS (SELECT 1 FROM messages WHERE business_id = b.id
+                            AND step = ? AND status IN ('draft','approved','sent'))
+          -- And nobody who has written back, whatever the stage says.
+          AND NOT EXISTS (SELECT 1 FROM inbound WHERE business_id = b.id
+                            AND kind = 'human')
+          AND LOWER(b.email) NOT IN (SELECT value FROM suppressions)
+        ORDER BY m.sent_at ASC
+        LIMIT ?
+        """,
+        (f"-{int(after_days)} days", step - 1, step, limit)).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def followups_waiting() -> int:
+    """Follow-up drafts written and not yet approved."""
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE step > 1 AND status = 'draft'"
+    ).fetchone()
+    return int(row["n"])
 
 
 # ---------- Replies that came back ----------

@@ -9,7 +9,7 @@
         <div class="eyebrow">Outbox</div>
         <h2>{{ messages|length }} {{ 'message' if messages|length == 1 else 'messages' }}</h2>
         <p class="lede">Drafts need approving before they can be sent. Sending happens one message at a time,
-          on purpose.</p>
+          on purpose. <a class="linkish" href="/followups">Follow-ups →</a></p>
       </div>
       <div class="row">
         {% for key, label in tabs %}

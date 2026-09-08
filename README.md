@@ -79,6 +79,7 @@ to work for recipients clicking through from an email.
 | `/addresses` | The ones with a website but no email, for going looking |
 | `/mastheads` | All 78 ACM titles, shaded by how far each one's book has got |
 | `/replies` | Everything that came back, and the ones nobody could place |
+| `/followups` | Who is owed a second or third email, and the schedule that decides it |
 | `/outbox` | Drafts waiting for approval, approved messages waiting to send, sent history |
 | `/suppressions` | Everyone permanently excluded from outreach |
 | `/unsubscribe` | The public unsubscribe page linked from every email |
@@ -112,6 +113,33 @@ tucked into the space beside it. Laid out flat the coach was half again as
 tall as the columns next to it, which left a wedge of empty blue under
 "What's waiting" and pushed the table below the fold; this way the three
 columns finish level and the whole dashboard lands on one screen.
+
+## Replies, and the second email
+
+**Replies** come in through `/api/inbound/mail` — a public URL, so it is shut
+unless `PEARCH_INBOUND_SECRET` is set and every call carries it in an
+`X-Pearch-Secret` header. Point any forwarder at it: Resend inbound, a
+Cloudflare email worker, a Zap. Three distinctions do the work:
+
+- An **out-of-office is not a reply**. It is recorded and moves nothing. It is
+  the classic false positive, and counting it would corrupt the one number
+  this exists to keep true.
+- An **opt-out is not a reply** either. It is suppressed, marked
+  do-not-contact and ruled out on arrival.
+- An **unmatched reply is not dropped**. It waits at `/replies` to be attached,
+  and the dashboard counts it above the replies themselves.
+
+Matching is the address first, then the domain — a reply often comes from a
+colleague of the person we wrote to. Free-mail domains never match on the
+domain, because nobody's company is gmail.com. If none of this is set up,
+paste a reply in on the business's own page and it is read the same way.
+
+**Follow-ups** at `/followups`. Most replies to cold outreach arrive on the
+second or third email, so one touch is about a third of a list. It writes
+them; it never sends them — they land in the outbox as drafts and go out
+through the same approval, preflight, suppression list and daily cap as
+everything else. It stops after two follow-ups, and it stops the moment
+anything human comes back through the inbox, whatever the stage says.
 
 ## Prospecting sources
 
@@ -181,6 +209,9 @@ pearch-outreach/
 ├── scoring.py          the 0-100 fit score
 ├── outreach.py         drafting (Anthropic SDK), campaigns, approval, sending
 ├── coach.py            the dashboard's three suggestions and its sounding board
+├── coverage.py         all 78 mastheads and what each one's book is worth
+├── replies.py          inbound mail: whose it is, what it is, what it changes
+├── followup.py         the second and third emails, and when they are owed
 ├── util.py             URL/email/phone/address normalising
 ├── sources/            prospecting sources (google_places, csv, sample)
 ├── templates/          Jinja2 pages

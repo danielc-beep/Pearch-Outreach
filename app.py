@@ -40,6 +40,7 @@ import crm
 import coach
 import coverage
 import replies
+import followup
 import sources
 import auth
 from auth import PasswordMiddleware
@@ -936,6 +937,46 @@ def api_reply_by_hand(business_id: int, body: HandReply) -> JSONResponse:
     if not got:
         raise HTTPException(status_code=404, detail="No such business")
     return JSONResponse(got)
+
+
+# ---------- Following up ----------
+
+class FollowupRun(BaseModel):
+    limit: int = 20
+    use_ai: bool = True
+
+
+@app.get("/followups", response_class=HTMLResponse)
+def followups_page(request: Request) -> HTMLResponse:
+    """Who is owed a second or third email, and the schedule that decides it."""
+    return page(request, "followups.html", nav="followups",
+                due=followup.due(60), steps=followup.schedule(),
+                waiting=db.followups_waiting(),
+                last_step=followup.LAST_STEP)
+
+
+@app.post("/api/followups/draft")
+def api_draft_followups(body: FollowupRun) -> JSONResponse:
+    """
+    Write the follow-ups that are owed. Nothing is sent.
+
+    They land in the outbox as drafts beside everything else and go out
+    through the same approval, the same preflight and the same daily cap.
+    """
+    return JSONResponse(followup.draft_due(max(1, min(body.limit, 100)), body.use_ai))
+
+
+class ScheduleIn(BaseModel):
+    days: dict[str, int]
+
+
+@app.post("/api/followups/schedule")
+def api_set_followup_schedule(body: ScheduleIn) -> JSONResponse:
+    try:
+        return JSONResponse({"steps": followup.set_schedule(
+            {int(k): v for k, v in body.days.items()})})
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/health")
