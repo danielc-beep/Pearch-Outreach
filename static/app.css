@@ -77,7 +77,6 @@ body {
 #fairy-lights { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
 
 a { color: var(--cyan-bright); text-decoration: none; }
-em, .italic { font-family: var(--serif); font-style: italic; font-weight: 500; }
 .script { font-family: var(--script); font-weight: 500; color: var(--cyan-soft); font-size: 1.5em; line-height: 1; }
 
 /* ---------- Chrome ---------- */
@@ -248,9 +247,8 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 .grid > * { min-width: 0; }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
-.grid-2 { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 980px) { .grid-4 { grid-template-columns: repeat(2, 1fr); } .grid-3 { grid-template-columns: 1fr; } }
-@media (max-width: 680px) { .grid-4, .grid-2 { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .grid-4 { grid-template-columns: 1fr; } }
 
 .stat .num { font-size: 40px; font-weight: 700; letter-spacing: -0.035em; line-height: 1; color: var(--white); }
 .stat .num .unit { font-size: 17px; font-weight: 600; color: var(--text-muted); letter-spacing: 0; margin-left: 4px; }
@@ -393,30 +391,6 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
   border-radius: 12px; padding: 16px 18px; font-size: 14px; line-height: 1.65; color: var(--text);
 }
 
-/* ---------- Steps ---------- */
-.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
-@media (max-width: 860px) { .steps { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 520px) { .steps { grid-template-columns: 1fr; } }
-/* The dotted connector runs 22px past its column, which is wider than the
-   page gutter once the steps stack — so it is dropped at that point. */
-@media (max-width: 860px) { .step:nth-child(2n)::before { display: none; } }
-@media (max-width: 520px) { .step::before { display: none; } }
-.step { position: relative; padding-top: 54px; }
-.step .num {
-  position: absolute; top: 0; left: 0; width: 42px; height: 42px; border-radius: 50%;
-  border: 1px solid var(--border); background: var(--ink-raised); color: var(--white);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; z-index: 2;
-}
-.step .num::after { content: ""; position: absolute; top: 5px; right: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--cyan-bright); box-shadow: 0 0 8px 1px var(--cyan-glow); }
-.step::before {
-  content: ""; position: absolute; top: 21px; left: 52px; right: -22px; height: 2px;
-  background-image: linear-gradient(90deg, var(--border) 50%, transparent 50%);
-  background-size: 8px 2px; background-repeat: repeat-x; z-index: 1;
-}
-.step:last-child::before { display: none; }
-.step p { color: var(--text-muted); font-size: 14px; margin: 0; }
-
 .spinner {
   display: inline-block; width: 14px; height: 14px; border-radius: 50%;
   border: 2px solid rgba(4,18,28,0.35); border-top-color: #04121C;
@@ -439,11 +413,6 @@ textarea { border-radius: 12px; line-height: 1.6; resize: vertical; min-height: 
 }
 
 /* ---------- Hero flourish & odds and ends ---------- */
-.hero-script { margin: -4px 0 18px; }
-.hero-script .script { font-size: 34px; }
-@media (max-width: 720px) { .hero-script .script { font-size: 26px; } }
-.hide-sm { display: inline; }
-@media (max-width: 720px) { .hide-sm { display: none; } }
 
 
 /* ---------- Review queue ----------
@@ -528,10 +497,6 @@ kbd {
   font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
   color: var(--white); min-width: 58px; flex-shrink: 0;
 }
-.board-text { min-width: 0; flex: 1; }
-.board-label { font-weight: 600; color: var(--white); font-size: 15px; }
-.board-detail { color: var(--text-muted); font-size: 13.5px; margin-top: 3px; }
-.board-go { color: var(--cyan-bright); font-weight: 600; font-size: 13.5px; white-space: nowrap; flex-shrink: 0; }
 .board-item.is-hot { border-color: rgba(63,214,147,0.45); }
 .board-item.is-hot .board-n { color: var(--success); }
 .board-item.is-warn .board-n { color: var(--warning); }
@@ -1048,43 +1013,110 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 .col-head h2 { font-size: 14px; margin: 0; letter-spacing: -0.01em; }
 
-/* The one box. */
-.next-up {
-  display: flex; align-items: center; gap: 14px; text-decoration: none;
-  background: rgba(0,154,199,0.13); border: 1px solid rgba(53,198,240,0.42);
-  border-radius: 12px; padding: 13px 16px; margin-bottom: 4px;
-  transition: border-color 0.15s, transform 0.15s;
+/* ---------- Next steps ---------- */
+/* A carousel is the wrong shape for most things and the right one here: the
+   list is short, every item is a real job, and the point is to put one of
+   them in front of you rather than let five counts blur into wallpaper.
+   The whole slide is the link, so there is no small target to hit on a card
+   that moves. */
+.steps { min-width: 0; }
+.steps-window {
+  position: relative; min-height: 126px;
+  border: 1px solid rgba(53,198,240,0.30); border-radius: 12px;
+  background: rgba(0,154,199,0.11); overflow: hidden;
 }
-.next-up:hover { border-color: var(--cyan-bright); transform: translateX(2px); }
-.next-n {
-  font-size: 30px; font-weight: 800; letter-spacing: -0.03em;
-  color: var(--cyan-bright); font-variant-numeric: tabular-nums; line-height: 1;
-}
-.next-text { min-width: 0; flex: 1; }
-.next-label { display: block; font-weight: 600; color: var(--white); font-size: 14px; }
-.next-detail {
-  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
-  overflow: hidden; color: var(--text-muted); font-size: 12px; margin-top: 2px;
-}
-.next-go { color: var(--cyan-bright); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+.steps-window:hover { border-color: var(--border-lit); }
 
-/* Everything else waiting: a list, not more boxes. */
-.rest { list-style: none; margin: 0; padding: 0; }
-.rest a {
-  display: flex; align-items: baseline; gap: 12px; text-decoration: none;
-  padding: 8px 4px 8px 16px; border-bottom: 1px solid rgba(255,255,255,0.07);
+/* The number beside the words, the action under them. Laid out in a row it
+   had to share the line with the link and the sentence came out clipped
+   mid-word, which is a worse crime than an extra 14 pixels of height. */
+.step {
+  position: absolute; inset: 0;
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 13px; align-content: center;
+  padding: 13px 15px 15px; text-decoration: none;
+  opacity: 0; transform: translateY(10px); pointer-events: none;
+  transition: opacity 0.34s ease, transform 0.34s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.rest a:hover { background: rgba(255,255,255,0.03); }
-.rest-n {
-  font-size: 16px; font-weight: 700; color: var(--white);
-  font-variant-numeric: tabular-nums; min-width: 30px;
+.step.is-on { opacity: 1; transform: none; pointer-events: auto; }
+.step:focus-visible { outline: 2px solid var(--cyan-bright); outline-offset: -3px; }
+.step-n {
+  grid-row: 1 / span 2; align-self: center;
+  font-size: 32px; font-weight: 800; letter-spacing: -0.035em; line-height: 1;
+  color: var(--cyan-bright); font-variant-numeric: tabular-nums;
+  min-width: 42px;
 }
-.rest-n.is-warn { color: var(--warning); }
-.rest-n.is-hot { color: var(--success); }
-.rest-label { flex: 1; min-width: 0; color: var(--text); font-size: 13px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rest-go { color: var(--cyan-bright); font-size: 12px; white-space: nowrap; opacity: 0; transition: opacity 0.15s; }
-.rest a:hover .rest-go { opacity: 1; }
+/* Reserved status colours, each with its own words beside it — the number is
+   never the only thing carrying the urgency. */
+.step-n.is-warn { color: var(--warning); }
+.step-n.is-hot { color: var(--success); }
+.step-text { min-width: 0; }
+.step-label {
+  display: block; font-weight: 650; color: var(--white); font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.step-detail {
+  /* Three, because two clipped the two longest jobs on the board mid-word
+     — and the sentence is the part that says why it matters. */
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+  overflow: hidden; color: var(--text-muted); font-size: 12px; margin-top: 2px;
+  line-height: 1.42;
+}
+.step-go {
+  grid-column: 2; justify-self: end; margin-top: 2px;
+  color: var(--cyan-bright); font-weight: 600; font-size: 12.5px; white-space: nowrap;
+}
+.step:hover .step-go { text-decoration: underline; }
+
+/* How long is left on this one. It is also the only thing on the panel that
+   shows the timer is paused, which is why it stops rather than hides. */
+.step-bar {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  transform-origin: left center; transform: scaleX(0);
+  background: linear-gradient(90deg, var(--cyan), var(--cyan-bright));
+}
+@keyframes step-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+.steps-dots { display: flex; align-items: center; gap: 6px; margin-top: 11px; }
+.steps-dot {
+  border: 0; background: none; padding: 4px 2px; cursor: pointer; line-height: 0;
+}
+.steps-dot i {
+  display: block; width: 20px; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.20); transition: background 0.2s;
+}
+.steps-dot:hover i { background: rgba(255,255,255,0.42); }
+.steps-dot.is-on i { background: var(--cyan-bright); }
+.steps-dot.is-warn.is-on i { background: var(--warning); }
+.steps-dot.is-hot.is-on i { background: var(--success); }
+.steps-dot:focus-visible { outline: 2px solid var(--cyan-bright); outline-offset: 1px; border-radius: 3px; }
+.steps-count {
+  margin-left: auto; font-size: 11px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Moving content that runs for more than five seconds needs a way to stop it. */
+.steps-play {
+  border: 0; background: none; cursor: pointer; padding: 4px 2px; line-height: 0;
+  color: var(--text-muted);
+}
+.steps-play:hover { color: var(--white); }
+.steps-play:focus-visible { outline: 2px solid var(--cyan-bright); outline-offset: 2px; border-radius: 4px; }
+.steps-play-icon {
+  display: block; width: 9px; height: 11px;
+  border-left: 3px solid currentColor; border-right: 3px solid currentColor;
+}
+.steps-play.is-stopped .steps-play-icon {
+  width: 0; height: 0; border: 6px solid transparent;
+  border-left: 10px solid currentColor; border-right: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* No timer, no sliding. The dots still work, so it stays navigable — it
+     simply waits to be told rather than moving on its own. */
+  .step { transition: none; }
+  .step-bar { display: none; }
+}
 
 /* The feed. */
 .feed { list-style: none; margin: 0; padding: 0; max-height: 208px; overflow-y: auto; }

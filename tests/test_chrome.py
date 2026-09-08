@@ -257,3 +257,50 @@ def test_the_fingerprint_follows_the_file(tmp_path, monkeypatch):
 def test_a_missing_asset_does_not_break_the_page():
     import app as app_module
     assert app_module.asset("not-here.css") == "/static/not-here.css"
+
+
+def test_the_stylesheet_carries_nothing_no_page_uses():
+    """
+    Rules for classes nothing renders.
+
+    Not tidiness. A dead `.steps { display: grid }` sat in the stylesheet
+    after the component using it was removed, and the next thing to want that
+    name inherited a four-column grid — a carousel laid out as four columns of
+    one word each, on a page that passed every other test. Dead CSS is not
+    inert; it is a trap with a name on it.
+
+    A class counts as used when a template or a script mentions it, or when
+    one of them builds it — `feed-{{ a.kind }}` and `'is-' + tone` are how
+    several of these are applied.
+    """
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    css = (root / "static" / "app.css").read_text()
+
+    declared: dict[str, int] = {}
+    depth = 0
+    for number, line in enumerate(css.splitlines(), 1):
+        stripped = line.strip()
+        if depth == 0 and "{" in stripped and not stripped.startswith(("/*", "*", "@")):
+            for selector in stripped.split("{")[0].split(","):
+                found = re.match(r"\.([a-zA-Z][a-zA-Z0-9_-]*)", selector.strip())
+                if found:
+                    declared.setdefault(found.group(1), number)
+        depth += stripped.count("{") - stripped.count("}")
+
+    markup = "\n".join(p.read_text() for p in
+                       list((root / "templates").glob("*.html")) +
+                       list((root / "static").glob("*.js")))
+
+    def used(name: str) -> bool:
+        if re.search(r"\b" + re.escape(name) + r"\b", markup):
+            return True
+        stem = name.rsplit("-", 1)[0] + "-"
+        return bool(re.search(re.escape(stem) + r"(\{\{|['\"]\s*\+|\$\{)", markup))
+
+    dead = {name: line for name, line in declared.items() if not used(name)}
+    assert not dead, ("these rules style nothing, and the names are free for the "
+                      "next component to trip over: "
+                      + ", ".join(f".{n} (line {l})" for n, l in sorted(dead.items(),
+                                                                       key=lambda kv: kv[1])))

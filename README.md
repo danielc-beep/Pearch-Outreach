@@ -72,7 +72,7 @@ Six tabs. Two of them have sections, because four of the old nine were pairs.
 
 | Tab | Sections | What it's for |
 | --- | --- | --- |
-| Dashboard | — | Target, revenue, pipeline, what's waiting, and the coach |
+| Dashboard | — | Target, revenue, pipeline, next steps, and the coach |
 | Prospect | — | Pick a source, run a search, see what came back |
 | Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 | CRM | — | The kanban board — drag a deal from one stage to the next |
@@ -86,6 +86,25 @@ Off the nav but linked where they are needed: `/businesses/{id}` (one business),
 Every URL these pages used to live at still works — `/outbox`, `/replies`,
 `/review`, `/review/align`, `/align`, `/mastheads` and `/businesses` all
 redirect, query string included.
+
+## Next steps
+
+The dashboard's job list is a carousel: one job at a time, in the order they
+should be done, the whole slide a link to the screen that fixes it. A carousel
+is the wrong shape for most things and the right one here — the list is short,
+every item is a real job, and the point is to put one of them in front of you
+rather than let five counts blur into wallpaper.
+
+What stops it being annoying: it pauses the moment you point at it or tab into
+it, it pauses when the tab is hidden, there is a button to stop it for good,
+and it does not move at all for anyone whose system asks for less motion. A
+moving target you cannot click is worse than a static list. The dots are
+labelled with what each step is, so they are navigation rather than
+decoration, and arrow keys work when focus is inside.
+
+The live poll updates the counts in place, and rebuilds the slides when the
+set of jobs changes — a slide for a job that is finished is worse than no
+slide.
 
 ## The coach
 

@@ -147,27 +147,45 @@
   {% endif %}
 
   <div class="dash-grid">
-    <!-- The one box on the page, because it is the one thing to act on. -->
-    <section class="dash-col">
-      <div class="col-head"><h2>What's waiting</h2><a class="linkish" href="/prospect">Find more</a></div>
+    <!-- One job at a time, in the order they should be done. The whole slide
+         is the link, so there is no small target to hit on a moving card. -->
+    <section class="dash-col steps" id="steps">
+      <div class="col-head">
+        <h2>Next steps</h2>
+        {% if board|length > 1 %}
+        <button class="steps-play" id="steps-play" type="button"
+                aria-label="Pause the steps" aria-pressed="false">
+          <span class="steps-play-icon" aria-hidden="true"></span>
+        </button>
+        {% endif %}
+      </div>
       {% if board %}
-      <a class="next-up" href="{{ board[0].href }}">
-        <span class="next-n">{{ board[0].count }}</span>
-        <span class="next-text">
-          <span class="next-label">{{ board[0].label }}</span>
-          <span class="next-detail">{{ board[0].detail }}</span>
-        </span>
-        <span class="next-go">{{ board[0].action }} →</span>
-      </a>
-      <ul class="rest">
-        {% for item in board[1:] %}
-        <li><a href="{{ item.href }}">
-          <span class="rest-n {{ 'is-' ~ item.tone if item.tone }}">{{ item.count }}</span>
-          <span class="rest-label">{{ item.label }}</span>
-          <span class="rest-go">{{ item.action }} →</span>
-        </a></li>
+      <div class="steps-window" id="steps-window">
+        {% for item in board %}
+        <a class="step {{ 'is-on' if loop.first }}" href="{{ item.href }}"
+           data-href="{{ item.href }}" {% if not loop.first %}aria-hidden="true" tabindex="-1"{% endif %}>
+          <span class="step-n {{ 'is-' ~ item.tone if item.tone }}">{{ item.count }}</span>
+          <span class="step-text">
+            <span class="step-label">{{ item.label }}</span>
+            <span class="step-detail">{{ item.detail }}</span>
+          </span>
+          <span class="step-go">{{ item.action }} →</span>
+        </a>
         {% endfor %}
-      </ul>
+      </div>
+      {% if board|length > 1 %}
+      <div class="steps-dots" id="steps-dots" role="tablist" aria-label="Steps">
+        {% for item in board %}
+        <button class="steps-dot {{ 'is-on' if loop.first }} {{ 'is-' ~ item.tone if item.tone }}"
+                type="button" role="tab" data-i="{{ loop.index0 }}"
+                aria-selected="{{ 'true' if loop.first else 'false' }}"
+                aria-label="{{ item.count }} {{ item.label }}">
+          <i></i>
+        </button>
+        {% endfor %}
+        <span class="steps-count" id="steps-count">1/{{ board|length }}</span>
+      </div>
+      {% endif %}
       {% else %}
       <h3 style="margin:8px 0 4px;font-size:15px">{{ next_step.title }}</h3>
       <p class="muted" style="margin:0 0 12px">{{ next_step.detail }}</p>
@@ -422,10 +440,7 @@
         if (n && n.textContent.trim() !== String(s.count)) n.textContent = s.count;
       });
     }
-    (data.board || []).forEach(function (item) {
-      var cell = document.querySelector('a[href="' + item.href + '"] .next-n, a[href="' + item.href + '"] .rest-n');
-      if (cell) setNumber(cell, item.count, false);
-    });
+    if (window.acmSteps) window.acmSteps.update(data.board || []);
   }
 
   // Setting the target.
@@ -477,6 +492,178 @@
       } catch (err) { previewEl.textContent = err.message; }
     });
   }
+
+  // ---------- Next steps ----------
+  // The jobs waiting, one at a time, in the order they should be done. A
+  // carousel is the wrong shape for most things and the right one here: the
+  // list is short, every item is a real job, and the point is to put one of
+  // them in front of you rather than to let five counts blur into wallpaper.
+  //
+  // The rules that stop it being annoying: it pauses the moment you point at
+  // it or tab into it, it pauses when the tab is hidden, there is a button to
+  // stop it for good, and it does not move at all for anyone who has asked
+  // their system for less motion. A moving target you cannot click is worse
+  // than a static list.
+  window.acmSteps = (function () {
+    var DWELL = 6000;
+    var box = document.getElementById('steps-window');
+    if (!box) return {update: function () {}};
+
+    var dots = document.getElementById('steps-dots');
+    var counter = document.getElementById('steps-count');
+    var play = document.getElementById('steps-play');
+    var slides = Array.prototype.slice.call(box.querySelectorAll('.step'));
+    var index = 0;
+    var timer = null;
+    var stopped = false;      // the button — a decision, not a hover
+    var held = false;         // pointer, focus or a hidden tab
+
+    function show(next, announce) {
+      if (!slides.length) return;
+      index = (next + slides.length) % slides.length;
+      slides.forEach(function (slide, i) {
+        var on = i === index;
+        slide.classList.toggle('is-on', on);
+        slide.setAttribute('tabindex', on ? '0' : '-1');
+        if (on) slide.removeAttribute('aria-hidden');
+        else slide.setAttribute('aria-hidden', 'true');
+      });
+      if (dots) {
+        dots.querySelectorAll('.steps-dot').forEach(function (dot, i) {
+          dot.classList.toggle('is-on', i === index);
+          dot.setAttribute('aria-selected', i === index ? 'true' : 'false');
+        });
+      }
+      if (counter) counter.textContent = (index + 1) + '/' + slides.length;
+      restartProgress();
+      // Only when a person pressed something. Announcing every automatic turn
+      // would make a screen reader talk over whatever else you were doing.
+      if (announce && slides[index]) {
+        box.setAttribute('aria-live', 'polite');
+        window.setTimeout(function () { box.removeAttribute('aria-live'); }, 1200);
+      }
+    }
+
+    function restartProgress() {
+      var on = slides[index];
+      if (!on || reduce) return;
+      var bar = on.querySelector('.step-bar');
+      if (!bar) return;
+      bar.style.animation = 'none';
+      void bar.offsetWidth;                       // forces the restart
+      bar.style.animation = running()
+        ? 'step-fill ' + DWELL + 'ms linear forwards' : 'none';
+    }
+
+    function running() { return !stopped && !held && slides.length > 1 && !reduce; }
+
+    function tick() {
+      window.clearTimeout(timer);
+      if (!running()) return;
+      timer = window.setTimeout(function () { show(index + 1); tick(); }, DWELL);
+    }
+
+    function hold(on) {
+      held = on;
+      window.clearTimeout(timer);
+      var bar = slides[index] && slides[index].querySelector('.step-bar');
+      if (bar) bar.style.animationPlayState = on ? 'paused' : 'running';
+      if (!on) { restartProgress(); tick(); }
+    }
+
+    box.addEventListener('mouseenter', function () { hold(true); });
+    box.addEventListener('mouseleave', function () { hold(false); });
+    box.addEventListener('focusin', function () { hold(true); });
+    box.addEventListener('focusout', function () { hold(false); });
+    document.addEventListener('visibilitychange', function () { hold(document.hidden); });
+
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') { show(index + 1, true); tick(); }
+      else if (e.key === 'ArrowLeft') { show(index - 1, true); tick(); }
+      else return;
+      e.preventDefault();
+      slides[index].focus();
+    });
+
+    if (dots) {
+      dots.addEventListener('click', function (e) {
+        var dot = e.target.closest('.steps-dot');
+        if (!dot) return;
+        show(Number(dot.dataset.i), true);
+        tick();
+      });
+    }
+
+    if (play) {
+      play.addEventListener('click', function () {
+        stopped = !stopped;
+        play.setAttribute('aria-pressed', stopped ? 'true' : 'false');
+        play.setAttribute('aria-label', stopped ? 'Play the steps' : 'Pause the steps');
+        play.classList.toggle('is-stopped', stopped);
+        if (stopped) window.clearTimeout(timer); else { restartProgress(); tick(); }
+      });
+    }
+
+    function keyOf(list) { return list.map(function (i) { return i.href; }).join('|'); }
+    var shape = keyOf(slides.map(function (s) { return {href: s.dataset.href}; }));
+
+    function rebuild(board) {
+      // A slide for a job that is finished is worse than no slide, so when the
+      // set changes the window is rewritten — keeping your place if the step
+      // you were looking at is still there.
+      var here = slides[index] && slides[index].dataset.href;
+      box.innerHTML = board.map(function (item, i) {
+        return '<a class="step' + (i === 0 ? ' is-on' : '') + '" href="' + esc(item.href) +
+          '" data-href="' + esc(item.href) + '"' + (i === 0 ? '' : ' aria-hidden="true" tabindex="-1"') + '>' +
+          '<span class="step-n' + (item.tone ? ' is-' + esc(item.tone) : '') + '">' + esc(item.count) + '</span>' +
+          '<span class="step-text"><span class="step-label">' + esc(item.label) + '</span>' +
+          '<span class="step-detail">' + esc(item.detail) + '</span></span>' +
+          '<span class="step-go">' + esc(item.action) + ' &rarr;</span>' +
+          '<span class="step-bar"></span></a>';
+      }).join('');
+      if (dots) {
+        dots.querySelectorAll('.steps-dot').forEach(function (d) { d.remove(); });
+        board.forEach(function (item, i) {
+          var dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = 'steps-dot' + (item.tone ? ' is-' + item.tone : '');
+          dot.setAttribute('role', 'tab');
+          dot.dataset.i = i;
+          dot.setAttribute('aria-label', item.count + ' ' + item.label);
+          dot.appendChild(document.createElement('i'));
+          dots.insertBefore(dot, counter);
+        });
+        dots.hidden = board.length < 2;
+      }
+      slides = Array.prototype.slice.call(box.querySelectorAll('.step'));
+      var again = board.findIndex(function (i) { return i.href === here; });
+      show(again >= 0 ? again : 0);
+      tick();
+    }
+
+    function update(board) {
+      if (!board.length) return;
+      var next = keyOf(board);
+      if (next !== shape) { shape = next; rebuild(board); return; }
+      // Same steps, new numbers: count them up in place rather than redrawing.
+      board.forEach(function (item) {
+        var cell = box.querySelector('.step[data-href="' + item.href + '"] .step-n');
+        if (cell) setNumber(cell, item.count, false);
+        var dot = dots && dots.querySelectorAll('.steps-dot')[board.indexOf(item)];
+        if (dot) dot.setAttribute('aria-label', item.count + ' ' + item.label);
+      });
+    }
+
+    slides.forEach(function (slide) {
+      var bar = document.createElement('span');
+      bar.className = 'step-bar';
+      slide.appendChild(bar);
+    });
+    slides.forEach(function (s, i) { s.setAttribute('tabindex', i === 0 ? '0' : '-1'); });
+    show(0);
+    tick();
+    return {update: update};
+  })();
 
   // ---------- The coach ----------
   // The panel is rendered from cache on the server so it is never blank, then

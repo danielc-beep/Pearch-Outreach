@@ -75,7 +75,7 @@ def test_the_dashboard_renders_the_board(client):
     rows = _seed(4)
     db.update_business(rows[0]["id"], {"status": "replied"})
     html = client.get("/").text
-    assert "What's" in html and "waiting" in html
+    assert "Next steps" in html
     assert "replied to an email" in html
 
 
@@ -198,3 +198,80 @@ def test_finding_emails_is_still_reachable_without_a_nav_tab(client):
     assert 'href="/addresses"' in home, "from the dashboard's list of jobs"
     assert 'href="/addresses"' in client.get("/crm").text, "and from the footer everywhere"
     assert client.get("/addresses").status_code == 200
+
+
+# ---------- Next steps, one at a time ----------
+# A carousel is only bearable if it can be stopped, so most of these are about
+# that rather than about the sliding.
+
+def _steps(client):
+    html = client.get("/").text
+    return html.split('id="steps-window">')[1].split("</div>")[0], html
+
+
+def test_every_job_is_a_slide_and_the_first_one_is_showing(client):
+    rows = _seed(4)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    db.update_business(rows[1]["id"], {"email": ""})
+    window, _ = _steps(client)
+    assert window.count('class="step ') + window.count('class="step"') >= 2
+    assert window.count("is-on") == 1, "one slide showing, the rest waiting"
+
+
+def test_the_whole_slide_is_the_link(client):
+    """There is no small target to hit on a card that moves."""
+    rows = _seed(4)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    window, _ = _steps(client)
+    assert window.strip().startswith("<a "), window[:60]
+
+
+def test_the_slides_nobody_is_looking_at_are_out_of_the_tab_order(client):
+    rows = _seed(4)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    db.update_business(rows[1]["id"], {"email": ""})
+    window, _ = _steps(client)
+    assert 'tabindex="-1"' in window
+    assert 'aria-hidden="true"' in window
+
+
+def test_there_is_a_way_to_stop_it(client):
+    """Content that moves on its own for more than five seconds needs one."""
+    rows = _seed(4)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    db.update_business(rows[1]["id"], {"email": ""})
+    _, html = _steps(client)
+    assert 'id="steps-play"' in html
+    assert 'aria-label="Pause the steps"' in html
+
+
+def test_a_single_step_does_not_pretend_to_be_a_carousel(client):
+    """No timer, no dots, no pause button for a list of one."""
+    rows = _seed(2)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    for row in rows[1:]:
+        db.update_business(row["id"], {"email": "has@one.com.au",
+                                       "masthead": "newcastleherald.com.au"})
+    html = client.get("/").text
+    import worklist
+    if len(worklist.board()) == 1:
+        assert 'id="steps-dots"' not in html
+        assert 'id="steps-play"' not in html
+
+
+def test_the_dots_say_what_each_step_is(client):
+    """A row of anonymous dots is decoration; these are labelled."""
+    rows = _seed(4)
+    db.update_business(rows[0]["id"], {"status": "replied"})
+    db.update_business(rows[1]["id"], {"email": ""})
+    html = client.get("/").text
+    dots = html.split('id="steps-dots"')[1].split("</div>")[0]
+    assert 'aria-label="1 replied to an email"' in dots
+
+
+def test_an_empty_board_still_says_what_to_do(client):
+    """Nothing waiting is not nothing to do."""
+    html = client.get("/").text
+    assert 'class="steps-window"' not in html
+    assert "Next steps" in html
+    assert "Find businesses" in html, "the empty state still points somewhere"
