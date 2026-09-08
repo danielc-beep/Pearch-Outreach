@@ -17,7 +17,7 @@ from typing import Any
 
 import db
 import mastheads
-from config import DEFAULT_DEAL_VALUE
+import revenue
 
 # The bands a masthead's book can be in, coldest first. Ordinal, not
 # categorical — this is one quantity in four steps, so the board shades it
@@ -63,7 +63,7 @@ def board() -> dict[str, Any]:
                 **title, **row,
                 "band": _band(row),
                 "patch": mastheads.home_location(title["site"]),
-                "pipeline_est": row["pipeline"] or row["pitched"] * DEFAULT_DEAL_VALUE,
+                "pipeline_est": row["pipeline"] or row["pitched"] * revenue.default_value(),
             })
         groups.append({
             "state": group["state"],

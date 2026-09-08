@@ -31,7 +31,8 @@ import db
 import renewals
 import target
 import worklist
-from config import ANTHROPIC_API_KEY, DEFAULT_DEAL_VALUE, DRAFT_MODEL
+import revenue
+from config import ANTHROPIC_API_KEY, DRAFT_MODEL
 
 log = logging.getLogger(__name__)
 
@@ -95,7 +96,7 @@ def brief() -> dict[str, Any]:
     sentence around them.
     """
     stats = db.stats()
-    money = db.revenue(DEFAULT_DEAL_VALUE)
+    money = db.revenue(revenue.default_value())
     board = worklist.board()
     funnel = crm.funnel()
     return {

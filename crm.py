@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import db
-from config import DEFAULT_DEAL_VALUE
+import revenue
 
 # key, label, what it means, colour, where it goes next
 STAGES: list[dict[str, Any]] = [
@@ -167,7 +167,7 @@ def summary(**filters: Any) -> dict[str, Any]:
     without doing the arithmetic in your head from eight column headers.
     """
     counts = db.status_counts(**filters)
-    money = db.revenue(DEFAULT_DEAL_VALUE, **filters)
+    money = db.revenue(revenue.default_value(), **filters)
     working = sum(counts.get(s["key"], 0) for s in STAGES if s["key"] in WORKING)
     cold = sum(db.count_stale_in_stage(s["key"], s["stale_after"], **filters)
                for s in STAGES if s["stale_after"] and counts.get(s["key"]))

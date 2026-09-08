@@ -42,6 +42,31 @@
       </div>
     </div>
 
+    <div class="rev-unpriced">
+      {% if unpriced.unpriced %}
+      <span><b>{{ unpriced.unpriced }}</b> of {{ unpriced.count }} open deals have no price on them.
+        {% if deal_value %}Each counts as <b>${{ '{:,.0f}'.format(deal_value) }}</b> in the
+        pipeline figure.{% else %}They count as nothing, so the pipeline figure is
+        <b>${{ '{:,.0f}'.format(unpriced.set_total) }}</b> rather than a guess.{% endif %}</span>
+      {% else %}
+      <span>Every open deal carries a real figure. An unpriced one would count as
+        <b>${{ '{:,.0f}'.format(deal_value) }}</b>.</span>
+      {% endif %}
+      <button class="linkish" id="dv-edit" type="button">
+        {{ 'change it' if deal_value else 'set a figure' }}</button>
+      <form class="rev-dv" id="dv-form" hidden autocomplete="off">
+        <label for="dv-amount">An unpriced deal counts as</label>
+        <input type="number" id="dv-amount" min="0" step="500"
+               value="{{ deal_value|round|int if deal_value else (suggested|round|int or '') }}">
+        <button class="btn btn-sm btn-primary" type="submit">Save</button>
+        <button class="linkish" id="dv-cancel" type="button">Cancel</button>
+        {% if suggested and not deal_value %}
+        <span class="help">The middle of what you have already priced is
+          ${{ '{:,.0f}'.format(suggested) }}.</span>
+        {% endif %}
+      </form>
+    </div>
+
     {% if y.deals or y.has_last_year %}
     <figure class="rev-figure">
       <figcaption class="rev-legend">
@@ -200,6 +225,30 @@
 {% block scripts %}
 <script>
 (function () {
+  // What an unpriced deal is worth. Every figure that leans on it — the
+  // pipeline here, on the dashboard and on each masthead — reads it live, so
+  // saving is enough and there is nothing to redeploy.
+  const dvEdit = document.getElementById('dv-edit');
+  const dvForm = document.getElementById('dv-form');
+  if (dvEdit && dvForm) {
+    dvEdit.addEventListener('click', () => {
+      dvForm.hidden = false;
+      dvEdit.hidden = true;
+      document.getElementById('dv-amount').focus();
+    });
+    document.getElementById('dv-cancel').addEventListener('click', () => {
+      dvForm.hidden = true; dvEdit.hidden = false;
+    });
+    dvForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await window.postJSON('/api/deal-value',
+          {amount: Number(document.getElementById('dv-amount').value || 0)});
+        window.location.reload();
+      } catch (err) { window.alert(err.message); }
+    });
+  }
+
   const dialog = document.getElementById('ren-dialog');
   const dateEl = document.getElementById('ren-date');
   const monthsEl = document.getElementById('ren-months');

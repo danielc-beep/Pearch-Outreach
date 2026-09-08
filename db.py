@@ -1491,6 +1491,25 @@ def count_churned() -> int:
     return int(row["n"])
 
 
+def median_deal_value() -> float:
+    """
+    The middle price of everything anybody has actually put a number on.
+
+    A mean is dragged around by the one deal that came in at triple, and a
+    figure meant to stand in for "a typical deal" should not be.
+    """
+    rows = get_conn().execute(
+        "SELECT deal_value FROM businesses WHERE deal_value IS NOT NULL AND deal_value > 0 "
+        "ORDER BY deal_value").fetchall()
+    values = [float(r["deal_value"]) for r in rows]
+    if not values:
+        return 0.0
+    middle = len(values) // 2
+    if len(values) % 2:
+        return values[middle]
+    return (values[middle - 1] + values[middle]) / 2
+
+
 def revenue_by_month(year: int) -> list[dict[str, Any]]:
     """
     Twelve rows, every one present whether or not anything was signed in it.

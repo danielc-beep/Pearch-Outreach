@@ -47,7 +47,7 @@ import sources
 import auth
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, APP_USERNAME,
-                    DEFAULT_DEAL_VALUE, INBOUND_SECRET,
+                    INBOUND_SECRET,
                     DB_PATH, DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
@@ -844,7 +844,7 @@ def _dashboard_payload() -> dict[str, Any]:
     certainly being computed anyway.
     """
     stats = db.stats()
-    money = db.revenue(DEFAULT_DEAL_VALUE)
+    money = db.revenue(revenue_year.default_value())
     board = worklist.board()
     queue = next((i["count"] for i in board if i["key"] == "review"), 0)
     db.record_today({
@@ -1034,13 +1034,34 @@ def revenue_page(request: Request, year: int = 0) -> HTMLResponse:
     """The year against last year, and the client book underneath it."""
     data = revenue_year.year(year or None)
     return page(request, "revenue.html", nav="revenue",
-                y=data, c=revenue_year.chart(data), book=renewals.book())
+                y=data, c=revenue_year.chart(data), book=renewals.book(),
+                unpriced=db.revenue(revenue_year.default_value())["pipeline"],
+                deal_value=revenue_year.default_value(),
+                suggested=revenue_year.suggested_value())
 
 
 @app.get("/renewals")
 def renewals_redirect() -> RedirectResponse:
     """Renewals live on the revenue page; the obvious URL should still land there."""
     return RedirectResponse("/revenue#renewals", status_code=308)
+
+
+class DealValueIn(BaseModel):
+    amount: float
+
+
+@app.post("/api/deal-value")
+def api_set_deal_value(body: DealValueIn) -> JSONResponse:
+    """
+    What one unpriced deal counts as.
+
+    A pricing decision somebody makes in a meeting, so it is set here rather
+    than in a hosting console.
+    """
+    try:
+        return JSONResponse({"amount": revenue_year.set_default_value(body.amount)})
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 class GoLiveIn(BaseModel):

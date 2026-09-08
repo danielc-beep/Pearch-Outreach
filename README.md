@@ -51,6 +51,7 @@ required; each key just switches on more of the app.
 | `PEARCH_DRAFT_EFFORT` | How hard it thinks: `low`–`max` (default `medium`) |
 | `RESEND_API_KEY` + `PEARCH_SEND_ENABLED=1` | Actually sending email |
 | `PEARCH_INBOUND_SECRET` | Replies coming back in through `/api/inbound/mail` |
+| `PEARCH_DEFAULT_DEAL_VALUE` | Starting value for an unpriced deal (set it in the app instead) |
 | `ABR_GUID` | ABN / legal entity lookup against the Australian Business Register |
 | `PEARCH_DB_PATH` | Where the SQLite file lives (use a mounted disk in production) |
 
@@ -185,6 +186,14 @@ normal vision, which the palette validator rejects, and a tick on a bar says
 "the line you are being measured against" more directly anyway. Year-to-date
 is compared with the *same stretch* of last year, never with its full twelve
 months.
+
+**What an unpriced deal counts as** is set on that page too, not in a hosting
+console — it is a pricing decision somebody makes in a meeting, and it is read
+live, so saving is enough and there is nothing to redeploy. It starts at $0, so
+the pipeline figure is only what somebody actually agreed to until you say
+otherwise; the box pre-fills with the middle of what you have already priced.
+Deals carrying a real figure are never overwritten by it, and the count of
+unpriced ones is stated beside every total that leans on it.
 
 Underneath is the client book. A won deal with no go-live date is the top row,
 not a hidden one — that is a client whose content nobody has published. A

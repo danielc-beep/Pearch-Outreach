@@ -24,9 +24,58 @@ from datetime import datetime, timezone
 from typing import Any
 
 import db
+from config import DEFAULT_DEAL_VALUE
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+# ---------- What an unpriced deal is worth ----------
+# A pipeline number is only worth having if you know how much of it somebody
+# actually agreed to, so this fills in for deals nobody has priced and is
+# always reported separately from the ones that carry a real figure.
+#
+# It lives in the database rather than in an environment variable, for the
+# same reason the password does: it is a pricing decision somebody makes in a
+# meeting, not a hosting setting anybody should file a ticket to change. The
+# env var stays as the fallback for a fresh install.
+
+SETTING = "default_deal_value"
+MAX_DEAL = 10_000_000.0
+
+
+def default_value() -> float:
+    """What one unpriced deal counts as. Set in the app, or from the env."""
+    stored = db.get_setting(SETTING)
+    if stored:
+        try:
+            return max(0.0, float(stored))
+        except ValueError:
+            pass
+    return float(DEFAULT_DEAL_VALUE)
+
+
+def set_default_value(amount: float) -> float:
+    """Change it. Bounded, because a typo here silently inflates every figure."""
+    amount = float(amount)
+    if not 0 <= amount <= MAX_DEAL:
+        raise ValueError(f"A deal value runs between $0 and ${MAX_DEAL:,.0f}.")
+    db.set_setting(SETTING, repr(amount))
+    return amount
+
+
+def suggested_value() -> float:
+    """
+    What to put in the box before anybody has decided.
+
+    The middle of what has already been priced, rounded to something a person
+    would say out loud. Better than a number this app invented, because it is
+    the business's own.
+    """
+    middle = db.median_deal_value()
+    if not middle:
+        return 0.0
+    step = 500 if middle < 20_000 else 1000
+    return float(round(middle / step) * step)
 
 
 def this_year() -> int:

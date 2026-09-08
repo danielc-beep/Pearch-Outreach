@@ -181,3 +181,77 @@ def test_the_dashboard_shows_the_trades_not_the_fit_ranking(client):
 
 def test_the_empty_state_says_what_fills_it(client):
     assert "Nothing pitched yet" in client.get("/").text
+
+
+# ---------- What an unpriced deal counts as ----------
+# A pipeline number is worth having only if you know how much of it somebody
+# actually agreed to, so the stand-in figure is always reported apart from the
+# deals that carry a real one.
+
+def test_it_starts_at_nothing_so_the_pipeline_is_not_a_guess(client):
+    import revenue
+    assert revenue.default_value() == 0.0
+
+
+def test_setting_it_changes_every_figure_that_leans_on_it(client):
+    """It is read live, so saving is enough — there is nothing to redeploy."""
+    import crm
+    import db
+    import revenue
+    for _ in range(3):
+        db.insert_business({"name": "Open", "status": "qualified"})
+    assert crm.summary()["pipeline"] == 0
+    revenue.set_default_value(9000)
+    assert crm.summary()["pipeline"] == 27000
+    assert db.revenue(revenue.default_value())["pipeline"]["unpriced"] == 3
+
+
+def test_a_priced_deal_is_never_overwritten_by_the_default(client):
+    import db
+    import revenue
+    db.insert_business({"name": "Priced", "status": "qualified", "deal_value": 4000})
+    db.insert_business({"name": "Not priced", "status": "qualified"})
+    revenue.set_default_value(9000)
+    money = db.revenue(revenue.default_value())["pipeline"]
+    assert money["set_total"] == 4000, "what was actually agreed"
+    assert money["total"] == 13000, "plus one stand-in"
+
+
+def test_a_silly_figure_is_refused(client):
+    import pytest
+    import revenue
+    for bad in (-1, 20_000_000):
+        with pytest.raises(ValueError):
+            revenue.set_default_value(bad)
+
+
+def test_it_suggests_the_middle_of_what_you_have_already_priced(client):
+    """Better than a number this app invented, because it is the business's own."""
+    import db
+    import revenue
+    for value in (8000, 9000, 30000):
+        db.insert_business({"name": f"Won {value}", "status": "won", "deal_value": value})
+    assert db.median_deal_value() == 9000
+    assert revenue.suggested_value() == 9000
+
+
+def test_it_suggests_nothing_when_nothing_has_been_priced(client):
+    import revenue
+    assert revenue.suggested_value() == 0.0
+
+
+def test_the_page_says_how_much_of_the_pipeline_is_a_guess(client):
+    import db
+    db.insert_business({"name": "Priced", "status": "qualified", "deal_value": 4000})
+    db.insert_business({"name": "Not priced", "status": "qualified"})
+    body = client.get("/revenue").text
+    assert "open deals have no price on them" in body
+    assert 'id="dv-edit"' in body
+
+
+def test_the_endpoint_sets_it(client):
+    import revenue
+    got = client.post("/api/deal-value", json={"amount": 9500}).json()
+    assert got["amount"] == 9500
+    assert revenue.default_value() == 9500
+    assert client.post("/api/deal-value", json={"amount": -5}).status_code == 400
