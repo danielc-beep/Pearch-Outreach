@@ -6,6 +6,9 @@
   <section class="section">
     <div class="eyebrow">Prospect</div>
     <h2>Find businesses</h2>
+    <p class="lede" style="max-width:60ch">Describe who you are after and it finds them,
+      visits their websites for contact details, scores them, and skips anyone already
+      on file. One business at a time here, or a whole masthead's patch below.</p>
 
     <!-- The quick way, moved here off the dashboard: a trade, a town and a
          masthead. The fuller form below is for a source that wants more. -->
@@ -52,17 +55,6 @@
       {% endif %}
       Already have a list? <a href="/prospect?source=csv">Import a CSV</a>.
     </p>
-    <p class="search-hint" id="hs-hint" style="text-align:center">
-      {% if live_source %}Live search via {{ live_source }}.
-      {% elif can_search %}No prospecting API key set, so this runs on
-      <strong>sample data</strong> — everything works, the businesses are fictional.
-      {% else %}<strong>Nothing is set up to search with.</strong> Set
-      <code>GOOGLE_PLACES_API_KEY</code> in the environment to search Google Places.
-      {% endif %}
-    </p>
-
-    <p class="lede" style="margin-bottom:32px">Pick a source, describe who you're after, and it finds
-      them, visits their websites for contact details, scores them, and skips anyone already on file.</p>
 
     <div class="grid grid-3" style="margin-bottom:28px">
       {% for s in sources %}
@@ -79,13 +71,13 @@
     </div>
 
     <!-- Work a whole masthead patch in one go -->
-    <div class="card" id="territory" style="max-width:760px;margin-bottom:26px">
+    <div class="card" id="territory" style="margin-bottom:26px">
       <h3 style="margin-bottom:4px">Work a masthead's patch</h3>
       <p class="help" style="margin:0 0 18px">Pick a title and the trades worth calling on.
         It runs one search per trade across that paper's home town, enriches and scores
         what it finds, and stamps every record with the masthead.</p>
 
-      <div class="field-block">
+      <div class="field-block sweep-masthead">
         <label for="tr-masthead">Masthead</label>
         <select data-search id="tr-masthead">
           {% for t in patches %}
@@ -129,11 +121,15 @@
       <div id="tr-progress" class="territory-progress" hidden></div>
     </div>
 
-    <div class="card" style="max-width:760px">
+    <div class="card">
+      <h3 style="margin-bottom:4px">Run one search</h3>
+      <p class="help" style="margin:0 0 18px">One trade in one place, with the source's own
+        settings. Use this when the quick search at the top needs more control — a
+        different source, a bigger batch, or a CSV to paste in.</p>
       <form id="prospect-form">
         <input type="hidden" name="source" id="source-key" value="{{ active_source }}" />
-        <div id="source-fields"></div>
-        <div class="field-block">
+        <div id="source-fields" class="source-fields"></div>
+        <div class="field-block sweep-masthead">
           <label for="pf-masthead">Masthead these prospects are pitched from</label>
           <select data-search id="pf-masthead" name="masthead">
             <option value="">Australian Community Media</option>

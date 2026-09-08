@@ -84,14 +84,20 @@ def test_the_sticky_header_is_opaque(client):
     assert "background: #101A3E;" in client.get("/static/app.css").text
 
 
-def test_the_search_bar_is_the_one_light_surface(client):
+def test_the_search_bar_wears_the_same_materials_as_the_page(client):
+    """
+    It used to be a white pill, drawn for a light hero it no longer sits in.
+    On the prospecting page it was the one bright object in a column of dark
+    cards, which is what a component from a different design looks like.
+    """
     css = client.get("/static/app.css").text
-    assert "max-width: 860px; margin: 0 auto; background: #FFFFFF;" in css
-    # Two class names deep, or the dark input[type=text] rule further down the
-    # file wins on specificity and paints near-white text on the white bar.
+    bar = css.split(".searchbar {")[1].split("}")[0]
+    assert "var(--ink-sunken)" in bar and "#FFFFFF" not in bar
+    assert "max-width" not in bar, "it runs the width of the page now"
+    # Two class names deep, or the generic dark input rule further down the
+    # file wins on specificity and brings its own border and padding with it.
     assert ".searchbar .field input, .searchbar .field select {" in css
-    assert "color: #16224A;" in css
-    assert ".searchbar .field input::placeholder { color: #96A2BA; }" in css
+    assert "#16224A" not in css.split(".searchbar")[1].split(".picker")[0]
 
 
 def test_the_search_bar_fields_are_only_capped_while_it_is_a_row(client):
@@ -334,3 +340,28 @@ def test_an_open_dropdown_outranks_the_rows_under_it():
     assert ".has-picker-open { position: relative; z-index: 60; }" in css
     assert "holder.classList.add('has-picker-open')" in js
     assert "holder.classList.remove('has-picker-open')" in js
+
+
+def test_the_prospecting_page_does_not_print_its_hint_twice():
+    """
+    Two paragraphs said the same thing, one of them centred, and both carried
+    the same id — which is also the id the script writes the result into.
+    """
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent /
+            "templates" / "prospect.html").read_text()
+    assert page.count('id="hs-hint"') == 1
+
+
+def test_the_sweep_runs_across_the_page():
+    """
+    It was a 760px card on a 1240px page: a tall column of trades down the
+    left with half the screen empty beside it. Forty trades across the full
+    width is a grid you can read in one go.
+    """
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    page = (root / "templates" / "prospect.html").read_text()
+    css = (root / "static" / "app.css").read_text()
+    assert "max-width:760px" not in page
+    assert "repeat(auto-fill, minmax(178px, 1fr))" in css

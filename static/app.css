@@ -164,55 +164,63 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
    are meant to use rather than another panel to read. Everything inside
    it is therefore set explicitly against white — the dark palette's tokens
    would all but vanish here, so none of them are used. */
+/* The quick search: a trade, a town, a masthead.
+   It was a white pill, drawn for a light hero it no longer sits in. On this
+   page it was the one bright object among a column of dark cards, which is
+   what "doesn't look professional" looks like — a component that belongs to
+   a different design. Same shape, the page's own materials. */
 .searchbar {
-  display: flex; align-items: stretch; gap: 0;
-  max-width: 860px; margin: 0 auto; background: #FFFFFF;
-  border: 1px solid rgba(255,255,255,0.28); border-radius: 999px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.28), 0 22px 60px -28px rgba(0,0,0,0.9);
-  /* Not `overflow: hidden`. The pill needs its corners clipped, but the
-     masthead picker's dropdown lives inside this bar and hiding the overflow
-     cut it off at the bar's own edge. The two ends are rounded directly
-     instead, which clips exactly what needed clipping and nothing else. */
+  display: flex; align-items: stretch; gap: 0; width: 100%;
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 14px; overflow: visible;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-.searchbar > :first-child { border-radius: 999px 0 0 999px; }
-.searchbar > :last-child { border-radius: 0 999px 999px 0; }
-.searchbar:focus-within { border-color: var(--cyan-bright); box-shadow: 0 0 34px -4px var(--cyan-glow); }
-.searchbar .field { flex: 1; display: flex; flex-direction: column; padding: 12px 22px; text-align: left; min-width: 0; }
-.searchbar .field + .field { border-left: 1px solid #E4E9F2; }
-.searchbar label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #5A6B8C; }
-/* Two class names deep on purpose. The dark `input[type=text]` rule further
-   down this file scores the same as `.searchbar input` and comes later, so it
-   would win — and paint near-white text on this white bar. */
+.searchbar:focus-within {
+  border-color: var(--border-lit); box-shadow: 0 0 0 3px rgba(53,198,240,0.12);
+}
+.searchbar > :first-child { border-radius: 13px 0 0 13px; }
+.searchbar > :last-child { border-radius: 0 13px 13px 0; }
+.searchbar .field {
+  flex: 1; display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 18px; text-align: left; min-width: 0;
+}
+.searchbar .field + .field { border-left: 1px solid rgba(255,255,255,0.10); }
+.searchbar label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.11em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+/* Two class names deep on purpose. The generic dark `input[type=text]` rule
+   further down scores the same as `.searchbar input` and comes later, so it
+   would win and bring its own border and padding with it. */
 .searchbar .field input, .searchbar .field select {
-  border: 0; outline: 0; font-family: inherit; font-size: 15px; color: #16224A;
-  background: transparent; padding: 2px 0; width: 100%; min-width: 0;
+  border: 0; outline: 0; font-family: inherit; font-size: 14.5px; color: var(--text);
+  background: transparent; padding: 1px 0; width: 100%; min-width: 0;
   box-shadow: none;
 }
 .searchbar .field input:focus, .searchbar .field select:focus { box-shadow: none; }
 /* The native chevron is drawn immediately after the selected text, so a long
    masthead name runs straight under it. Ours is pinned to the right edge of
-   the field instead, with the text reserved out of its way and ellipsised
-   before it gets there. */
+   the field instead, with the text ellipsised before it gets there. */
 .searchbar .field select {
   appearance: none; -webkit-appearance: none;
-  padding-right: 20px;
-  text-overflow: ellipsis;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' fill='none' stroke='%235A6B8C' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  padding-right: 20px; text-overflow: ellipsis; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' fill='none' stroke='%23C3D4E8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 2px top 50%;
   background-size: 11px 7px;
 }
-.searchbar .field select:hover { cursor: pointer; }
 /* The dropdown itself is drawn by the OS, so it needs telling too. */
-.searchbar .field select option, .searchbar .field select optgroup { background: #FFFFFF; color: #16224A; }
-.searchbar .field input::placeholder { color: #96A2BA; }
+.searchbar .field select option, .searchbar .field select optgroup {
+  background: var(--ink-panel); color: var(--text);
+}
+.searchbar .field input::placeholder { color: var(--text-muted); opacity: 0.7; }
 .searchbar button {
   border: 0; background: var(--cyan); color: #04121C; font-family: inherit;
-  font-size: 15px; font-weight: 700; padding: 0 34px; cursor: pointer; transition: 0.15s;
+  font-size: 14.5px; font-weight: 700; padding: 0 30px; cursor: pointer;
+  transition: 0.15s; white-space: nowrap;
 }
 .searchbar button:hover { background: var(--cyan-bright); }
-.searchbar button:disabled { background: #9FC9D9; color: #33566A; cursor: progress; }
+.searchbar button:disabled { background: rgba(255,255,255,0.10); color: var(--text-muted); cursor: not-allowed; }
 /* The two pickers are capped only while the bar is a row. Stacked, a cap
    stops the field reaching the edge of the bar and the dividers come out at
    three different lengths — which is what an inline max-width did here
@@ -227,9 +235,13 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
   .searchbar .field-source { flex: 0 0 176px; }
 }
 @media (max-width: 760px) {
-  .searchbar { flex-direction: column; border-radius: 22px; }
-  .searchbar .field + .field { border-left: 0; border-top: 1px solid #E4E9F2; }
-  .searchbar button { padding: 16px; }
+  /* Stacked, the dividers run across rather than down and the corner rounding
+     belongs to the top and bottom of the column, not its left and right. */
+  .searchbar { flex-direction: column; border-radius: 14px; }
+  .searchbar .field + .field { border-left: 0; border-top: 1px solid rgba(255,255,255,0.10); }
+  .searchbar > :first-child { border-radius: 13px 13px 0 0; }
+  .searchbar > :last-child { border-radius: 0 0 13px 13px; }
+  .searchbar button { padding: 15px; }
 }
 .search-hint { color: var(--text-muted); font-size: 13px; margin-top: 14px; }
 .search-hint a { color: var(--cyan-bright); text-decoration: underline; text-underline-offset: 2px; }
@@ -451,8 +463,25 @@ kbd {
 }
 
 /* ---------- Territory sweep ---------- */
-.trade-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px 14px; }
-@media (max-width: 620px) { .trade-grid { grid-template-columns: 1fr 1fr; } }
+/* As many columns as the card is wide enough for. Fixed at three it was a
+   tall list down one side of a wide page; forty trades across the full width
+   is a grid you can read in one go. */
+.trade-grid {
+  display: grid; gap: 8px 18px;
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+}
+/* One choice, not a full-width field. A select stretched across a metre of
+   card reads as an afterthought however good the rest of the page is. */
+.sweep-masthead select, .sweep-masthead .picker { max-width: 420px; }
+/* The source's own fields, side by side rather than a column of full-width
+   boxes. A textarea — the CSV paste — takes the whole row it needs. */
+.source-fields {
+  display: grid; gap: 0 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+}
+.source-fields .field-block:has(textarea) { grid-column: 1 / -1; }
+@media (max-width: 640px) { .source-fields { grid-template-columns: 1fr; } }
 .trade { display: flex; align-items: center; gap: 8px; font-size: 13.5px; cursor: pointer; }
 .trade-group + .trade-group { margin-top: 14px; }
 .trade-group-head {
@@ -897,17 +926,6 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .picker-option.is-chosen { color: var(--cyan-bright); font-weight: 600; }
 .picker-none { padding: 10px 9px; font-size: 13px; color: var(--text-muted); }
 
-/* The white search bar on the dashboard has its own ideas about inputs. */
-.searchbar .picker-list {
-  background: #FFFFFF; border-color: rgba(22,34,74,0.16);
-  top: calc(100% + 14px);          /* clear of the bar's own shadow */
-  min-width: 260px;
-}
-.searchbar .picker-option { color: #16224A; }
-.searchbar .picker-option:hover, .searchbar .picker-option.is-active {
-  background: rgba(0,154,199,0.14); color: #0D1636;
-}
-.searchbar .picker-group { color: #5A6E92; }
 
 
 /* ---------- The batch that needs no reading ---------- */
