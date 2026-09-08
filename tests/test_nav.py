@@ -18,8 +18,8 @@ def _nav(client):
 
 def test_there_are_six_tabs_in_the_order_the_work_is_done(client):
     hrefs = [line.split('href="')[1].split('"')[0] for line in _nav(client)]
-    assert hrefs == ["/", "/prospect", "/crm", "/admin/review",
-                     "/emails/outbox", "/revenue"]
+    assert hrefs == ["/", "/prospect", "/crm", "/emails/outbox",
+                     "/revenue", "/admin/review"], "the order the work is done in"
 
 
 def test_emails_opens_on_the_outbox_with_the_inbox_beside_it(client):

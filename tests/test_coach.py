@@ -327,8 +327,16 @@ def test_the_trades_table_fills_the_space_the_coach_casts(client):
     assert ".dash-wide { grid-column: 1 / 3; }" in CSS
 
 
-def test_the_composer_sits_on_the_floor_of_the_column(client):
-    assert ".coach-ask { display: flex; gap: 6px; margin-top: auto; }" in CSS
+def test_the_question_box_comes_first(client):
+    """
+    Asking is what people open this panel to do; the three suggestions are
+    what it says before anybody has asked anything.
+    """
+    body = client.get("/").text
+    panel = body.split('id="coach"')[1].split("</section>")[0]
+    assert panel.index('id="coach-ask"') < panel.index('id="coach-list"')
+    assert panel.index('id="coach-ask"') < panel.index('id="coach-chat"')
+    assert ".coach-ask { display: flex; gap: 6px; margin-bottom: 9px; }" in CSS
 
 
 def test_the_transcript_can_actually_be_hidden(client):
@@ -336,7 +344,19 @@ def test_the_transcript_can_actually_be_hidden(client):
     assert ".coach-chat[hidden] { display: none; }" in CSS
 
 
-def test_the_starters_fill_the_room_the_three_leave_over(client):
+def test_the_starters_sit_with_the_box_they_are_prompts_for(client):
+    from unittest.mock import patch
+    import app
+    with patch.object(app, "ANTHROPIC_API_KEY", "sk-ant-test"):
+        body = client.get("/").text
+    panel = body.split('id="coach"')[1].split("</section>")[0]
+    assert panel.count('class="coach-starter"') == 3
+    assert "What should I do first today?" in panel
+    assert panel.index('id="coach-ask"') < panel.index('id="coach-starters"')
+
+
+def test_the_chips_are_not_offered_when_the_chat_cannot_answer(client):
+    """Every one of them would come back saying it needs an API key."""
     body = client.get("/").text
-    assert body.count('class="coach-starter"') == 3
-    assert "What should I do first today?" in body
+    assert 'class="coach-starter"' not in body
+    assert "Chat needs an Anthropic API key" in body

@@ -1173,7 +1173,7 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .coach-source[data-source="claude"] { color: var(--cyan-soft); }
 
 .coach { display: flex; flex-direction: column; }
-.coach-list { list-style: none; margin: 0 0 10px; padding: 0; counter-reset: coach;
+.coach-list { list-style: none; margin: 0; padding: 0; counter-reset: coach;
               flex: 0 0 auto; }
 .coach-item {
   position: relative; counter-increment: coach;
@@ -1203,8 +1203,9 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 .coach-item a { font-size: 12px; }
 
 .coach-chat {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-bottom: 8px;
-  padding: 2px 0; display: flex; flex-direction: column; gap: 7px;
+  flex: 0 1 auto; min-height: 0; max-height: 320px; overflow-y: auto;
+  margin-bottom: 12px; padding: 2px 0;
+  display: flex; flex-direction: column; gap: 7px;
 }
 /* The class sets display, which beats the browser's rule for [hidden]. */
 .coach-chat[hidden] { display: none; }
@@ -1226,14 +1227,11 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 /* Quiet enough not to compete with the three numbered suggestions, present
    enough to say the box below it is a conversation rather than a search. */
 .coach-starters {
-  flex: 1 1 auto; display: flex; flex-direction: column;
-  align-items: flex-start; gap: 4px; padding: 2px 0 8px;
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 5px; margin-bottom: 11px;
 }
 .coach-starters[hidden] { display: none; }
-.coach-starters-head {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
-  color: var(--text-muted); margin-bottom: 1px;
-}
+.coach-note { margin: -2px 0 11px; }
 .coach-starter {
   font: inherit; font-size: 11.5px; line-height: 1.35; text-align: left; cursor: pointer;
   color: var(--cyan-soft); background: rgba(0,154,199,0.10);
@@ -1242,9 +1240,9 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 }
 .coach-starter:hover { background: rgba(0,154,199,0.22); border-color: var(--border-lit); }
 
-/* Pinned to the bottom of the column whether or not there is a transcript
-   above it, so the box does not float in the middle of the empty space. */
-.coach-ask { display: flex; gap: 6px; margin-top: auto; }
+/* Directly under the heading: asking is what people come to this panel to
+   do, and the three suggestions are what it says before anybody has. */
+.coach-ask { display: flex; gap: 6px; margin-bottom: 9px; }
 .coach-ask input {
   flex: 1; min-width: 0; font: inherit; font-size: 12.5px; color: var(--text);
   background: var(--surface); border: 1px solid var(--border);
@@ -1287,10 +1285,7 @@ table.bare .sub { color: var(--text-muted); }
      back to being a band and the table goes back to being full width. */
   .dash-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .dash-wide, .dash-tall { grid-column: 1 / -1; grid-row: auto; }
-  .coach-ask { margin-top: 0; }
   .coach-chat { max-height: 220px; }
-  /* No column height to fill, so the chips stop being useful padding. */
-  .coach-starters { flex-direction: row; flex-wrap: wrap; align-items: center; }
   /* Across the full width the three read as three, side by side. Stacked,
      each one is a single line of text with half a screen of nothing after it. */
   .coach-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 26px; }

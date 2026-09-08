@@ -69,16 +69,17 @@ to work for recipients clicking through from an email.
 
 ## The screens
 
-Six tabs. Two of them have sections, because four of the old nine were pairs.
+Six tabs, in the order the work is actually done. Three of them have sections,
+because several of the old nine were pairs.
 
 | Tab | Sections | What it's for |
 | --- | --- | --- |
 | Dashboard | — | Target, revenue, pipeline, next steps, and the coach |
 | Prospect | — | Pick a source, run a search, see what came back |
 | CRM | — | The kanban board — drag a deal from one stage to the next |
-| Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 | Emails | Outbox · Inbox | Drafts waiting to go, and everything that came back |
-| Revenue | — | The year against last year, and the client book |
+| Revenue | The year · Delivery | The year against last year, the client book, and what is still to publish |
+| Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
 
 Off the nav but linked where they are needed: `/businesses/{id}` (one business),
 `/addresses` (the ones with a website but no email), `/followups`,
@@ -109,7 +110,10 @@ slide.
 
 ## The coach
 
-The dashboard's third column is an advisor. It reads the live pipeline —
+The dashboard's third column is an advisor. The question box sits directly
+under the heading, because asking is what people open the panel to do; the
+three suggestions below it are what it says before anybody has asked anything.
+It reads the live pipeline —
 target and gap, revenue, what is sitting at each stage, what has gone cold,
 which trades have replied and signed — and offers three things to do next,
 best first. Underneath it is a chat box that answers questions against the

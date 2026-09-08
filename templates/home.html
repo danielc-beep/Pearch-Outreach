@@ -216,6 +216,31 @@
         <h2>Coach</h2>
         <span class="coach-source" id="coach-source" data-source="{{ coach.source }}">{{ 'thinking…' if coach_live else 'from your figures' }}</span>
       </div>
+
+      <!-- The question box first, because asking is the thing you come here
+           to do; the three suggestions are what it says when you have not
+           asked anything yet. -->
+      <form class="coach-ask" id="coach-ask" autocomplete="off">
+        <input id="coach-q" type="text" maxlength="2000"
+               placeholder="Ask the coach — what should I do about Contacted?">
+        <button class="btn small" type="submit">Ask</button>
+      </form>
+
+      {% if coach_live %}
+      <div class="coach-starters" id="coach-starters">
+        {% for q in ["What should I do first today?",
+                     "Which trades should I prospect next?",
+                     "What is stopping me hitting the target?"] %}
+        <button class="coach-starter" type="button">{{ q }}</button>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="coach-note muted small">Chat needs an Anthropic API key. The three below
+        are worked out from your own numbers and do not.</p>
+      {% endif %}
+
+      <div class="coach-chat" id="coach-chat" hidden></div>
+
       <ol class="coach-list" id="coach-list">
         {% for s in coach.suggestions %}
         <li class="coach-item is-{{ s.urgency }}">
@@ -225,30 +250,6 @@
         </li>
         {% endfor %}
       </ol>
-
-      <div class="coach-chat" id="coach-chat" hidden></div>
-
-      <!-- The room the suggestions leave over, spent on teaching what the box
-           underneath is for. Goes the moment there is a conversation to show
-           instead. -->
-      <div class="coach-starters" id="coach-starters">
-        <span class="coach-starters-head">Or ask</span>
-        {% for q in ["What should I do first today?",
-                     "Which trades should I prospect next?",
-                     "What is stopping me hitting the target?"] %}
-        <button class="coach-starter" type="button">{{ q }}</button>
-        {% endfor %}
-      </div>
-
-      <form class="coach-ask" id="coach-ask" autocomplete="off">
-        <input id="coach-q" type="text" maxlength="2000"
-               placeholder="Ask the coach — what should I do about Contacted?">
-        <button class="btn small" type="submit">Ask</button>
-      </form>
-      {% if not coach_live %}
-      <p class="muted small">Chat needs an Anthropic API key. The suggestions above are
-        worked out from your own numbers and do not.</p>
-      {% endif %}
     </section>
 
     <section class="dash-col dash-wide">
