@@ -1592,6 +1592,29 @@ def backfill_contracts() -> int:
 
 # ---------- Following up ----------
 
+def bounced(limit: int = 200) -> list[dict[str, Any]]:
+    """
+    Businesses whose address came back dead, and who still hold that address.
+
+    Worth a screen of their own: the record is good, the work of finding it is
+    done, and all that stands between it and an email is somebody spending two
+    minutes on the website looking for a different address.
+    """
+    rows = get_conn().execute(
+        "SELECT b.* FROM businesses b JOIN suppressions s ON s.value = LOWER(b.email) "
+        "WHERE s.reason LIKE '%bounce%' AND b.do_not_contact = 0 "
+        "ORDER BY b.fit_score DESC LIMIT ?", (limit,)).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def count_bounced() -> int:
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM businesses b JOIN suppressions s "
+        "ON s.value = LOWER(b.email) WHERE s.reason LIKE '%bounce%' AND b.do_not_contact = 0"
+    ).fetchone()
+    return int(row["n"])
+
+
 def sent_count(business_id: int) -> int:
     """How many emails have actually gone to this business."""
     row = get_conn().execute(

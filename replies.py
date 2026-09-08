@@ -18,6 +18,12 @@ distinctions do most of the work:
 - **An opt-out is not a reply either.** It is a suppression, and it is acted
   on rather than filed. Being too eager here costs a prospect; being too slow
   costs a complaint, so this errs towards suppressing.
+- **A bounce is about somebody who is not the sender.** It arrives from a mail
+  system, so matching it on who sent it finds nobody — the address that failed
+  is inside the message. A hard bounce takes that address out of service; left
+  alone it would collect the pitch, a nudge and a last word, three sends to a
+  mailbox that does not exist, which is how a sending domain earns a
+  reputation.
 - **An unmatched reply is not thrown away.** It goes in the inbox for someone
   to attach, and the dashboard counts it, because a reply nobody can find is
   the same as a reply nobody read.
@@ -49,6 +55,32 @@ AUTO_MARKERS = (
     "your message could not be delivered", "address not found",
 )
 
+# A mail system telling us an address is finished. Kept apart from the
+# out-of-office list above, because those two need opposite treatment: one is
+# a person who will be back on Monday, the other is a dead mailbox.
+BOUNCE_SUBJECTS = (
+    "undeliverable", "delivery status notification", "mail delivery failed",
+    "returned mail", "delivery has failed", "failure notice",
+    "message not delivered", "delivery incomplete", "mail delivery subsystem",
+)
+# Permanent: the address does not exist and never will.
+HARD_BOUNCE = (
+    "address not found", "does not exist", "no such user", "user unknown",
+    "recipient not found", "unknown recipient", "mailbox unavailable",
+    "no mailbox", "recipient address rejected", "550 5.1.1", "550 5.1.10",
+    "5.1.1", "unrouteable address", "invalid recipient", "account has been disabled",
+)
+# Temporary: the mailbox is real and having a bad week.
+SOFT_BOUNCE = (
+    "mailbox full", "over quota", "quota exceeded", "temporarily unavailable",
+    "try again later", "greylisted", "4.2.2", "452 4.2.2", "message too large",
+    "out of storage",
+)
+
+# Addresses that carry a bounce rather than being the subject of one.
+POSTMASTER = ("mailer-daemon", "postmaster", "no-reply", "noreply", "bounce",
+              "bounces", "mail-daemon")
+
 # What someone writes when they want to be left alone. Matched as whole
 # phrases against a lowercased body, so "remove me" does not fire on
 # "remove metal".
@@ -75,22 +107,69 @@ def _domain(email: str) -> str:
     return email.split("@", 1)[1].lower() if "@" in email else ""
 
 
-def classify(subject: str, body: str) -> str:
+def classify(subject: str, body: str, sender: str = "") -> str:
     """
-    What kind of reply this is: human, auto, or optout.
+    What this is: human, auto, optout, bounce or soft_bounce.
 
-    Opt-out wins over auto-reply. A holiday message that also says "and take
-    me off your list" is an opt-out with a holiday message attached.
+    Order matters. Opt-out wins over everything, because a holiday message
+    that also says "and take me off your list" is an opt-out with a holiday
+    message attached. A bounce is looked for before an out-of-office, because
+    several bounce notices carry wording that reads like one.
+
+    An unclassifiable failure notice counts as a hard bounce. Wrong in the
+    safe direction: the cost is one prospect nobody emails again, against a
+    dead address collecting three more sends.
     """
     subject_l = (subject or "").strip().lower()
     body_l = (body or "").strip().lower()
+    both = f"{subject_l}\n{body_l}"
+
     if any(phrase in body_l or phrase in subject_l for phrase in OPT_OUT):
         return "optout"
+
+    from_daemon = any(p in (sender or "").lower().split("@")[0] for p in POSTMASTER)
+    looks_failed = any(p in subject_l for p in BOUNCE_SUBJECTS)
+    if looks_failed or (from_daemon and any(m in both for m in HARD_BOUNCE + SOFT_BOUNCE)):
+        if any(m in both for m in HARD_BOUNCE):
+            return "bounce"
+        if any(m in both for m in SOFT_BOUNCE):
+            return "soft_bounce"
+        return "bounce"
+
     if any(subject_l.startswith(p) or f" {p}" in subject_l for p in AUTO_SUBJECTS):
         return "auto"
     if any(marker in body_l for marker in AUTO_MARKERS):
         return "auto"
     return "human"
+
+
+def failed_recipient(payload: dict[str, Any], body: str) -> str:
+    """
+    The address a bounce is about, which is never the address it came from.
+
+    Providers name it half a dozen ways, and when none of them are there it is
+    still in the text of the notice — so the body is read for an address we
+    have actually emailed, which also stops a stray support address in the
+    footer being mistaken for the prospect.
+    """
+    for key in ("original_recipient", "failed_recipient", "x_failed_recipients",
+                "recipient", "to"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            value = value[0] if value else ""
+        if isinstance(value, dict):
+            value = value.get("address") or value.get("email") or ""
+        email, _ = _address(str(value or ""))
+        if email and db.business_by_email(email):
+            return email
+
+    for found in ADDRESS.findall(body or ""):
+        email = found.lower()
+        if any(p in email.split("@")[0] for p in POSTMASTER):
+            continue
+        if db.business_by_email(email):
+            return email
+    return ""
 
 
 def match(from_email: str, subject: str = "") -> tuple[dict[str, Any] | None, str]:
@@ -155,8 +234,17 @@ def receive(payload: dict[str, Any]) -> dict[str, Any]:
         log.warning("inbound with no usable sender: %s", list(data)[:8])
         return {"stored": False, "why": "No sender address."}
 
-    kind = classify(subject, body)
-    business, matched_on = match(from_email, subject)
+    kind = classify(subject, body, from_email)
+    if kind in ("bounce", "soft_bounce"):
+        # The sender is a mail system, so matching on it finds nobody. What
+        # the notice is about is inside the notice.
+        failed = failed_recipient(data, body)
+        business = db.business_by_email(failed) if failed else None
+        matched_on = "bounced address" if business else ""
+        if failed:
+            from_email = failed
+    else:
+        business, matched_on = match(from_email, subject)
     business_id = int(business["id"]) if business else None
     message = db.last_message_to(business_id) if business_id else None
 
@@ -193,6 +281,30 @@ def apply_to(inbound_id: int, business_id: int, kind: str, from_email: str,
                         f"{who} asked to be taken off the list: {excerpt}")
         log.info("opt-out from %s — suppressed and ruled out", who)
         return "suppressed"
+
+    if kind == "bounce":
+        # The address is finished. Suppressing it is what actually stops the
+        # sequence: preflight refuses a suppressed address and the follow-up
+        # query skips one, so one write closes both doors. The stage is left
+        # alone — a dead mailbox is not a business that said no, and somebody
+        # should go and find them a working address.
+        # The address, not the business. outreach.unsubscribe() also marks the
+        # business do-not-contact and rules it out, which is right for someone
+        # who asked to be left alone and wrong here: a dead mailbox is not a
+        # refusal, and ruling them out means nobody ever goes looking for a
+        # working address.
+        db.suppress(who, "hard bounce — address does not exist")
+        db.log_activity(business_id, "bounced",
+                        f"{who} bounced: {excerpt or subject or 'address not found'}")
+        log.info("hard bounce for %s — suppressed", who)
+        return "bounced"
+
+    if kind == "soft_bounce":
+        # A real mailbox having a bad week. Suppressing it would throw away a
+        # prospect over a full inbox, so it is recorded and nothing else.
+        db.log_activity(business_id, "bounced",
+                        f"{who} deferred: {excerpt or subject}")
+        return "logged"
 
     if kind == "auto":
         # Recorded, and deliberately does not touch the stage. An out-of-office

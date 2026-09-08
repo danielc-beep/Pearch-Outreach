@@ -115,6 +115,13 @@ def board() -> list[dict[str, Any]]:
               "approved and ready to send",
               "Reviewed, drafted and signed off. Nothing is stopping these but the sending.",
               "Open the outbox", "/emails/outbox?status=approved"),
+        # The record is good and the address is dead — two minutes on their
+        # website is all that stands between it and an email.
+        _item("bounced", db.count_bounced(),
+              "addresses that bounced",
+              "The email came back undeliverable, so they have been taken out of "
+              "sending until somebody finds a working address.",
+              "Find a new one", "/addresses?bounced=1", "warn"),
         _item("no_email", no_email,
               "have no email address",
               "Found, scored, and unusable until someone has an address to write to. "

@@ -524,7 +524,8 @@ def align_page(request: Request, industry: str = "", state: str = "") -> HTMLRes
 
 
 @app.get("/addresses", response_class=HTMLResponse)
-def addresses_page(request: Request, masthead: str = "", industry: str = "") -> HTMLResponse:
+def addresses_page(request: Request, masthead: str = "", industry: str = "",
+                   bounced: int = 0) -> HTMLResponse:
     """
     The businesses with a website but no EMAIL address on file.
 
@@ -537,14 +538,22 @@ def addresses_page(request: Request, masthead: str = "", industry: str = "") -> 
     # website-less rows in Python left `total` counting records this page
     # deliberately never shows — so it read "124 waiting" while showing forty,
     # and no amount of work could ever bring it to nought.
-    rows, total = db.list_businesses(
-        has_email=False, has_website=True, masthead=masthead, industry=industry,
-        sort="score", limit=60,
-    )
+    # Two kinds of "we cannot email them": never had an address, and had one
+    # that came back dead. Same job — go and find one — so they share a screen.
+    if bounced:
+        rows = db.bounced()
+        total = len(rows)
+    else:
+        rows, total = db.list_businesses(
+            has_email=False, has_website=True, masthead=masthead, industry=industry,
+            sort="score", limit=60,
+        )
     return page(
         request, "addresses.html",
         nav="addresses",
-        businesses=rows, total=total,
+        businesses=rows, total=total, bounced=bool(bounced),
+        bounced_count=db.count_bounced(),
+        missing_count=db.list_businesses(has_email=False, has_website=True, limit=1)[1],
         f={"masthead": masthead, "industry": industry},
         industries=db.industry_options(),
     )

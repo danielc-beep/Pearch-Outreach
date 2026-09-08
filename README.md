@@ -149,8 +149,15 @@ Cloudflare email worker, a Zap. Three distinctions do the work:
   this exists to keep true.
 - An **opt-out is not a reply** either. It is suppressed, marked
   do-not-contact and ruled out on arrival.
-- An **unmatched reply is not dropped**. It waits at `/replies` to be attached,
-  and the dashboard counts it above the replies themselves.
+- A **bounce is about somebody who is not the sender**. It arrives from a mail
+  system, so matching it on who sent it finds nobody; the failed address is
+  inside the message and is read out of it. A hard bounce takes that address
+  out of sending — which stops the follow-up sequence too — but does not rule
+  the business out, because a dead mailbox is not a refusal and somebody
+  should go and find a working address. A full mailbox is a soft bounce and is
+  only recorded.
+- An **unmatched reply is not dropped**. It waits at `/emails/inbox` to be
+  attached, and the dashboard counts it above the replies themselves.
 
 Matching is the address first, then the domain — a reply often comes from a
 colleague of the person we wrote to. Free-mail domains never match on the

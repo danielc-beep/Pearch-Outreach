@@ -7,15 +7,33 @@
     <div class="section-head">
       <div>
         <div class="eyebrow">Email addresses</div>
+        {% if bounced %}
+        <h2>The ones that came back</h2>
+        <p class="lede">These were emailed and the message bounced, so the address has
+          been taken out of sending. The record is good and the work of finding it is
+          done — all that stands between it and an email is a different address. Open
+          its contact page and paste a new one in.</p>
+        {% else %}
         <h2>The ones the scraper <em>couldn't crack</em></h2>
         <p class="lede">An <strong>email address</strong>, not a street one. Each of these
           is a real business that cleared every criterion and has a website, but the
           scraper could not read an email off it. Open its contact page, copy the
           address, paste it here. Ten seconds each, and a dead record becomes a prospect.</p>
+        {% endif %}
       </div>
       <a class="btn" href="/admin/database?has_email=0">See every one without an email</a>
     </div>
 
+    <nav class="subtabs" aria-label="Addresses">
+      <a href="/addresses" class="subtab {{ '' if bounced else 'is-on' }}">
+        Never had one{% if missing_count %} <span class="subtab-n">{{ missing_count }}</span>{% endif %}
+      </a>
+      <a href="/addresses?bounced=1" class="subtab {{ 'is-on' if bounced }}">
+        Bounced{% if bounced_count %} <span class="subtab-n subtab-warn">{{ bounced_count }}</span>{% endif %}
+      </a>
+    </nav>
+
+    {% if not bounced %}
     <form class="filters" method="get" action="/addresses">
       <div class="f">
         <label for="ad-masthead">Masthead</label>
@@ -41,6 +59,7 @@
       {% if f.masthead or f.industry %}<a class="btn" href="/addresses">Clear</a>{% endif %}
     </form>
 
+    {% endif %}
     <div id="flash"></div>
 
     {% if businesses %}
