@@ -87,7 +87,7 @@
           sessionStorage.setItem('lastPurge', JSON.stringify(
             {batch: data.batch, removed: data.removed}));
         }
-        window.location = '/businesses';
+        window.location = '/admin/database';
       } catch (err) {
         document.getElementById('flash').innerHTML =
           '<div class="notice notice-error">' + err.message + '</div>';
@@ -157,6 +157,7 @@
 
 {% block body %}
 <div class="wrap">
+  {% include "_subtabs.html" %}
   <section class="section">
     <div class="section-head">
       <div>
@@ -172,7 +173,7 @@
       </div>
     </div>
 
-    <form class="filters" method="get" action="/businesses">
+    <form class="filters" method="get" action="/admin/database">
       <div class="f">
         <label for="f-q">Search</label>
         <input id="f-q" type="search" name="q" value="{{ f.q }}" placeholder="name, domain, suburb" />
@@ -238,14 +239,14 @@
         </select>
       </div>
       <button class="btn btn-primary" type="submit">Apply</button>
-      {% if has_filters %}<a class="btn" href="/businesses">Clear</a>{% endif %}
+      {% if has_filters %}<a class="btn" href="/admin/database">Clear</a>{% endif %}
     </form>
 
     {% if unreachable_count %}
     <div class="notice notice-warn">
       <strong>{{ unreachable_count }} website{{ '' if unreachable_count == 1 else 's' }} didn't respond.</strong>
       A business whose site doesn't resolve is either stale or was never real.
-      <a href="/businesses?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
+      <a href="/admin/database?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
     </div>
     {% endif %}
 
@@ -266,7 +267,7 @@
       under {{ '%.1f'|format(min_prospect_rating) }} stars.</strong>
       Found before the rating floor existed, or with no Google rating at all. Every
       email opens by congratulating the business on its rating, so these can't be worked.
-      <a href="/businesses?sort=score&amp;min_rating=0.1">See them</a> or
+      <a href="/admin/database?sort=score&amp;min_rating=0.1">See them</a> or
       <button class="btn btn-sm" id="btn-purge-low" style="margin-left:8px">
         Remove {{ 'it' if below_rating_count == 1 else 'them' }}
       </button>
@@ -332,7 +333,7 @@
         <a href="{{ search_only_url }}">Search “{{ f.q }}” on its own</a>, or adjust the filters above.
         {% else %}
         <strong>Nothing matches those filters.</strong>
-        {% if has_filters %}<a href="/businesses">Clear them</a> or {% endif %}<a href="/prospect">prospect for more businesses</a>.
+        {% if has_filters %}<a href="/admin/database">Clear them</a> or {% endif %}<a href="/prospect">prospect for more businesses</a>.
         {% endif %}
       </div>
       {% endif %}

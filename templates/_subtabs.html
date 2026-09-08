@@ -1,0 +1,12 @@
+{# One segmented bar, shared by every tab that has halves. The counts are the
+   reason it earns its space: a bar that only says where you are is a label,
+   one that says how much is waiting behind the other option is navigation. #}
+<nav class="subtabs" aria-label="{{ subtab_label|default('Sections') }}">
+  {% for t in subtabs %}
+  <a href="{{ t.href }}" class="subtab {{ 'is-on' if t.key == tab }}"
+     {% if t.key == tab %}aria-current="page"{% endif %}>
+    {{ t.label }}
+    {%- if t.count %} <span class="subtab-n {{ 'subtab-warn' if t.tone == 'warn' }}">{{ t.count }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</nav>

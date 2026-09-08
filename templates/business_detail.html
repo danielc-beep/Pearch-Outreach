@@ -5,7 +5,7 @@
 <div class="wrap">
   <section class="section">
     <div class="row" style="margin-bottom:8px">
-      <a class="muted small" href="/businesses">← Back to the database</a>
+      <a class="muted small" href="/admin/database">← Back to the database</a>
     </div>
     <div class="section-head">
       <div>
@@ -376,7 +376,7 @@
     if (!confirm('Permanently delete {{ b.name|replace("'", "\\'") }}? This cannot be undone.')) return;
     try {
       await post('/api/businesses/' + BUSINESS_ID + '/delete');
-      window.location = '/businesses';
+      window.location = '/admin/database';
     } catch (err) { flash(err.message, 'error'); }
   });
 

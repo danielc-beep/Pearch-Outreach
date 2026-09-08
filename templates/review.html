@@ -3,7 +3,7 @@
 
 {% block body %}
 <div class="wrap">
-  {% include "_review_tabs.html" %}
+  {% include "_subtabs.html" %}
   <section class="section" style="margin-top:36px">
     <div class="section-head">
       <div>
@@ -18,11 +18,11 @@
           Draft the {{ undrafted }} without one
         </button>
         {% endif %}
-        <a class="btn" href="/businesses">Open the database</a>
+        <a class="btn" href="/admin/database">Open the database</a>
       </div>
     </div>
 
-    <form class="filters" method="get" action="/review">
+    <form class="filters" method="get" action="/admin/review">
       <div class="f">
         <label for="rq-region">Region</label>
         <select id="rq-region" name="region">
@@ -56,7 +56,7 @@
                value="{{ f.min_score or '' }}" style="width:88px" />
       </div>
       <button class="btn btn-primary" type="submit">Apply</button>
-      {% if has_filters %}<a class="btn" href="/review">Clear</a>{% endif %}
+      {% if has_filters %}<a class="btn" href="/admin/review">Clear</a>{% endif %}
     </form>
 
     <div id="flash"></div>
@@ -100,7 +100,7 @@
         Nothing is waiting for a decision under these filters.
       </p>
       <div class="row">
-        <a class="btn btn-primary" href="/outbox">See what's ready to send</a>
+        <a class="btn btn-primary" href="/emails/outbox">See what's ready to send</a>
         <a class="btn" href="/prospect">Find more businesses</a>
       </div>
     </div>

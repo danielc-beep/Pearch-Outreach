@@ -3,6 +3,7 @@
 
 {% block body %}
 <div class="wrap">
+  {% include "_subtabs.html" %}
   <section class="section" style="margin-top:36px">
     <div class="section-head">
       <div>
@@ -21,7 +22,7 @@
       <span class="cov-sum-cell"><b>{{ '{:,}'.format(board.totals.prospects) }}</b><span>prospects placed</span></span>
       <span class="cov-sum-cell is-won"><b>${{ '{:,.0f}'.format(board.totals.revenue) }}</b><span>signed</span></span>
       {% if board.totals.unaligned %}
-      <a class="cov-sum-cell is-warn" href="/review/align">
+      <a class="cov-sum-cell is-warn" href="/admin/align">
         <b>{{ board.totals.unaligned }}</b><span>not aligned to any title →</span></a>
       {% endif %}
     </div>

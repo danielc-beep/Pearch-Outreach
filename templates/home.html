@@ -248,7 +248,7 @@
         <tbody>
           {% for t in trades %}
           <tr>
-            <td><a href="/businesses?industry={{ t.industry|urlencode }}"><strong>{{ t.industry }}</strong></a></td>
+            <td><a href="/admin/database?industry={{ t.industry|urlencode }}"><strong>{{ t.industry }}</strong></a></td>
             <td class="n sub">{{ t.prospects }}</td>
             <td class="n sub">{{ t.reached_out }}</td>
             <td class="n">{{ t.replied }}{% if t.reply_rate is not none %}

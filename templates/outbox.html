@@ -3,6 +3,7 @@
 
 {% block body %}
 <div class="wrap">
+  {% include "_subtabs.html" %}
   <section class="section">
     <div class="section-head">
       <div>
@@ -13,7 +14,7 @@
       </div>
       <div class="row">
         {% for key, label in tabs %}
-        <a class="btn btn-sm {{ 'btn-primary' if key == active_tab }}" href="/outbox?status={{ key }}">{{ label }}</a>
+        <a class="btn btn-sm {{ 'btn-primary' if key == active_tab }}" href="/emails/outbox?status={{ key }}">{{ label }}</a>
         {% endfor %}
       </div>
     </div>

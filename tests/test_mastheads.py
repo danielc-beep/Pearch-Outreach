@@ -334,7 +334,7 @@ def test_the_board_sends_you_to_the_queue_not_a_filtered_list(client):
     import worklist
     _seed_for_alignment()
     row = next(i for i in worklist.board() if i["key"] == "unaligned")
-    assert row["href"] == "/review/align"
+    assert row["href"] == "/admin/align"
     assert row["count"] == 2
 
 
@@ -423,13 +423,13 @@ def test_the_old_align_link_still_lands(client):
     """It was its own section; bookmarks and the work board predate the move."""
     response = client.get("/align", follow_redirects=False)
     assert response.status_code == 308
-    assert response.headers["location"] == "/review/align"
+    assert response.headers["location"] == "/admin/align"
 
 
 def test_review_is_one_section_with_two_tabs(client):
-    for path in ("/review", "/review/align"):
+    for path in ("/admin/review", "/admin/align"):
         body = client.get(path).text
-        assert 'href="/review"' in body and 'href="/review/align"' in body
+        assert 'href="/admin/review"' in body and 'href="/admin/align"' in body
         assert 'class="subtab' in body, path
 
 
@@ -437,16 +437,20 @@ def test_the_align_tab_carries_the_count(client):
     import db
     db.upsert_business({"name": "Adrift Co", "industry": "Trades", "suburb": "Nowhere",
                         "rating": 4.5, "source": "csv", "email": "a@b.com.au"})
-    body = client.get("/review").text
+    body = client.get("/admin/review").text
     tabs = body.split('class="subtabs"')[1].split("</nav>")[0]
     assert "1" in tabs
 
 
-def test_database_is_the_last_thing_in_the_nav(client):
+def test_the_database_moved_under_admin(client):
+    """Nine tabs became six; the records live behind one of them now."""
     nav = client.get("/").text.split('<nav class="nav">')[1].split("</nav>")[0]
     links = [line for line in nav.splitlines() if "href=" in line]
-    assert "/businesses" in links[-1], links[-1]
+    assert len(links) == 6, links
+    assert not any('href="/admin/database"' in line for line in links)
     assert not any('href="/align"' in line for line in links)
+    body = client.get("/admin/database").text
+    assert 'href="/admin/review"' in body, "reached from the Admin bar instead"
 
 
 # ---------- Finding a masthead among seventy-eight ----------

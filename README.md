@@ -68,22 +68,24 @@ to work for recipients clicking through from an email.
 
 ## The screens
 
-| Route | What it's for |
-| --- | --- |
-| `/` | Dashboard — target, revenue, pipeline, what's waiting, and the coach |
-| `/businesses` | The database: filter by status, region, industry, score, contactability |
-| `/businesses/{id}` | One business: details, score breakdown, contacts, drafts, timeline |
-| `/prospect` | Pick a source, run a search, see what came back |
-| `/review` | The queue: one business at a time, and the masthead alignment tab |
-| `/crm` | The kanban board — drag a deal from one stage to the next |
-| `/addresses` | The ones with a website but no email, for going looking |
-| `/mastheads` | All 78 ACM titles, shaded by how far each one's book has got |
-| `/replies` | Everything that came back, and the ones nobody could place |
-| `/followups` | Who is owed a second or third email, and the schedule that decides it |
-| `/revenue` | The year against last year, and the client book (`/renewals` lands here) |
-| `/outbox` | Drafts waiting for approval, approved messages waiting to send, sent history |
-| `/suppressions` | Everyone permanently excluded from outreach |
-| `/unsubscribe` | The public unsubscribe page linked from every email |
+Six tabs. Two of them have sections, because four of the old nine were pairs.
+
+| Tab | Sections | What it's for |
+| --- | --- | --- |
+| Dashboard | — | Target, revenue, pipeline, what's waiting, and the coach |
+| Prospect | — | Pick a source, run a search, see what came back |
+| Admin | Review · Align · Mastheads · Database | The queue, masthead alignment, all 78 titles, and every record |
+| CRM | — | The kanban board — drag a deal from one stage to the next |
+| Emails | Outbox · Inbox | Drafts waiting to go, and everything that came back |
+| Revenue | — | The year against last year, and the client book |
+
+Off the nav but linked where they are needed: `/businesses/{id}` (one business),
+`/addresses` (the ones with a website but no email), `/followups`,
+`/suppressions`, `/backups`, `/unsubscribe`.
+
+Every URL these pages used to live at still works — `/outbox`, `/replies`,
+`/review`, `/review/align`, `/align`, `/mastheads` and `/businesses` all
+redirect, query string included.
 
 ## The coach
 

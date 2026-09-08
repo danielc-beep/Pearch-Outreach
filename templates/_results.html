@@ -5,7 +5,7 @@
     <p class="lede">{{ run.found_count }} businesses found for
       “{{ run.query.get('industry', '') }} {{ run.query.get('location', '') }}”.</p>
   </div>
-  <a class="btn btn-primary" href="/businesses?sort=newest">Open the database</a>
+  <a class="btn btn-primary" href="/admin/database?sort=newest">Open the database</a>
 </div>
 {% if run.error %}<div class="notice notice-error">{{ run.error }}</div>{% endif %}
 {% if businesses %}

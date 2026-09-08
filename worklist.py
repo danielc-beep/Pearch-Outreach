@@ -84,28 +84,28 @@ def board() -> list[dict[str, Any]]:
               "replies nobody could place",
               "They came from an address we do not hold, so no business has moved. "
               "Attach one and it takes effect as though it had arrived matched.",
-              "Open the inbox", "/replies", "hot"),
+              "Open the inbox", "/emails/inbox", "hot"),
         _item("replied", replied,
               "replied to an email",
               "Someone answered. That is the point of all of this, and it goes cold fastest.",
-              "Open them", "/businesses?status=replied", "hot"),
+              "Open them", "/admin/database?status=replied", "hot"),
         # Above the review row on purpose: nothing here can be reviewed until
         # it has a masthead, so this is the queue that unblocks that one.
         _item("unaligned", unaligned,
               "not aligned to a masthead",
               "Nothing moves without one. Their emails would come from ACM rather than "
               "the local paper that carries weight.",
-              "Align them", "/review/align", "warn"),
+              "Align them", "/admin/align", "warn"),
         _item("review", to_review,
               "waiting for a decision",
               "Read the business and its email, then approve it or rule it out.",
-              "Work the queue", "/review"),
+              "Work the queue", "/admin/review"),
         # Written and waiting. Separate from the pitch queue because a
         # follow-up needs nothing researched — it is read and approved.
         _item("followup", db.followups_waiting(),
               "follow-ups drafted",
               "Second and third emails, written and waiting for approval.",
-              "Read them", "/outbox?status=draft"),
+              "Read them", "/emails/outbox?status=draft"),
         _item("owed", len(_followup.due(200)),
               "owed another email",
               "Emailed once, no answer, and past the waiting period. Most replies "
@@ -114,7 +114,7 @@ def board() -> list[dict[str, Any]]:
         _item("send", approved,
               "approved and ready to send",
               "Reviewed, drafted and signed off. Nothing is stopping these but the sending.",
-              "Open the outbox", "/outbox?status=approved"),
+              "Open the outbox", "/emails/outbox?status=approved"),
         _item("no_email", no_email,
               "have no email address",
               "Found, scored, and unusable until someone has an address to write to. "
@@ -123,7 +123,7 @@ def board() -> list[dict[str, Any]]:
         _item("below_rating", below_rating,
               f"under {MIN_PROSPECT_RATING:.0f} stars",
               "Every email opens by congratulating the business on its rating. These cannot be worked.",
-              "Review them", "/businesses?masthead=&min_rating=0.1", "warn"),
+              "Review them", "/admin/database?masthead=&min_rating=0.1", "warn"),
         # Last on purpose. It is housekeeping, not the day's work — but it is
         # the only item here whose cost is unrecoverable.
         _item("backup", 1 if backup_note else 0,

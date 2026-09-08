@@ -3,7 +3,7 @@
 
 {% block body %}
 <div class="wrap">
-  {% include "_review_tabs.html" %}
+  {% include "_subtabs.html" %}
   <section class="section" style="margin-top:36px">
     <div class="section-head">
       <div>
@@ -19,7 +19,7 @@
       {% endif %}
     </div>
 
-    <form class="filters" method="get" action="/align">
+    <form class="filters" method="get" action="/admin/align">
       <div class="f">
         <label for="al-state">State</label>
         <select id="al-state" name="state">
@@ -35,7 +35,7 @@
         </select>
       </div>
       <button class="btn btn-primary" type="submit">Apply</button>
-      {% if f.industry or f.state %}<a class="btn" href="/align">Clear</a>{% endif %}
+      {% if f.industry or f.state %}<a class="btn" href="/admin/align">Clear</a>{% endif %}
     </form>
 
     <div id="flash"></div>
@@ -92,7 +92,7 @@
         Every business in the database is aligned to a masthead, so every email that
         goes out will come from the paper that covers the town.
       </p>
-      <a class="btn btn-primary" href="/review">Work the review queue</a>
+      <a class="btn btn-primary" href="/admin/review">Work the review queue</a>
     </div>
     {% endif %}
   </section>

@@ -39,7 +39,7 @@
     {% if waiting %}
     <div class="notice">
       <strong>{{ waiting }} follow-up{{ '' if waiting == 1 else 's' }} already drafted</strong>
-      and waiting for approval. <a href="/outbox?status=draft">Open the outbox →</a>
+      and waiting for approval. <a href="/emails/outbox?status=draft">Open the outbox →</a>
     </div>
     {% endif %}
 
@@ -93,7 +93,7 @@
         const n = got.drafted.length;
         flash(n
           ? `Wrote ${n} follow-up${n === 1 ? '' : 's'}. They are in the outbox waiting for
-             approval — nothing has been sent. <a href="/outbox?status=draft">Open it →</a>`
+             approval — nothing has been sent. <a href="/emails/outbox?status=draft">Open it →</a>`
           : 'Nothing to write.', n ? 'ok' : 'info');
         if (got.skipped.length) {
           flash(document.getElementById('flash').innerHTML +

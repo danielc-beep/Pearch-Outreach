@@ -79,7 +79,7 @@ def test_the_reply_comes_first_because_it_is_the_closest_money(client):
         first = coach.suggestions()["suggestions"][0]
     assert "replied" in first["headline"].lower()
     assert first["urgency"] == "now"
-    assert first["url"] == "/businesses?status=replied"
+    assert first["url"] == "/admin/database?status=replied"
 
 
 def test_every_suggestion_quotes_a_number(client):
@@ -114,7 +114,7 @@ def test_claude_writes_the_three_when_it_can_be_asked(client):
         got = coach.suggestions()
     assert got["source"] == "claude"
     assert got["suggestions"][0]["headline"] == "Answer the one who replied"
-    assert got["suggestions"][0]["url"] == "/businesses?status=replied"
+    assert got["suggestions"][0]["url"] == "/admin/database?status=replied"
 
 
 @patch.object(coach, "ANTHROPIC_API_KEY", "sk-ant-test")

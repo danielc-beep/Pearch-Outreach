@@ -49,10 +49,10 @@ MAX_QUESTION = 2000
 # The only places a suggestion can send you. The model picks a key; the app
 # owns the URL. That way a made-up path is impossible rather than unlikely.
 FOCUS: dict[str, dict[str, str]] = {
-    "replied":   {"label": "Open the replies",     "url": "/businesses?status=replied"},
-    "outbox":    {"label": "Open the outbox",      "url": "/outbox?status=approved"},
-    "review":    {"label": "Work the queue",       "url": "/review"},
-    "align":     {"label": "Align mastheads",      "url": "/review/align"},
+    "replied":   {"label": "Open the replies",     "url": "/admin/database?status=replied"},
+    "outbox":    {"label": "Open the outbox",      "url": "/emails/outbox?status=approved"},
+    "review":    {"label": "Work the queue",       "url": "/admin/review"},
+    "align":     {"label": "Align mastheads",      "url": "/admin/align"},
     "addresses": {"label": "Find emails",          "url": "/addresses"},
     "contacted": {"label": "Chase the follow-ups", "url": "/crm"},
     "qualified": {"label": "Open Qualified",       "url": "/crm"},

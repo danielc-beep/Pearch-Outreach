@@ -265,13 +265,55 @@ def _review_counts() -> dict[str, int]:
             "align": db.list_businesses(masthead="none", limit=1)[1]}
 
 
-@app.get("/review", response_class=HTMLResponse)
+# ---------- The two tabs that have halves ----------
+# Nine tabs across the top was five more than anyone can hold in their head,
+# and four of them were pairs: two about email, four about the records behind
+# it. They are two tabs now, each opening on a bar of its own sections. The
+# counts are what make the bar navigation rather than decoration — it says how
+# much is waiting behind the option you are not looking at.
+
+def _email_tabs() -> list[dict[str, Any]]:
+    stats = db.stats()
+    return [
+        {"key": "outbox", "label": "Outbox", "href": "/emails/outbox",
+         "count": stats["drafts"] + stats["approved"]},
+        {"key": "inbox", "label": "Inbox", "href": "/emails/inbox",
+         "count": db.count_unmatched_inbound(), "tone": "warn"},
+    ]
+
+
+def _admin_tabs() -> list[dict[str, Any]]:
+    counts = _review_counts()
+    return [
+        {"key": "decide", "label": "Review", "href": "/admin/review",
+         "count": counts["decide"]},
+        {"key": "align", "label": "Align", "href": "/admin/align",
+         "count": counts["align"], "tone": "warn"},
+        {"key": "mastheads", "label": "Mastheads", "href": "/admin/mastheads"},
+        {"key": "database", "label": "Database", "href": "/admin/database"},
+    ]
+
+
+def _moved(request: Request, to: str) -> RedirectResponse:
+    """
+    A 308 to a page's new home, carrying the query string with it.
+
+    Without that, /outbox?status=approved would land on the outbox with the
+    filter silently dropped — a redirect that loses half the request is worse
+    than a broken link, because it looks like it worked.
+    """
+    query = request.url.query
+    return RedirectResponse(f"{to}?{query}" if query else to, status_code=308)
+
+
+@app.get("/admin/review", response_class=HTMLResponse)
 def review_page(request: Request) -> HTMLResponse:
     """One business at a time, with a decision at the end of it."""
     filters = _review_filters(dict(request.query_params))
     return page(
         request, "review.html",
-        nav="review", tab="decide", counts=_review_counts(),
+        nav="admin", tab="decide", subtabs=_admin_tabs(), subtab_label="Admin",
+        counts=_review_counts(),
         triaged=review.triage(**filters),
         total=len(review.queue_ids(**filters)),
         undrafted=db.list_businesses(needs_review=True, needs_draft=True, limit=1, **filters)[1],
@@ -370,7 +412,7 @@ def api_review_decide(business_id: int, body: Decision) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@app.get("/businesses", response_class=HTMLResponse)
+@app.get("/admin/database", response_class=HTMLResponse)
 def businesses(request: Request, q: str = "", status: str = "", region: str = "",
                state: str = "", industry: str = "", source: str = "",
                has_email: str = "", website_status: str = "", min_score: str = "",
@@ -397,7 +439,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
     def page_url(n: int) -> str:
         params = {k: v for k, v in filters.items() if v}
         params["page_no"] = n
-        return f"/businesses?{urlencode(params)}"
+        return f"/admin/database?{urlencode(params)}"
 
     # An empty result is ambiguous: the search found nothing, or the other
     # filters excluded what it found. Only worth a second query when empty.
@@ -407,10 +449,10 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
 
     return page(
         request, "businesses.html",
-        nav="businesses",
+        nav="admin", tab="database", subtabs=_admin_tabs(), subtab_label="Admin",
         businesses=rows, total=total, f=filters,
         search_only_total=search_only_total,
-        search_only_url=f"/businesses?{urlencode({'q': q, 'sort': sort})}",
+        search_only_url=f"/admin/database?{urlencode({'q': q, 'sort': sort})}",
         has_filters=bool(query_string.replace("sort=score", "").strip("&")),
         regions=db.distinct_values("region"),
         industries=db.industry_options(),
@@ -434,7 +476,7 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="No such business")
     return page(
         request, "business_detail.html",
-        nav="businesses",
+        nav="admin",
         b=business,
         band=band(business["fit_score"]),
         contacts=db.list_contacts(business_id),
@@ -444,12 +486,12 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
 
 
 @app.get("/align")
-def align_moved() -> RedirectResponse:
-    """Align became a tab of Review. Old links, and old bookmarks, still land."""
-    return RedirectResponse("/review/align", status_code=308)
+def align_moved(request: Request) -> RedirectResponse:
+    """Align became a tab of Admin. Old links, and old bookmarks, still land."""
+    return _moved(request, "/admin/align")
 
 
-@app.get("/review/align", response_class=HTMLResponse)
+@app.get("/admin/align", response_class=HTMLResponse)
 def align_page(request: Request, industry: str = "", state: str = "") -> HTMLResponse:
     """
     The businesses with no masthead against their name.
@@ -472,7 +514,8 @@ def align_page(request: Request, industry: str = "", state: str = "") -> HTMLRes
         suggested += 1 if site else 0
     return page(
         request, "align.html",
-        nav="review", tab="align", counts=_review_counts(),
+        nav="admin", tab="align", subtabs=_admin_tabs(), subtab_label="Admin",
+        counts=_review_counts(),
         businesses=rows, total=total, suggested=suggested,
         f={"industry": industry, "state": state},
         industries=db.industry_options(),
@@ -556,7 +599,7 @@ def prospect_page(request: Request, source: str = "", run: int | None = None) ->
     )
 
 
-@app.get("/mastheads", response_class=HTMLResponse)
+@app.get("/admin/mastheads", response_class=HTMLResponse)
 def coverage_page(request: Request) -> HTMLResponse:
     """
     The network as a map: all 78 titles and what each one's book is worth.
@@ -564,7 +607,8 @@ def coverage_page(request: Request) -> HTMLResponse:
     The empty ones are the reason it exists, so they are on screen with the
     rest rather than filtered out of it.
     """
-    return page(request, "coverage.html", nav="mastheads",
+    return page(request, "coverage.html", nav="admin", tab="mastheads",
+                subtabs=_admin_tabs(), subtab_label="Admin",
                 board=coverage.board(), next_up=coverage.next_to_sweep())
 
 
@@ -620,11 +664,11 @@ def api_move_stage(business_id: int, move: StageMove) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/outbox", response_class=HTMLResponse)
+@app.get("/emails/outbox", response_class=HTMLResponse)
 def outbox(request: Request, status: str = "") -> HTMLResponse:
     return page(
         request, "outbox.html",
-        nav="outbox",
+        nav="emails", tab="outbox", subtabs=_email_tabs(), subtab_label="Emails",
         messages=db.list_messages(status=status),
         active_tab=status,
         tabs=[("", "All"), ("draft", "Drafts"), ("approved", "Approved"),
@@ -901,10 +945,11 @@ def api_business_search(q: str, limit: int = 8) -> JSONResponse:
          "status": b["status"]} for b in rows]})
 
 
-@app.get("/replies", response_class=HTMLResponse)
+@app.get("/emails/inbox", response_class=HTMLResponse)
 def replies_page(request: Request) -> HTMLResponse:
     """Everything that has come back, and the ones nobody could place."""
-    return page(request, "replies.html", nav="replies",
+    return page(request, "replies.html", nav="emails", tab="inbox",
+                subtabs=_email_tabs(), subtab_label="Emails",
                 unmatched=db.list_inbound(limit=100, unmatched_only=True),
                 recent=db.list_inbound(limit=40),
                 inbound_on=bool(INBOUND_SECRET))
@@ -1052,6 +1097,51 @@ def api_unchurn(business_id: int) -> JSONResponse:
     if not got:
         raise HTTPException(status_code=404, detail="No such business")
     return JSONResponse(got)
+
+
+# ---------- Where the old links go ----------
+# Nine tabs became six: the two about email are one tab with two halves, and
+# the four about the records behind it are one tab with four. Every path that
+# existed before still works, query string and all.
+
+@app.get("/emails")
+def emails_entry(request: Request) -> RedirectResponse:
+    return _moved(request, "/emails/outbox")
+
+
+@app.get("/admin")
+def admin_entry(request: Request) -> RedirectResponse:
+    return _moved(request, "/admin/review")
+
+
+@app.get("/outbox")
+def outbox_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/emails/outbox")
+
+
+@app.get("/replies")
+def replies_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/emails/inbox")
+
+
+@app.get("/review")
+def review_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/admin/review")
+
+
+@app.get("/review/align")
+def review_align_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/admin/align")
+
+
+@app.get("/mastheads")
+def mastheads_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/admin/mastheads")
+
+
+@app.get("/businesses")
+def businesses_moved(request: Request) -> RedirectResponse:
+    return _moved(request, "/admin/database")
 
 
 @app.get("/health")
