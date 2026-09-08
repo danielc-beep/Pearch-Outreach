@@ -41,6 +41,8 @@ import coach
 import coverage
 import replies
 import followup
+import renewals
+import revenue as revenue_year
 import sources
 import auth
 from auth import PasswordMiddleware
@@ -109,6 +111,7 @@ if os.getenv("PEARCH_BACKUPS", "1") == "1":
 # table that can count them. Runs once — it stops the moment it finds a row.
 try:
     _recovered = db.backfill_moves()
+    db.backfill_contracts()
     if _recovered:
         log.info("recovered %s stage moves from the activity log", _recovered)
 except Exception:
@@ -977,6 +980,78 @@ def api_set_followup_schedule(body: ScheduleIn) -> JSONResponse:
             {int(k): v for k, v in body.days.items()})})
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ---------- Revenue and renewals ----------
+
+@app.get("/revenue", response_class=HTMLResponse)
+def revenue_page(request: Request, year: int = 0) -> HTMLResponse:
+    """The year against last year, and the client book underneath it."""
+    data = revenue_year.year(year or None)
+    return page(request, "revenue.html", nav="revenue",
+                y=data, c=revenue_year.chart(data), book=renewals.book())
+
+
+@app.get("/renewals")
+def renewals_redirect() -> RedirectResponse:
+    """Renewals live on the revenue page; the obvious URL should still land there."""
+    return RedirectResponse("/revenue#renewals", status_code=308)
+
+
+class GoLiveIn(BaseModel):
+    when: str = ""
+    months: int | None = None
+    value: float | None = None
+
+
+@app.post("/api/renewals/{business_id}/live")
+def api_go_live(business_id: int, body: GoLiveIn) -> JSONResponse:
+    """The day the content went live, which is the day the term starts."""
+    try:
+        got = renewals.go_live(business_id, body.when, body.months, body.value)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
+
+
+class RenewIn(BaseModel):
+    months: int | None = None
+    value: float | None = None
+    signed_at: str = ""
+
+
+@app.post("/api/renewals/{business_id}/renew")
+def api_renew(business_id: int, body: RenewIn) -> JSONResponse:
+    try:
+        got = renewals.renew(business_id, body.months, body.value, body.signed_at)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
+
+
+class ChurnIn(BaseModel):
+    why: str = ""
+    when: str = ""
+
+
+@app.post("/api/renewals/{business_id}/churn")
+def api_churn(business_id: int, body: ChurnIn) -> JSONResponse:
+    got = renewals.churn(business_id, body.why, body.when)
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
+
+
+@app.post("/api/renewals/{business_id}/unchurn")
+def api_unchurn(business_id: int) -> JSONResponse:
+    got = renewals.unchurn(business_id)
+    if not got:
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(got)
 
 
 @app.get("/health")

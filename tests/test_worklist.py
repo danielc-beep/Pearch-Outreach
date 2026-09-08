@@ -182,4 +182,19 @@ def test_the_page_says_email_not_just_address(client):
     body = client.get("/addresses").text
     assert "email address" in body
     assert "paste the email address" in body
-    assert ">Emails<" in body            # and the nav says so too
+    # It came out of the top nav when Revenue went in — ten tabs wrapped onto
+    # a second row. It is a job rather than a destination, so it is reached
+    # from the dashboard's own list and from the footer, and both must hold.
+    assert 'href="/addresses"' in body
+
+
+def test_finding_emails_is_still_reachable_without_a_nav_tab(client):
+    """Dropping it from the nav must not drop it out of the app."""
+    import db
+    db.upsert_business({"name": "No email", "industry": "Plumber", "suburb": "Newcastle",
+                        "rating": 4.6, "review_count": 20, "source": "csv",
+                        "website": "https://noemail.com.au"})
+    home = client.get("/").text
+    assert 'href="/addresses"' in home, "from the dashboard's list of jobs"
+    assert 'href="/addresses"' in client.get("/crm").text, "and from the footer everywhere"
+    assert client.get("/addresses").status_code == 200

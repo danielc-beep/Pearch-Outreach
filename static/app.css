@@ -97,7 +97,10 @@ em, .italic { font-family: var(--serif); font-style: italic; font-weight: 500; }
 .logo .mark { font-family: var(--serif); font-style: italic; font-weight: 500; color: var(--cyan-soft); }
 .logo-sm { font-size: 18px; }
 .logo-sm .acm { width: 50px; }
-.nav { display: flex; gap: 4px; margin-right: auto; flex-wrap: wrap; }
+/* Never wraps. A second row of tabs pushes every page down by 40px and
+   reads as a mistake; below the width where they all fit, the row scrolls. */
+.nav { display: flex; gap: 4px; margin-right: auto; flex-wrap: nowrap; min-width: 0; }
+.nav a { white-space: nowrap; }
 .nav a {
   color: var(--text-muted); font-size: 14px; font-weight: 500;
   padding: 8px 14px; border-radius: 999px; transition: 0.15s;
@@ -111,9 +114,16 @@ em, .italic { font-family: var(--serif); font-style: italic; font-weight: 500; }
   box-shadow: 0 0 0 0 var(--cyan-glow);
 }
 .nav-cta:hover { background: var(--cyan-bright); box-shadow: 0 0 28px -4px var(--cyan-glow); }
+@media (max-width: 1320px) {
+  .nav a { font-size: 13px; padding: 8px 10px; }
+}
 @media (max-width: 900px) {
   .topbar-inner { flex-wrap: wrap; gap: 14px; padding: 0 20px; }
-  .nav { order: 3; width: 100%; }
+  .nav {
+    order: 3; width: 100%; overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav::-webkit-scrollbar { display: none; }
   .nav-cta { margin-left: auto; }
 }
 
@@ -1257,6 +1267,130 @@ table.bare .sub { color: var(--text-muted); }
   .feed-row.is-fresh, .stat-value.is-changed { animation: none; }
 }
 
+
+/* ---------- The year's revenue ---------- */
+/* One hue in two steps for the stack — new business under renewals, with a
+   2px hole between them so the join reads as a boundary rather than a colour
+   change — and last year as a neutral reference tick on each bar rather than
+   a second coloured series. Two similar-lightness lines on this ink came out
+   about eleven units apart in normal vision, which the palette validator
+   rejects outright; a tick on a bar says "the line you are being measured
+   against" without asking the eye to separate two blues. */
+.rev-head {
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+  gap: 14px 30px; margin: 4px 0 18px;
+}
+.rev-label {
+  display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px;
+}
+.rev-big {
+  display: block; font-size: 40px; font-weight: 800; letter-spacing: -0.035em;
+  line-height: 1; color: var(--white); font-variant-numeric: tabular-nums;
+}
+.rev-delta { display: block; margin-top: 7px; font-size: 13px; font-weight: 600; }
+.rev-delta.is-up { color: var(--success); }
+.rev-delta.is-down { color: var(--danger); }
+.rev-delta .muted { font-weight: 400; margin-left: 6px; }
+.rev-split { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 26px; }
+.rev-cell { display: flex; align-items: baseline; gap: 7px; }
+.rev-cell b {
+  font-size: 19px; font-weight: 800; letter-spacing: -0.02em;
+  color: var(--white); font-variant-numeric: tabular-nums;
+}
+.rev-cell span { font-size: 12px; color: var(--text-muted); }
+.rev-cell.is-warn b { color: var(--warning); }
+.rev-cell.is-quiet b { color: var(--text-muted); }
+.rev-book { margin: 4px 0 16px; padding-bottom: 13px;
+            border-bottom: 1px solid rgba(255,255,255,0.10); }
+
+.rev-figure { margin: 0 0 18px; }
+.rev-legend { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-bottom: 9px; }
+.rev-key { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted); }
+.rev-key i { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.rev-key i.is-new { background: #0E7FB8; }
+.rev-key i.is-renewal { background: #35C6F0; }
+.rev-key i.is-last { height: 0; border-top: 2px dashed #DCE9F7; border-radius: 0; }
+
+.rev-chart-wrap { position: relative; }
+.rev-months { padding-left: 0; }
+.rev-chart { display: block; width: 100%; height: 200px; overflow: visible; }
+.rev-grid { stroke: rgba(255,255,255,0.07); stroke-width: 1; }
+.rev-axis { stroke: rgba(255,255,255,0.20); stroke-width: 1; }
+.rev-seg.is-new { fill: #0E7FB8; }
+.rev-seg.is-renewal { fill: #35C6F0; }
+.rev-hit { fill: transparent; }
+.rev-bar { cursor: default; }
+.rev-bar:hover .rev-seg, .rev-bar:focus .rev-seg { fill: var(--cyan-soft); }
+.rev-bar:focus { outline: none; }
+.rev-bar:focus .rev-hit { fill: rgba(255,255,255,0.05); }
+/* Months that have not happened yet are drawn, but quietly — an empty
+   November in September is not a bad November. */
+.rev-bar.is-future .rev-seg { opacity: 0.45; }
+.rev-last { stroke: #DCE9F7; stroke-width: 2; stroke-dasharray: 3 2; }
+
+.rev-months {
+  display: grid; grid-template-columns: repeat(12, 1fr); margin-top: 2px;
+  font-size: 10.5px; color: var(--text-muted); text-align: center;
+}
+.rev-months .is-future { opacity: 0.45; }
+.rev-chart-wrap { padding-left: 52px; }
+.rev-scale {
+  position: absolute; left: 0; top: 0; height: 200px; width: 46px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  align-items: flex-end; text-align: right;
+  font-size: 10.5px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+}
+.rev-scale span { transform: translateY(-50%); }
+.rev-scale span:first-child { transform: translateY(4px); }
+.rev-scale span:last-child { transform: translateY(-10px); }
+.rev-table { margin-top: 4px; }
+.rev-table summary { cursor: pointer; font-size: 12.5px; color: var(--cyan-bright); }
+.rev-table tr.is-future td { opacity: 0.5; }
+.rev-up { color: var(--success); }
+.rev-down { color: var(--danger); }
+
+/* ---------- The client book ---------- */
+/* One axis — how soon somebody has to do something — so the states run along
+   one ramp from urgent to quiet, each with its own word beside it. */
+.ren-state {
+  display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; border-radius: 999px; padding: 2px 9px; margin-right: 7px;
+  color: var(--text-muted); background: rgba(255,255,255,0.07);
+}
+.ren-state.is-not_live { color: var(--warning); background: rgba(255,194,77,0.15); }
+.ren-state.is-overdue  { color: var(--danger); background: rgba(255,145,134,0.16); }
+.ren-state.is-imminent { color: var(--warning); background: rgba(255,194,77,0.15); }
+.ren-state.is-soon     { color: var(--cyan-soft); background: rgba(0,154,199,0.16); }
+.ren-state.is-running  { color: var(--success); background: rgba(63,214,147,0.13); }
+table.renewals td { vertical-align: top; }
+/* Only the sub-line inside a cell, never a cell that happens to carry the
+   class — matching those turned every td into a block and stacked the whole
+   table into one column. */
+table.renewals td > .sub { display: block; font-size: 11.5px; }
+.ren-do { white-space: nowrap; }
+.ren-do .btn { margin-left: 4px; }
+
+.ren-dialog {
+  border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px;
+  background: var(--ink-panel); color: var(--text); max-width: 340px; width: 92vw;
+  box-shadow: var(--shadow);
+}
+.ren-dialog::backdrop { background: rgba(6,12,32,0.72); }
+.ren-dialog h3 { margin: 0 0 6px; font-size: 16px; }
+.ren-dialog .help { margin: 0 0 14px; }
+.ren-dialog label {
+  display: block; margin-bottom: 11px; font-size: 12px; color: var(--text-muted);
+}
+.ren-dialog input, .ren-dialog select {
+  display: block; width: 100%; margin-top: 4px; font: inherit; font-size: 13px;
+  color: var(--text); background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 9px; padding: 8px 10px;
+}
+.ren-dialog input:focus, .ren-dialog select:focus {
+  outline: none; border-color: var(--border-lit);
+}
+.ren-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 
 /* ---------- Follow-ups ---------- */
 .fu-schedule {

@@ -24,11 +24,11 @@
         <a href="/" class="{{ 'is-active' if nav == 'home' }}">Dashboard</a>
         <a href="/prospect" class="{{ 'is-active' if nav == 'prospect' }}">Prospect</a>
         <a href="/review" class="{{ 'is-active' if nav == 'review' }}">Review</a>
-        <a href="/addresses" class="{{ 'is-active' if nav == 'addresses' }}">Emails</a>
         <a href="/crm" class="{{ 'is-active' if nav == 'crm' }}">CRM</a>
         <a href="/mastheads" class="{{ 'is-active' if nav == 'mastheads' }}">Mastheads</a>
         <a href="/outbox" class="{{ 'is-active' if nav == 'outbox' }}">Outbox</a>
         <a href="/replies" class="{{ 'is-active' if nav == 'replies' }}">Replies</a>
+        <a href="/revenue" class="{{ 'is-active' if nav == 'revenue' }}">Revenue</a>
         <a href="/businesses" class="{{ 'is-active' if nav == 'businesses' }}">Database</a>
       </nav>
       <a class="nav-cta" href="/prospect">Find businesses</a>
@@ -45,6 +45,8 @@
       </div>
       <div class="footer-meta">
         <span>{{ send_enabled and 'Sending enabled' or 'Sending disabled — drafts only' }}</span>
+        <span>·</span>
+        <a href="/addresses">Find emails</a>
         <span>·</span>
         <a href="/suppressions">Suppression list</a>
         <span>·</span>

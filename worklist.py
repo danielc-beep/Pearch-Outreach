@@ -19,6 +19,7 @@ import backup
 import db
 import review
 import followup as _followup
+import renewals as _renewals
 from config import MIN_PROSPECT_RATING
 
 
@@ -61,7 +62,22 @@ def board() -> list[dict[str, Any]]:
 
     unplaced = db.count_unmatched_inbound()
 
+    book = _renewals.book()
+
     items = [
+        # Above everything: a client whose content nobody has published is
+        # somebody paying for nothing, and their term has not even started.
+        _item("not_live", book["counts"].get("not_live", 0),
+              "signed but not live",
+              "The content has not been published, so their twelve months has not "
+              "started and nothing is being delivered.",
+              "Set the date", "/revenue#renewals", "warn"),
+        _item("renewals", book["counts"].get("overdue", 0)
+              + book["counts"].get("imminent", 0),
+              "up for renewal",
+              "Their year is up or nearly up. Renewing an existing client is the "
+              "cheapest revenue there is.",
+              "Open the book", "/revenue#renewals", "hot"),
         # Above the replies themselves: a reply nobody could place is a reply
         # nobody has read, and it is not counted in the number underneath.
         _item("unplaced", unplaced,

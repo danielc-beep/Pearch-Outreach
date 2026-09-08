@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 
 import crm
 import db
+import renewals
 import target
 import worklist
 from config import ANTHROPIC_API_KEY, DEFAULT_DEAL_VALUE, DRAFT_MODEL
@@ -59,6 +60,8 @@ FOCUS: dict[str, dict[str, str]] = {
     "pricing":   {"label": "Put values on deals",  "url": "/crm"},
     "prospect":  {"label": "Find more businesses", "url": "/prospect"},
     "target":    {"label": "Set one on the dashboard", "url": "/#target"},
+    "renewals":  {"label": "Open the client book",   "url": "/revenue#renewals"},
+    "revenue":   {"label": "Open the year",          "url": "/revenue"},
 }
 DEFAULT_FOCUS = "pipeline"
 
@@ -109,6 +112,7 @@ def brief() -> dict[str, Any]:
         "conversion": crm.conversion(),
         "trades": db.industry_performance(),
         "cold": {stage: _cold_cards(stage) for stage in ("replied", "contacted", "qualified")},
+        "book": renewals.book(),
     }
 
 
@@ -200,6 +204,18 @@ def brief_text(data: dict[str, Any]) -> str:
             where = f" in {card['suburb']}" if card["suburb"] else ""
             lines.append(f"- {card['name']}{where} ({card['industry']}), "
                          f"{card['days']} days at this stage{value}")
+
+    book = data.get("book") or {}
+    if book.get("total"):
+        due = [c for c in book["clients"] if c["state"] in ("overdue", "imminent", "soon")]
+        lines.append(
+            f"CLIENTS: {book['total']} signed, worth {_money(book['book_value'])} on the "
+            f"books. {book['counts'].get('not_live', 0)} have no go-live date, so their "
+            f"term has not started. {book['at_risk']} are up for renewal inside three "
+            f"months, worth {_money(book['at_risk_value'])}.")
+        for client in due[:5]:
+            lines.append(f"- {client['name']} renews {client['due']} "
+                         f"({client['days']} days), {_money(client['value'])}")
 
     lines.append("SCREENS A SUGGESTION CAN POINT AT (use the key on the left):")
     for key, place in FOCUS.items():
@@ -355,6 +371,23 @@ def _rules(data: dict[str, Any]) -> list[dict[str, Any]]:
         f"{approved} {'email is' if approved == 1 else 'emails are'} drafted, reviewed and "
         f"signed off. Nothing is stopping them but the sending.",
         "outbox", "now")
+
+    book = data.get("book") or {}
+    counts = book.get("counts") or {}
+    not_live = counts.get("not_live", 0)
+    add(not_live, f"Set the go-live date on {not_live} client"
+                  f"{'' if not_live == 1 else 's'}",
+        f"{not_live} signed {'client has' if not_live == 1 else 'clients have'} no "
+        f"go-live date, so nobody has published their content and their twelve months "
+        f"has not started.",
+        "renewals", "now")
+
+    up = counts.get("overdue", 0) + counts.get("imminent", 0)
+    add(up, f"Renew {up} client{'' if up == 1 else 's'}",
+        f"{up} {'is' if up == 1 else 'are'} at or past their renewal date, out of "
+        f"{_money(book.get('at_risk_value', 0))} up inside three months. Renewing "
+        f"someone who already bought is the cheapest revenue there is.",
+        "renewals", "now")
 
     cold_contacted = stages.get("contacted", {}).get("cold", 0)
     add(cold_contacted, f"Follow up {cold_contacted} that went quiet",

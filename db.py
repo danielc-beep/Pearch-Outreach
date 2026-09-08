@@ -11,6 +11,7 @@ means adding it to SCHEMA and to MIGRATIONS.
 from __future__ import annotations
 
 import json
+import logging
 import secrets
 import re
 import sqlite3
@@ -21,6 +22,8 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator
 
 from config import DB_PATH, MIN_PROSPECT_RATING
+
+log = logging.getLogger(__name__)
 
 _local = threading.local()
 
@@ -168,6 +171,23 @@ CREATE INDEX IF NOT EXISTS idx_moves_to ON stage_moves(to_stage);
 """
 
 
+CREATE_CONTRACTS = """
+CREATE TABLE IF NOT EXISTS contracts (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at  TEXT NOT NULL,
+    business_id INTEGER NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL DEFAULT 'new',
+    value       REAL NOT NULL DEFAULT 0,
+    signed_at   TEXT NOT NULL,
+    started_at  TEXT NOT NULL,
+    months      INTEGER NOT NULL DEFAULT 12,
+    note        TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_contracts_business ON contracts(business_id);
+CREATE INDEX IF NOT EXISTS idx_contracts_signed ON contracts(signed_at);
+"""
+
+
 CREATE_INBOUND = """
 CREATE TABLE IF NOT EXISTS inbound (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -226,6 +246,16 @@ MIGRATIONS: list[tuple[str, str]] = [
     # A number rather than a flag because "is this a follow-up" stops being the
     # question the moment there is more than one of them.
     ("messages", "ALTER TABLE messages ADD COLUMN step INTEGER NOT NULL DEFAULT 1"),
+    # The day the content actually went live. This is when a twelve-month
+    # contract starts running, and it is not the day the deal was signed —
+    # there is usually a fortnight of writing in between, and billing a client
+    # from the wrong end of it is the kind of mistake that costs a renewal.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN live_at TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN term_months INTEGER"),
+    # Left rather than lost: a client who signed, ran a year and did not renew
+    # is a different animal from a prospect who said no, and counting them
+    # together would flatter the loss column and hide the churn.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN churned_at TEXT"),
 ]
 
 
@@ -266,6 +296,7 @@ def init_db() -> None:
     conn.executescript(CREATE_METRICS)
     conn.executescript(CREATE_MOVES)
     conn.executescript(CREATE_INBOUND)
+    conn.executescript(CREATE_CONTRACTS)
     existing = {
         table: {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
         for table in ("businesses", "contacts", "campaigns", "messages", "prospecting_runs")
@@ -282,7 +313,7 @@ def reset_db() -> None:
     conn = get_conn()
     for table in ("activities", "messages", "campaigns", "prospecting_runs",
                   "contacts", "suppressions", "trash", "settings", "metrics_daily",
-                  "stage_moves", "inbound",
+                  "stage_moves", "inbound", "contracts",
                   "businesses"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()
@@ -326,6 +357,7 @@ BUSINESS_FIELDS = (
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
     "notes", "website_status", "masthead", "contact_url", "deal_value", "won_at",
+    "live_at", "term_months", "churned_at",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -1409,6 +1441,134 @@ def stage_since(business_ids: list[int]) -> dict[int, str]:
         business_ids,
     ).fetchall()
     return {int(r["business_id"]): r["at"] for r in rows}
+
+
+# ---------- Contracts, and the money over time ----------
+# The contracts table is the ledger of revenue events: the first sale and
+# every renewal after it, each with the day it was signed and the day the
+# content it pays for goes live. Those two dates are genuinely different and
+# the app needs both — one answers "how did this year go", the other answers
+# "when is this client up".
+
+def add_contract(business_id: int, value: float, signed_at: str, started_at: str,
+                 months: int = 12, kind: str = "new", note: str = "") -> int:
+    with tx() as conn:
+        cur = conn.execute(
+            "INSERT INTO contracts (created_at, business_id, kind, value, signed_at, "
+            "started_at, months, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (now(), business_id, kind, float(value or 0), signed_at, started_at,
+             int(months), note or None))
+        return int(cur.lastrowid)
+
+
+def list_contracts(business_id: int) -> list[dict[str, Any]]:
+    rows = get_conn().execute(
+        "SELECT * FROM contracts WHERE business_id = ? ORDER BY started_at, id",
+        (business_id,)).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def latest_contract(business_id: int) -> dict[str, Any] | None:
+    """The one currently running, which is the one whose term ends last."""
+    return row_to_dict(get_conn().execute(
+        "SELECT * FROM contracts WHERE business_id = ? "
+        "ORDER BY DATE(started_at, '+' || months || ' months') DESC, id DESC LIMIT 1",
+        (business_id,)).fetchone())
+
+
+def update_contract(contract_id: int, data: dict[str, Any]) -> None:
+    if not data:
+        return
+    sets = ", ".join(f"{k} = ?" for k in data)
+    with tx() as conn:
+        conn.execute(f"UPDATE contracts SET {sets} WHERE id = ?",
+                     [*data.values(), contract_id])
+
+
+def count_churned() -> int:
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM businesses WHERE churned_at IS NOT NULL").fetchone()
+    return int(row["n"])
+
+
+def revenue_by_month(year: int) -> list[dict[str, Any]]:
+    """
+    Twelve rows, every one present whether or not anything was signed in it.
+
+    A chart that skips empty months draws a straight line through August and
+    reports a quiet month as a busy one.
+    """
+    rows = get_conn().execute(
+        "SELECT CAST(STRFTIME('%m', signed_at) AS INTEGER) AS month, kind, "
+        "       COALESCE(SUM(value), 0) AS total, COUNT(*) AS n "
+        "FROM contracts WHERE STRFTIME('%Y', signed_at) = ? GROUP BY month, kind",
+        (str(year),)).fetchall()
+    months = [{"month": m, "new": 0.0, "renewal": 0.0, "total": 0.0, "deals": 0}
+              for m in range(1, 13)]
+    for row in rows:
+        index = int(row["month"] or 0) - 1
+        if 0 <= index < 12:
+            bucket = "renewal" if row["kind"] == "renewal" else "new"
+            months[index][bucket] += float(row["total"])
+            months[index]["total"] += float(row["total"])
+            months[index]["deals"] += int(row["n"])
+    return months
+
+
+def contracts_in_year(year: int) -> list[dict[str, Any]]:
+    rows = get_conn().execute(
+        "SELECT c.*, b.name AS business_name FROM contracts c "
+        "JOIN businesses b ON b.id = c.business_id "
+        "WHERE STRFTIME('%Y', c.signed_at) = ? ORDER BY c.signed_at DESC", (str(year),)
+    ).fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def contract_years() -> list[int]:
+    """Every year the ledger has anything in, newest first."""
+    rows = get_conn().execute(
+        "SELECT DISTINCT CAST(STRFTIME('%Y', signed_at) AS INTEGER) AS y "
+        "FROM contracts ORDER BY y DESC").fetchall()
+    return [int(r["y"]) for r in rows if r["y"]]
+
+
+def clients(include_churned: bool = False) -> list[dict[str, Any]]:
+    """
+    Everyone who has signed, with the contract they are running on.
+
+    Won but not yet live counts: that is a client whose content nobody has
+    published, which is the most urgent row on the page rather than one to
+    filter out of it.
+    """
+    clause = "" if include_churned else "AND b.churned_at IS NULL"
+    rows = get_conn().execute(
+        f"SELECT b.* FROM businesses b WHERE b.status = 'won' {clause} "
+        f"ORDER BY COALESCE(b.live_at, b.won_at, b.updated_at) ASC").fetchall()
+    return [row_to_dict(r) for r in rows]
+
+
+def backfill_contracts() -> int:
+    """
+    Give every won business that has no contract row the one it implies.
+
+    The ledger arrived after the deals did. Without this, a database full of
+    won businesses would report a year with no revenue in it, which is the
+    kind of empty chart people conclude is broken rather than new.
+    """
+    rows = get_conn().execute(
+        "SELECT id, deal_value, won_at, live_at, term_months, created_at FROM businesses "
+        "WHERE status = 'won' AND id NOT IN (SELECT business_id FROM contracts)"
+    ).fetchall()
+    made = 0
+    for row in rows:
+        signed = (row["won_at"] or row["created_at"] or now())[:10]
+        started = (row["live_at"] or signed)[:10]
+        add_contract(int(row["id"]), float(row["deal_value"] or 0), signed, started,
+                     int(row["term_months"] or 12), "new", "backfilled from the record")
+        made += 1
+    if made:
+        log.info("wrote %s contract rows from existing won businesses", made)
+    return made
 
 
 # ---------- Following up ----------

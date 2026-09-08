@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% block title %}Revenue and renewals — {{ app_name }}{% endblock %}
+
+{% block body %}
+<div class="wrap">
+  <section class="section" style="margin-top:36px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">The year</div>
+        <h2>{{ y.year }} against <em>{{ y.last_year }}</em></h2>
+        <p class="lede">Every contract signed, counted in the month it was signed —
+          new business and renewals both. Year-to-date is measured against the same
+          stretch of last year, not against its full twelve months.</p>
+      </div>
+      {% if y.years|length > 1 %}
+      <form method="get" action="/revenue" style="margin:0">
+        <select name="year" onchange="this.form.submit()">
+          {% for yr in y.years %}<option value="{{ yr }}" {{ 'selected' if yr == y.year }}>{{ yr }}</option>{% endfor %}
+        </select>
+      </form>
+      {% endif %}
+    </div>
+
+    <div class="rev-head">
+      <div class="rev-hero">
+        <span class="rev-label">Signed to {{ y.through_name }}</span>
+        <b class="rev-big">${{ '{:,.0f}'.format(y.to_date) }}</b>
+        {% if y.has_last_year %}
+        <span class="rev-delta {{ 'is-up' if y.ahead_by >= 0 else 'is-down' }}">
+          {{ '+' if y.ahead_by >= 0 else '−' }}${{ '{:,.0f}'.format(y.ahead_by|abs) }}
+          {%- if y.change is not none %} ({{ '+' if y.change >= 0 else '−' }}{{ '{:.1f}'.format(y.change|abs) }}%){% endif %}
+          <span class="muted">vs ${{ '{:,.0f}'.format(y.last_to_date) }} by {{ y.through_name }} {{ y.last_year }}</span>
+        </span>
+        {% else %}
+        <span class="rev-delta muted">No {{ y.last_year }} to compare against — this is the first year on the books.</span>
+        {% endif %}
+      </div>
+      <div class="rev-split">
+        <span class="rev-cell"><b>${{ '{:,.0f}'.format(y.new) }}</b><span>new business</span></span>
+        <span class="rev-cell"><b>${{ '{:,.0f}'.format(y.renewal) }}</b><span>renewals</span></span>
+        <span class="rev-cell"><b>{{ y.deals }}</b><span>contract{{ '' if y.deals == 1 else 's' }} signed</span></span>
+      </div>
+    </div>
+
+    {% if y.deals or y.has_last_year %}
+    <figure class="rev-figure">
+      <figcaption class="rev-legend">
+        <span class="rev-key"><i class="is-new"></i>New business</span>
+        <span class="rev-key"><i class="is-renewal"></i>Renewals</span>
+        <span class="rev-key"><i class="is-last"></i>Same month, {{ y.last_year }}</span>
+      </figcaption>
+      <div class="rev-chart-wrap">
+        <div class="rev-scale">
+          {% for t in c.ticks|reverse %}<span>${{ '{:,.0f}'.format(t.value) }}</span>{% endfor %}
+        </div>
+        <svg class="rev-chart" viewBox="0 0 {{ c.width }} {{ c.height }}"
+             role="img" aria-label="Revenue signed each month of {{ y.year }}, with the same month last year marked on each bar"
+             preserveAspectRatio="none">
+          {% for t in c.ticks %}
+          <line class="rev-grid" x1="0" x2="{{ c.width }}" y1="{{ t.y }}" y2="{{ t.y }}"></line>
+          {% endfor %}
+          {% for b in c.bars %}
+          <g class="rev-bar {{ 'is-future' if b.future }}" tabindex="0"
+             aria-label="{{ b.name }}: ${{ '{:,.0f}'.format(b.total) }} signed{% if b.has_last %}, ${{ '{:,.0f}'.format(b.last) }} in {{ y.last_year }}{% endif %}">
+            <rect class="rev-hit" x="{{ b.x - 3 }}" y="0" width="{{ b.w + 6 }}" height="{{ c.height }}"></rect>
+            {% if b.new_h %}<rect class="rev-seg is-new" x="{{ b.x }}" y="{{ b.new_y }}" width="{{ b.w }}" height="{{ b.new_h }}" rx="2"></rect>{% endif %}
+            {% if b.renew_h %}<rect class="rev-seg is-renewal" x="{{ b.x }}" y="{{ b.renew_y }}" width="{{ b.w }}" height="{{ b.renew_h }}" rx="2"></rect>{% endif %}
+            {% if b.has_last %}<line class="rev-last" x1="{{ b.x - 2 }}" x2="{{ b.x + b.w + 2 }}" y1="{{ b.last_y }}" y2="{{ b.last_y }}"></line>{% endif %}
+            <title>{{ b.name }} {{ y.year }} — ${{ '{:,.0f}'.format(b.total) }}{% if b.has_last %} · {{ y.last_year }} ${{ '{:,.0f}'.format(b.last) }}{% endif %}</title>
+          </g>
+          {% endfor %}
+          <line class="rev-axis" x1="0" x2="{{ c.width }}" y1="{{ c.base }}" y2="{{ c.base }}"></line>
+        </svg>
+        <div class="rev-months">
+          {% for b in c.bars %}<span class="{{ 'is-future' if b.future }}">{{ b.name }}</span>{% endfor %}
+        </div>
+      </div>
+    </figure>
+    {% else %}
+    <div class="empty"><strong>Nothing signed yet.</strong>
+      The first contract writes itself here the moment a deal is marked won.</div>
+    {% endif %}
+
+    {% if y.deals or y.has_last_year %}
+    <details class="rev-table">
+      <summary>The numbers behind it</summary>
+      <div class="bare-scroll">
+        <table class="bare">
+          <thead><tr><th>Month</th><th class="n">New</th><th class="n">Renewals</th>
+            <th class="n">{{ y.year }}</th><th class="n">{{ y.last_year }}</th><th class="n">Change</th></tr></thead>
+          <tbody>
+            {% for m in y.months %}
+            <tr class="{{ 'is-future' if m.future }}">
+              <td>{{ m.name }}</td>
+              <td class="n sub">{{ '${:,.0f}'.format(m.new) if m.new else '—' }}</td>
+              <td class="n sub">{{ '${:,.0f}'.format(m.renewal) if m.renewal else '—' }}</td>
+              <td class="n"><strong>{{ '${:,.0f}'.format(m.total) if m.total else '—' }}</strong></td>
+              <td class="n sub">{{ '${:,.0f}'.format(m.last) if m.last else '—' }}</td>
+              <td class="n {{ 'rev-up' if m.ahead > 0 else ('rev-down' if m.ahead < 0 else '') }}">
+                {%- if m.ahead %}{{ '+' if m.ahead > 0 else '−' }}${{ '{:,.0f}'.format(m.ahead|abs) }}{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
+  </section>
+
+  <section class="section" id="renewals" style="margin-top:14px">
+    <div class="section-head">
+      <div>
+        <div class="eyebrow">Renewals</div>
+        <h2>Every client, and when they are up</h2>
+        <p class="lede">A twelve-month term runs from the day the content goes live, not
+          the day the deal was signed. A client with no go-live date has not started
+          paying for anything — that is the first row to fix, not one to hide.</p>
+      </div>
+    </div>
+
+    <div class="rev-split rev-book">
+      <span class="rev-cell"><b>{{ book.total }}</b><span>client{{ '' if book.total == 1 else 's' }}</span></span>
+      <span class="rev-cell"><b>${{ '{:,.0f}'.format(book.book_value) }}</b><span>book value</span></span>
+      {% if book.counts.not_live %}
+      <span class="rev-cell is-warn"><b>{{ book.counts.not_live }}</b><span>not live yet</span></span>
+      {% endif %}
+      {% if book.at_risk %}
+      <span class="rev-cell is-warn"><b>${{ '{:,.0f}'.format(book.at_risk_value) }}</b><span>up inside three months</span></span>
+      {% endif %}
+      {% if book.churned %}
+      <span class="rev-cell is-quiet"><b>{{ book.churned }}</b><span>left</span></span>
+      {% endif %}
+    </div>
+
+    {% if book.clients %}
+    <div class="bare-scroll">
+      <table class="bare renewals">
+        <thead><tr>
+          <th>Client</th><th>Masthead</th><th>Went live</th><th>Term</th>
+          <th>Renews</th><th class="n">Value</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for c in book.clients %}
+          <tr data-id="{{ c.id }}" class="ren-row is-{{ c.state }}">
+            <td>
+              <a href="/businesses/{{ c.id }}"><strong>{{ c.name }}</strong></a>
+              <span class="sub">{{ c.suburb or c.region or '' }}{% if c.renewals %} · {{ c.renewals }} renewal{{ '' if c.renewals == 1 else 's' }}{% endif %}</span>
+            </td>
+            <td class="sub">{{ masthead_name(c.masthead)|masthead_label }}</td>
+            <td class="sub">{{ c.live_at or '—' }}</td>
+            <td class="sub">{{ c.term }} months</td>
+            <td>
+              <span class="ren-state is-{{ c.state }}">{{ c.state_label }}</span>
+              {% if c.due %}<span class="sub">{{ c.due }}{% if c.days is not none %} · {{ c.days }}d{% endif %}</span>{% endif %}
+            </td>
+            <td class="n">{{ '${:,.0f}'.format(c.value) if c.value else '—' }}</td>
+            <td class="ren-do">
+              {% if c.state == 'not_live' %}
+              <button class="btn btn-sm btn-primary js-live" data-id="{{ c.id }}">Set go-live</button>
+              {% else %}
+              <button class="btn btn-sm js-renew" data-id="{{ c.id }}" data-value="{{ c.value|round|int }}">Renew</button>
+              <button class="btn btn-sm js-churn" data-id="{{ c.id }}">Left</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty"><strong>No clients yet.</strong>
+      A business becomes a client the moment it reaches Won on the board.</div>
+    {% endif %}
+  </section>
+</div>
+
+<dialog class="ren-dialog" id="ren-dialog">
+  <form method="dialog" id="ren-form">
+    <h3 id="ren-title">Set the go-live date</h3>
+    <p class="help" id="ren-help"></p>
+    <label>Date
+      <input type="date" id="ren-date" required>
+    </label>
+    <label>Term
+      <select id="ren-months">
+        {% for m in [3, 6, 12, 24] %}<option value="{{ m }}" {{ 'selected' if m == 12 }}>{{ m }} months</option>{% endfor %}
+      </select>
+    </label>
+    <label>Value
+      <input type="number" id="ren-value" min="0" step="100">
+    </label>
+    <div class="ren-actions">
+      <button class="btn" value="cancel" type="submit">Cancel</button>
+      <button class="btn btn-primary" id="ren-save" value="save" type="submit">Save</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const dialog = document.getElementById('ren-dialog');
+  const dateEl = document.getElementById('ren-date');
+  const monthsEl = document.getElementById('ren-months');
+  const valueEl = document.getElementById('ren-value');
+  let pending = null;
+
+  function open(mode, id, value) {
+    pending = {mode, id};
+    document.getElementById('ren-title').textContent =
+      mode === 'live' ? 'Set the go-live date' : 'Renew for another term';
+    document.getElementById('ren-help').textContent = mode === 'live'
+      ? 'The day the content was published. The term runs from here, not from the day the deal was signed.'
+      : 'The new term starts the day the current one ends, so renewing early or late does not change what they get.';
+    dateEl.value = new Date().toISOString().slice(0, 10);
+    valueEl.value = value || '';
+    dialog.showModal();
+  }
+
+  document.querySelectorAll('.js-live').forEach(b =>
+    b.addEventListener('click', () => open('live', b.dataset.id, b.dataset.value)));
+  document.querySelectorAll('.js-renew').forEach(b =>
+    b.addEventListener('click', () => open('renew', b.dataset.id, b.dataset.value)));
+
+  document.getElementById('ren-form').addEventListener('submit', async (e) => {
+    if (e.submitter && e.submitter.value === 'cancel') { pending = null; return; }
+    if (!pending) return;
+    const body = {months: Number(monthsEl.value),
+                  value: valueEl.value === '' ? null : Number(valueEl.value)};
+    if (pending.mode === 'live') body.when = dateEl.value;
+    else body.signed_at = dateEl.value;
+    try {
+      await window.postJSON(`/api/renewals/${pending.id}/` +
+        (pending.mode === 'live' ? 'live' : 'renew'), body);
+      window.location.reload();
+    } catch (err) { window.alert(err.message); }
+  });
+
+  document.querySelectorAll('.js-churn').forEach(b =>
+    b.addEventListener('click', async () => {
+      const why = window.prompt('Why did they leave? (optional)');
+      if (why === null) return;
+      await window.postJSON(`/api/renewals/${b.dataset.id}/churn`, {why});
+      window.location.reload();
+    }));
+})();
+</script>
+{% endblock %}

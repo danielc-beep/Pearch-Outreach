@@ -80,6 +80,7 @@ to work for recipients clicking through from an email.
 | `/mastheads` | All 78 ACM titles, shaded by how far each one's book has got |
 | `/replies` | Everything that came back, and the ones nobody could place |
 | `/followups` | Who is owed a second or third email, and the schedule that decides it |
+| `/revenue` | The year against last year, and the client book (`/renewals` lands here) |
 | `/outbox` | Drafts waiting for approval, approved messages waiting to send, sent history |
 | `/suppressions` | Everyone permanently excluded from outreach |
 | `/unsubscribe` | The public unsubscribe page linked from every email |
@@ -140,6 +141,36 @@ them; it never sends them — they land in the outbox as drafts and go out
 through the same approval, preflight, suppression list and daily cap as
 everything else. It stops after two follow-ups, and it stops the moment
 anything human comes back through the inbox, whatever the stage says.
+
+## Revenue, and the client book
+
+A client pays for twelve months from **the day their content goes live**, not
+the day the deal was signed — there are usually a couple of weeks of writing
+in between, and billing a term from the wrong end of that gap is how a renewal
+gets missed. Both dates are stored, and they do different jobs:
+
+- **signed** puts the money in a month of the year's revenue.
+- **live** starts the term and sets the renewal date.
+
+Every revenue event — the first sale and each renewal — is a row in
+`contracts`, so a client's second year counts as revenue rather than
+disappearing (a renewal is not a new deal, and `won_at` alone cannot see it).
+Deals that predate the ledger are backfilled once on startup.
+
+`/revenue` shows the year month by month, with **last year drawn as a
+reference tick on each bar** rather than a second coloured series: against
+this page's ink, cyan and any muted slate come out about eleven units apart in
+normal vision, which the palette validator rejects, and a tick on a bar says
+"the line you are being measured against" more directly anyway. Year-to-date
+is compared with the *same stretch* of last year, never with its full twelve
+months.
+
+Underneath is the client book. A won deal with no go-live date is the top row,
+not a hidden one — that is a client whose content nobody has published. A
+renewal starts the day the current term ends, so renewing early or late does
+not change what the client gets. And a client who ran a year and left is
+`churned`, not `lost`: folding them into lost deals would flatter the loss
+column and hide the churn.
 
 ## Prospecting sources
 
@@ -212,6 +243,8 @@ pearch-outreach/
 ├── coverage.py         all 78 mastheads and what each one's book is worth
 ├── replies.py          inbound mail: whose it is, what it is, what it changes
 ├── followup.py         the second and third emails, and when they are owed
+├── renewals.py         go-live dates, terms, renewal dates, churn
+├── revenue.py          the year against last year, and the chart geometry
 ├── util.py             URL/email/phone/address normalising
 ├── sources/            prospecting sources (google_places, csv, sample)
 ├── templates/          Jinja2 pages
