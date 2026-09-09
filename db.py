@@ -296,11 +296,28 @@ MIGRATIONS: list[tuple[str, str]] = [
     # Adpoint, so a won deal with no booking number is a deal nobody is
     # invoicing — which is a different kind of missing from a blank field.
     ("businesses", "ALTER TABLE businesses ADD COLUMN booking_ref TEXT"),
+    # When the website was last looked at. Separate from website_status because
+    # a check can finish without a verdict — a timeout tells you nothing about
+    # the business — and a sweep still has to know it has been there, or it
+    # hands the same records back for ever.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN website_checked_at TEXT"),
 ]
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def now_exact() -> str:
+    """
+    Like now(), to the microsecond.
+
+    Seconds are plenty for anything a person reads, but a website sweep compares
+    "when did this sweep start" against "when did we last look at this record",
+    and at second resolution the two collide inside a single batch — the sweep
+    then skips the very records it just meant to visit.
+    """
+    return datetime.now(timezone.utc).isoformat()
 
 
 def get_conn() -> sqlite3.Connection:
@@ -399,7 +416,7 @@ BUSINESS_FIELDS = (
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
     "notes", "website_status", "masthead", "contact_url", "deal_value", "won_at",
-    "live_at", "term_months", "churned_at", "booking_ref",
+    "live_at", "term_months", "churned_at", "booking_ref", "website_checked_at",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -1139,14 +1156,53 @@ def list_businesses(
     return [row_to_dict(r) for r in rows], int(total)
 
 
-def businesses_needing_website_check(limit: int = 25) -> tuple[list[dict[str, Any]], int]:
-    """A batch of businesses whose website has never been checked, plus the total."""
-    clause = ("website IS NOT NULL AND website != '' "
-              "AND (website_status IS NULL OR website_status = '')")
+# Which websites a check run should visit.
+#   new     — never looked at. The default, and what a fresh sweep wants.
+#   failed  — anything not currently live. The check used to call a site dead
+#             on any failure at all, so these are the records most worth
+#             asking again, and asking again has to be possible from inside
+#             the app rather than by editing the database.
+#   all     — every business with a website.
+CHECK_SCOPES = ("new", "failed", "all")
+
+
+def businesses_needing_website_check(
+        limit: int = 25, scope: str = "new",
+        checked_before: str = "") -> tuple[list[dict[str, Any]], int]:
+    """
+    A batch of businesses whose website needs looking at, plus the total left.
+
+    Selects on website_checked_at, not on the verdict. Selecting on the verdict
+    cannot terminate for the re-check scopes: a site that fails again still
+    matches, so the same rows come back in every batch and the sweep runs for
+    ever.
+
+    `checked_before` is the moment the sweep started. Every batch stamps the
+    time it looked, so a record already visited by this sweep is no longer
+    "checked before it began" and drops out — `remaining` falls to zero and the
+    caller's loop ends. It defaults to now, which is what a single deliberate
+    batch wants: take anything, however recently it was seen.
+    """
+    if scope not in CHECK_SCOPES:
+        raise ValueError(f"Unknown check scope: {scope}")
+    unchecked = "website_status IS NULL OR website_status = ''"
+    where = {
+        "new": f"({unchecked}) AND website_checked_at IS NULL",
+        "failed": f"({unchecked} OR website_status != 'live')",
+        "all": "1 = 1",
+    }[scope]
+    params: list[Any] = [checked_before or now_exact()]
+    clause = (f"website IS NOT NULL AND website != '' AND {where} "
+              "AND (website_checked_at IS NULL OR website_checked_at < ?)")
     conn = get_conn()
-    total = conn.execute(f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}").fetchone()["n"]
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}", params).fetchone()["n"]
+    # Longest-unseen first, so a sweep interrupted halfway picks up where it
+    # stopped rather than starting again from the top of the table.
     rows = conn.execute(
-        f"SELECT * FROM businesses WHERE {clause} ORDER BY id LIMIT ?", (limit,)
+        f"SELECT * FROM businesses WHERE {clause} "
+        "ORDER BY website_checked_at IS NOT NULL, website_checked_at, id LIMIT ?",
+        (*params, limit),
     ).fetchall()
     return [row_to_dict(r) for r in rows], int(total)
 

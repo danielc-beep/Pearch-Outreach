@@ -14,10 +14,11 @@
     const totals = {};
     try {
       let lastRemaining = Infinity;
+      let next = url;
       for (let pass = 0; pass < 200; pass++) {
         button.innerHTML = '<span class="spinner"></span> '
           + label + '…';
-        const data = await window.postJSON(url);
+        const data = await window.postJSON(next);
         Object.keys(data).forEach((k) => {
           if (typeof data[k] === 'number' && k !== 'remaining') {
             totals[k] = (totals[k] || 0) + data[k];
@@ -29,6 +30,13 @@
         // one before it, is not making progress — stop rather than spin.
         if (!data.remaining || !data.checked || data.remaining >= lastRemaining) break;
         lastRemaining = data.remaining;
+        // Carry the moment this sweep began into the next batch, so the server
+        // knows which records it has already been to. Without it a re-check
+        // scope hands back the same rows for ever.
+        if (data.checked_before) {
+          next = url + (url.includes('?') ? '&' : '?')
+            + 'checked_before=' + encodeURIComponent(data.checked_before);
+        }
       }
       flash.innerHTML = '<div class="notice notice-ok">' + describe(totals) + ' Done.</div>';
       setTimeout(() => window.location.reload(), 1200);
@@ -39,10 +47,19 @@
     }
   }
 
+  const websiteTally = (t) => 'Checked ' + (t.checked || 0) + ': ' + (t.live || 0)
+    + ' live, ' + (t.blocked || 0) + ' up but blocked, '
+    + (t.unreachable || 0) + " that don't resolve.";
+
   document.getElementById('btn-verify').addEventListener('click', (e) =>
-    runInBatches(e.currentTarget, '/api/websites/verify', 'Checking',
-      (t) => 'Checked ' + (t.checked || 0) + ': ' + (t.live || 0) + ' live, '
-             + (t.unreachable || 0) + " didn't respond."));
+    runInBatches(e.currentTarget, '/api/websites/verify', 'Checking', websiteTally));
+
+  // Only the ones a previous check ruled out. Re-confirming sites already known
+  // to be live would spend every batch on records nobody doubts.
+  const recheck = document.getElementById('btn-recheck');
+  if (recheck) recheck.addEventListener('click', (e) =>
+    runInBatches(e.currentTarget, '/api/websites/verify?scope=failed', 'Checking again',
+      websiteTally));
 
   document.getElementById('btn-find-emails').addEventListener('click', (e) =>
     runInBatches(e.currentTarget, '/api/enrich/missing', 'Visiting sites',
@@ -244,9 +261,21 @@
 
     {% if unreachable_count %}
     <div class="notice notice-warn">
-      <strong>{{ unreachable_count }} website{{ '' if unreachable_count == 1 else 's' }} didn't respond.</strong>
-      A business whose site doesn't resolve is either stale or was never real.
-      <a href="/admin/database?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>.
+      <strong>{{ unreachable_count }} domain{{ '' if unreachable_count == 1 else 's' }} didn't resolve.</strong>
+      The name has no address at all, so the record is stale or was never real.
+      Open the site yourself before acting on this — if it loads for you, the
+      check was wrong and asking again will clear it.
+      <a href="/admin/database?website_status=unreachable">Review {{ 'it' if unreachable_count == 1 else 'them' }}</a>
+      <button class="btn btn-sm" id="btn-recheck" style="margin-left:8px">Check them again</button>
+    </div>
+    {% endif %}
+
+    {% if blocked_count %}
+    <div class="notice notice-info">
+      <strong>{{ blocked_count }} site{{ '' if blocked_count == 1 else 's' }} answered but wouldn't let us read the page.</strong>
+      A firewall, a login wall or a bot filter — the business is real and the site
+      is up, we just can't scrape an email address off it. Worth a phone call.
+      <a href="/admin/database?website_status=blocked">See {{ 'it' if blocked_count == 1 else 'them' }}</a>.
     </div>
     {% endif %}
 
@@ -305,7 +334,9 @@
               <td>
                 {% if b.email %}<span class="mono">{{ b.email }}</span>{% else %}<span class="muted small">—</span>{% endif %}
                 {% if b.website_status == 'unreachable' %}
-                <div><span class="pill pill-dead">site dead</span></div>
+                <div><span class="pill pill-dead">domain doesn't resolve</span></div>
+                {% elif b.website_status == 'blocked' %}
+                <div><span class="pill">site up, page blocked</span></div>
                 {% endif %}
               </td>
               <td class="small">{{ b.phone or '—' }}</td>

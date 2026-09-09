@@ -11,6 +11,7 @@ returns fewer fields. It never raises at the callers' level.
 from __future__ import annotations
 
 import re
+import socket
 import time
 from typing import Any
 
@@ -131,6 +132,76 @@ def guess_industry(*texts: str | None) -> str:
     return ""
 
 
+# What a website check can honestly conclude. Four answers, not two — the
+# difference between them is the difference between "bin this record" and
+# "we could not read it today".
+LIVE = "live"                 # HTML came back. Everything works.
+BLOCKED = "blocked"           # A server answered and refused us. The site is up.
+UNREACHABLE = "unreachable"   # The name does not resolve. Nothing is there.
+UNKNOWN = "error"             # Timeout, TLS, a proxy in the way. We do not know.
+
+
+def _host_variants(url: str) -> list[str]:
+    """The URL as held, then with www flipped. A record easily carries the
+    variant that happens not to be served."""
+    host = domain_of(url)
+    if host.startswith("www."):
+        return [url, url.replace("www.", "", 1)]
+    return [url, url.replace("://", "://www.", 1)]
+
+
+def _name_resolves(host: str) -> bool:
+    """
+    Does this domain exist at all? The one question with a definite answer.
+
+    Everything else about an unanswered request is ambiguous — a firewall, a
+    slow host, a proxy between us and them — but a name that does not resolve
+    is a name nobody has registered or pointed anywhere. It is the only
+    evidence good enough to call a business's website dead.
+    """
+    try:
+        socket.getaddrinfo(host, None)
+        return True
+    except socket.gaierror:
+        return False
+    except OSError:
+        # Cannot tell. Not the business's fault, so not held against them.
+        return True
+
+
+def probe(client: httpx.Client, url: str) -> tuple[str, str]:
+    """
+    Visit a site and report what actually happened. Returns (status, html).
+
+    The rule that matters: a server answering at all — even with a 403, even
+    with a Cloudflare challenge — means the domain resolves and somebody is
+    running a web server on it, which is exactly what a made-up domain cannot
+    do. Plenty of Australian small-business sites sit behind a WAF that
+    answers a datacentre IP with 403, and calling those dead is what put real,
+    working businesses on a list to be deleted.
+    """
+    answered = False
+    for candidate in _host_variants(url):
+        for _attempt in range(2):        # one retry: a single timeout is not proof
+            try:
+                response = client.get(candidate)
+            except httpx.HTTPError:
+                continue
+            answered = True
+            content_type = response.headers.get("content-type", "html")
+            if response.status_code < 400 and "html" in content_type:
+                return LIVE, deobfuscate(response.text)
+            break                        # answered, just not with a page we can read
+
+    if answered:
+        return BLOCKED, ""
+    if not _name_resolves(domain_of(url)):
+        return UNREACHABLE, ""
+    # It resolves and nothing came back. That is a bad afternoon, not a dead
+    # business, so nothing is recorded and it will be asked again.
+    return UNKNOWN, ""
+
+
 def _fetch(client: httpx.Client, url: str, blocked: list[int] | None = None) -> str:
     try:
         r = client.get(url)
@@ -162,12 +233,14 @@ def enrich_from_website(website: str) -> dict[str, Any]:
     deadline = time.monotonic() + PAGE_BUDGET
 
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True, headers=ACCEPT_HEADERS) as client:
-        home = _fetch(client, url, blocked)
-        if not home:
-            # Nothing served. A dead domain, a blocked bot, or — the reason this
-            # is recorded rather than shrugged off — a website that was never
-            # real. Either way it is not somewhere to send a prospect.
-            return {"enrich_error": "could not fetch site", "website_status": "unreachable"}
+        status, home = probe(client, url)
+        if status != LIVE:
+            # No page to read. What that means depends entirely on why, and
+            # this used to report all three as a dead website — which is how a
+            # working electrician behind a WAF ended up on a list to delete.
+            if status == UNKNOWN:
+                return {"enrich_error": "could not reach site"}
+            return {"enrich_error": f"site {status}", "website_status": status}
         pages.append(home)
 
         # Prefer pages the homepage actually links to, then fall back to the
@@ -254,42 +327,18 @@ def enrich_from_website(website: str) -> dict[str, Any]:
 
 def website_is_live(website: str) -> str:
     """
-    Does this domain exist and answer? "live", "unreachable", or "" for no URL.
+    What the website check concluded. One of live, blocked, unreachable, error.
 
-    The question is whether the business is real, not whether its homepage is
-    happy — so ANY HTTP response counts as live, including a 403 or a 404. A
-    Cloudflare challenge, a WAF that dislikes us, a homepage that has moved:
-    all of them mean DNS resolved and a server replied, which is exactly what
-    a fabricated domain cannot do. Only a transport failure — no DNS record,
-    connection refused, nothing back before the timeout — is unreachable.
-
-    Judging on the status code instead is what marked real, working
-    businesses as dead: plenty of Australian small-business sites sit behind
-    Cloudflare and answer a datacentre IP with 403.
+    A thin wrapper on probe(), because the two ways this app looks at a
+    website used to reason differently and the one that ran during
+    prospecting was the wrong one.
     """
     url = normalise_url(website)
     if not url:
         return ""
-
-    # Try the URL we hold, then flip www on or off. A record can easily carry
-    # the variant that happens not to be served.
-    candidates = [url]
-    host = domain_of(url)
-    if host.startswith("www."):
-        candidates.append(url.replace("www.", "", 1))
-    else:
-        candidates.append(url.replace("://", "://www.", 1))
-
     with httpx.Client(timeout=TIMEOUT, follow_redirects=True,
                       headers=ACCEPT_HEADERS) as client:
-        for candidate in candidates:
-            for attempt in range(2):        # one retry: a single timeout is not proof
-                try:
-                    client.get(candidate)
-                    return "live"
-                except httpx.HTTPError:
-                    continue
-    return "unreachable"
+        return probe(client, url)[0]
 
 
 def lookup_abn(name_or_abn: str) -> dict[str, Any]:

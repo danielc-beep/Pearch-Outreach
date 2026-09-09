@@ -66,16 +66,35 @@ def test_a_site_with_no_address_says_so(monkeypatch):
     assert "No email published" in result["enrich_note"]
 
 
-def test_an_unreachable_site_reports_an_error(monkeypatch):
+def test_a_domain_that_does_not_resolve_reports_it(monkeypatch):
     def handler(request):
-        raise httpx.ConnectError("refused")
+        raise httpx.ConnectError("Name or service not known")
     transport = httpx.MockTransport(handler)
     original = httpx.Client
     monkeypatch.setattr(enrich.httpx, "Client",
                         lambda *a, **kw: original(*a, **{**kw, "transport": transport}))
+    monkeypatch.setattr(enrich, "_name_resolves", lambda host: False)
 
     result = enrich.enrich_from_website("https://down.com.au")
-    assert result["enrich_error"] == "could not fetch site"
-    # The status is the useful half: a domain that serves nothing is not a
-    # prospect, whether it is dead or was never real.
+    assert result["enrich_error"] == "site unreachable"
+    # Nobody has registered it or pointed it anywhere. That is the one website
+    # result worth holding against a business.
     assert result["website_status"] == "unreachable"
+
+
+def test_a_site_we_simply_could_not_reach_records_nothing(monkeypatch):
+    """
+    A timeout on a domain that resolves is a bad afternoon, not a dead
+    business — so no status is written and it gets asked again.
+    """
+    def handler(request):
+        raise httpx.ConnectTimeout("too slow")
+    transport = httpx.MockTransport(handler)
+    original = httpx.Client
+    monkeypatch.setattr(enrich.httpx, "Client",
+                        lambda *a, **kw: original(*a, **{**kw, "transport": transport}))
+    monkeypatch.setattr(enrich, "_name_resolves", lambda host: True)
+
+    result = enrich.enrich_from_website("https://slow.com.au")
+    assert result["enrich_error"] == "could not reach site"
+    assert "website_status" not in result

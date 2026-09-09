@@ -302,7 +302,8 @@ def test_verification_flags_a_website_that_does_not_resolve(client, monkeypatch)
                         lambda url: "unreachable" if "example.com.au" in url else "live")
 
     result = client.post("/api/websites/verify").json()
-    assert result == {"checked": 2, "live": 1, "unreachable": 1, "remaining": 0}
+    assert {k: v for k, v in result.items() if k != "checked_before"} == {
+        "checked": 2, "live": 1, "unreachable": 1, "blocked": 0, "remaining": 0}
 
     dead = client.get("/api/businesses?").json()["businesses"]
     by_name = {b["name"]: b["website_status"] for b in dead}
@@ -319,8 +320,88 @@ def test_the_page_warns_about_unreachable_websites(client, monkeypatch):
     client.post("/api/websites/verify")
 
     body = client.get("/businesses").text
-    assert "1 website didn't respond" in body
-    assert "site dead" in body
+    assert "1 domain didn't resolve" in body
+    assert "domain doesn't resolve" in body
+    # The reader has to be able to disagree with the machine, so the banner
+    # says how — otherwise a wrong verdict is indistinguishable from a right one.
+    assert "Check them again" in body
+
+
+def test_a_blocked_site_does_not_read_as_a_dead_business(client, monkeypatch):
+    """
+    The complaint that started this: a live site with contact details on it,
+    reported as dead. A server that answers and refuses us has proved the
+    business exists, and the page must not say otherwise.
+    """
+    import db as db_module
+    import enrich
+    db_module.insert_business({"name": "Watts Needed", "domain": "wattsneeded.com.au",
+                               "website": "https://wattsneeded.com.au", "fit_score": 90})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "blocked")
+    client.post("/api/websites/verify")
+
+    body = client.get("/businesses").text
+    assert "site up, page blocked" in body
+    assert "domain doesn't resolve" not in body
+    assert "1 domain didn't resolve" not in body
+
+
+def test_one_business_can_be_rechecked_on_the_spot(client, monkeypatch):
+    """
+    Somebody opens a record marked dead, clicks the link, and the site loads.
+    Settling that has to take one button, not a database sweep — and clearing
+    the verdict has to clear the score penalty it caused.
+    """
+    import db as db_module
+    import enrich
+    bid = db_module.insert_business({"name": "Watts Needed", "domain": "wattsneeded.com.au",
+                                     "website": "https://wattsneeded.com.au",
+                                     "rating": 4.9, "review_count": 40,
+                                     "email": "hi@wattsneeded.com.au"})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "unreachable")
+    client.post("/api/websites/verify")
+    penalised = db_module.get_business(bid)["fit_score"]
+
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "live")
+    got = client.post(f"/api/businesses/{bid}/website/check").json()
+    assert got["status"] == "live"
+
+    cleared = db_module.get_business(bid)
+    assert cleared["website_status"] == "live"
+    assert cleared["fit_score"] > penalised
+
+
+def test_a_recheck_sweep_finishes(client, monkeypatch):
+    """
+    Re-checking the ones already ruled out cannot select on the verdict: a site
+    that fails again still matches, so the same rows come back every batch and
+    the sweep never ends. It has to select on when we last looked.
+    """
+    import db as db_module
+    import enrich
+    for i in range(5):
+        db_module.insert_business({"name": f"Co {i}", "domain": f"co{i}.com.au",
+                                   "website": f"https://co{i}.com.au"})
+    monkeypatch.setattr(enrich, "website_is_live", lambda url: "unreachable")
+    client.post("/api/websites/verify?limit=5")
+
+    # What the page's loop does: carry the moment the sweep began into every
+    # batch, so the server knows which records it has already been to.
+    seen, sweep = 0, ""
+    for _ in range(10):
+        batch = client.post(f"/api/websites/verify?scope=failed&limit=2"
+                            f"&checked_before={sweep}").json()
+        seen += batch["checked"]
+        sweep = batch["checked_before"]
+        if not batch["remaining"]:
+            break
+    assert seen == 5
+    assert client.post(f"/api/websites/verify?scope=failed"
+                       f"&checked_before={sweep}").json()["checked"] == 0
+
+
+def test_an_unknown_scope_is_refused(client):
+    assert client.post("/api/websites/verify?scope=everything").status_code == 400
 
 
 def test_verification_skips_what_it_has_already_checked(client, monkeypatch):

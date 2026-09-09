@@ -91,6 +91,7 @@ def enrich_record(record: dict[str, Any]) -> dict[str, Any]:
     # is merged even when the fetch failed and everything else came back empty.
     if found.get("website_status"):
         record["website_status"] = found["website_status"]
+        record["website_checked_at"] = db.now_exact()
     error = found.pop("enrich_error", None)
     note = found.pop("enrich_note", "")
     if error:
@@ -466,7 +467,8 @@ def enrich_missing(limit: int = 12, recheck: bool = False) -> dict[str, Any]:
     }
 
 
-def verify_websites(limit: int = 25, recheck: bool = False) -> dict[str, Any]:
+def verify_websites(limit: int = 25, recheck: bool = False,
+                    scope: str = "new", checked_before: str = "") -> dict[str, Any]:
     """
     Check that each business's website actually serves a page.
 
@@ -479,35 +481,102 @@ def verify_websites(limit: int = 25, recheck: bool = False) -> dict[str, Any]:
     and the caller loops. Progress survives an interruption because each batch
     commits before returning.
     """
+    # Three scopes, because "check again" means two different things. After a
+    # fix to the check itself you want the ones it wrongly ruled out — that is
+    # `failed`, and it leaves the known-live records alone so the batches are
+    # spent where the doubt is. `all` re-asks about everything.
+    #
+    # A sweep only terminates because each batch stamps website_checked_at and
+    # anything stamped since the sweep began drops out of the next batch, so the
+    # caller passes the moment it started. `recheck` is the older flag and still
+    # means "everything, one batch".
     if recheck:
-        rows, _ = db.list_businesses(limit=limit)
-        targets = [b for b in rows if b.get("website")]
-        outstanding = 0
-    else:
-        targets, outstanding = db.businesses_needing_website_check(limit)
+        scope = "all"
+    started = checked_before or db.now_exact()
+    targets, outstanding = db.businesses_needing_website_check(
+        limit, scope=scope, checked_before=started)
 
     if not targets:
-        return {"checked": 0, "live": 0, "unreachable": 0, "remaining": 0}
+        return {"checked": 0, "live": 0, "unreachable": 0, "blocked": 0,
+                "remaining": 0, "checked_before": started}
 
     with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
         statuses = list(pool.map(lambda b: enrich.website_is_live(b["website"]), targets))
 
-    live = unreachable = 0
+    live = unreachable = blocked = 0
+    checked_at = db.now_exact()
     for business, status in zip(targets, statuses):
-        if not status:
+        # Stamp the visit either way. An empty status means no website to check;
+        # "error" means we could not tell today — a timeout, a TLS handshake, a
+        # proxy in the way. Neither is a finding, and writing one down would turn
+        # a bad afternoon into a permanent mark on the record. But the sweep still
+        # has to know it has been here, or this record comes back every batch.
+        if not status or status == enrich.UNKNOWN:
+            db.update_business(int(business["id"]), {"website_checked_at": checked_at})
             continue
-        db.update_business(int(business["id"]), {"website_status": status})
-        if status == "live":
+        changed = status != (business.get("website_status") or "")
+        db.update_business(int(business["id"]),
+                           {"website_status": status, "website_checked_at": checked_at})
+        # The verdict is worth points, so a record whose verdict moved has to be
+        # rescored — otherwise a site cleared as live keeps the dead-site penalty.
+        if changed:
+            reenrich_score_only(int(business["id"]))
+        if status == enrich.LIVE:
             live += 1
-        else:
+        elif status == enrich.UNREACHABLE:
             unreachable += 1
             db.log_activity(int(business["id"]), "verified",
-                            f"{business['website']} did not respond")
+                            f"{business['website']} does not resolve")
+        else:
+            blocked += 1
+            db.log_activity(int(business["id"]), "verified",
+                            f"{business['website']} answered but would not let us read it")
 
-    log.info("verified %s websites: %s live, %s unreachable",
-             len(targets), live, unreachable)
+    log.info("verified %s websites: %s live, %s blocked, %s unreachable",
+             len(targets), live, blocked, unreachable)
     return {"checked": len(targets), "live": live, "unreachable": unreachable,
-            "remaining": max(0, outstanding - len(targets))}
+            "blocked": blocked, "remaining": max(0, outstanding - len(targets)),
+            # Echoed so the caller can pass it back and the next batch knows
+            # which records this sweep has already been to.
+            "checked_before": started}
+
+
+def check_one_website(business_id: int) -> dict[str, Any]:
+    """
+    Look at one business's website now and record what came back.
+
+    The batch sweep is the right tool for a database; this is for the moment
+    somebody opens a record, sees "doesn't resolve", clicks the link and finds a
+    perfectly good site. Being able to settle that on the spot is the difference
+    between trusting the list and second-guessing all of it.
+    """
+    business = db.get_business(business_id)
+    if not business:
+        return {"error": "No such business"}
+    if not business.get("website"):
+        return {"status": "", "message": "No website on this record to check."}
+
+    status = enrich.website_is_live(business["website"])
+    fields: dict[str, Any] = {"website_checked_at": db.now_exact()}
+    message = {
+        enrich.LIVE: "The site answered with a page. It's live.",
+        enrich.BLOCKED: "The site answered but wouldn't let us read the page — "
+                        "a firewall or a bot filter. The business is real.",
+        enrich.UNREACHABLE: "The domain has no address at all. Nothing is there.",
+        enrich.UNKNOWN: "Couldn't tell — the request timed out or something in "
+                        "between got in the way. Nothing recorded.",
+    }[status]
+    # An inconclusive check leaves the verdict alone rather than replacing what
+    # is known with a shrug.
+    if status != enrich.UNKNOWN:
+        fields["website_status"] = status
+    db.update_business(business_id, fields)
+    db.log_activity(business_id, "verified", f"{business['website']}: {message}")
+    # The verdict feeds the fit score, so a record cleared here has to stop
+    # carrying the penalty the wrong verdict gave it.
+    if "website_status" in fields:
+        reenrich_score_only(business_id)
+    return {"status": status, "message": message}
 
 
 def reenrich_score_only(business_id: int) -> dict[str, Any] | None:

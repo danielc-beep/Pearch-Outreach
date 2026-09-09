@@ -467,6 +467,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         unaligned_count=db.count_without_masthead(),
         below_rating_count=db.count_below_rating(MIN_PROSPECT_RATING),
         unreachable_count=db.list_businesses(website_status="unreachable", limit=1)[1],
+        blocked_count=db.list_businesses(website_status="blocked", limit=1)[1],
     )
 
 
@@ -1467,14 +1468,25 @@ def api_update_business(business_id: int, patch: BusinessPatch) -> JSONResponse:
 
 
 @app.post("/api/websites/verify")
-def api_verify_websites(limit: int = 25, recheck: bool = False) -> JSONResponse:
+def api_verify_websites(limit: int = 25, recheck: bool = False,
+                        scope: str = "new", checked_before: str = "") -> JSONResponse:
     """
     Check a batch of business websites.
 
     Batched so the request finishes well inside a hosting proxy's timeout —
     the response carries `remaining` and the caller loops until it is zero.
+
+    `scope` is "new" (never checked), "failed" (also the ones a previous check
+    ruled out — what you want after fixing the check) or "all".
     """
-    return JSONResponse(prospect.verify_websites(limit=min(limit, 50), recheck=recheck))
+    if scope not in db.CHECK_SCOPES:
+        raise HTTPException(status_code=400, detail=f"Unknown scope: {scope}")
+    # Timestamps carry a "+00:00" offset, and an unencoded "+" in a query string
+    # decodes to a space. Put it back rather than comparing against a mangled
+    # time, which would quietly hand the sweep the wrong batch.
+    checked_before = checked_before.replace(" 00:00", "+00:00")
+    return JSONResponse(prospect.verify_websites(limit=min(limit, 50), recheck=recheck,
+                                                 scope=scope, checked_before=checked_before))
 
 
 @app.post("/api/sample/purge")
@@ -1491,6 +1503,14 @@ def api_purge_sample() -> JSONResponse:
     log.info("purged %s sample businesses (batch %s)", removed, batch)
     return JSONResponse({"removed": removed, "batch": batch,
                          "remaining": db.stats()["total"]})
+
+
+@app.post("/api/businesses/{business_id}/website/check")
+def api_check_one_website(business_id: int) -> JSONResponse:
+    """Look at one business's website now, and say plainly what came back."""
+    if not db.get_business(business_id):
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(prospect.check_one_website(business_id))
 
 
 @app.post("/api/businesses/{business_id}/delete")

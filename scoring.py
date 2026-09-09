@@ -136,8 +136,12 @@ def score_business(b: dict[str, Any]) -> tuple[int, list[str]]:
         score += points
         reasons.append(f"{points} {label}")
     elif b.get("website_status") == "unreachable":
-        # We checked and nothing answered. A site we cannot read is a site we
-        # cannot write about, so it is worth less than one we have not checked.
+        # The domain does not resolve — nobody has registered it or pointed it
+        # anywhere. That is the only website result worth marking a business
+        # down for. "blocked" means a server answered and refused us, which
+        # says something about their firewall and nothing about their
+        # business, and "error" means we could not tell; docking either one
+        # was scoring a working electrician down for having a WAF.
         points, label = PENALTIES["dead_website"]
         score += points
         reasons.append(f"{points} {label}")

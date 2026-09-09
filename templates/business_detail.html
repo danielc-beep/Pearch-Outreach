@@ -34,10 +34,22 @@
             <dt>Website</dt><dd>
               {% if b.website %}<a href="{{ b.website }}" target="_blank" rel="noopener noreferrer">{{ b.website }}</a>
                 {% if b.website_status == 'unreachable' %}
-                <span class="pill pill-dead">doesn't resolve</span>
+                <span class="pill pill-dead">domain doesn't resolve</span>
+                {% elif b.website_status == 'blocked' %}
+                <span class="pill">site up, page blocked</span>
                 {% elif b.website_status == 'live' %}
                 <span class="pill hot">live</span>
                 {% endif %}
+                <button class="btn btn-sm" id="btn-check-site" style="margin-left:8px">Check it now</button>
+                <div class="muted small" id="site-check-note">
+                  {% if b.website_status and b.website_status != 'live' %}
+                    Open the link before acting on this. If it loads for you, check it again —
+                    the answer here is about what a machine could reach, not whether the
+                    business exists.
+                  {% elif b.website_checked_at %}
+                    Last checked {{ b.website_checked_at[:16].replace('T', ' ') }}.
+                  {% endif %}
+                </div>
               {% else %}—{% endif %}</dd>
             <dt>Address</dt><dd>{{ b.address or '—' }}</dd>
             <dt>Region</dt><dd>{{ b.region or '—' }}{{ ' · ' ~ b.state if b.state }}</dd>
@@ -389,6 +401,25 @@
       '<div class="notice notice-' + (kind || 'info') + '">' + msg + '</div>';
     window.scrollTo({top: 0, behavior: 'smooth'});
   };
+
+  // Settling "is this site actually dead?" on the spot, without a whole sweep.
+  const checkSite = document.getElementById('btn-check-site');
+  if (checkSite) checkSite.addEventListener('click', async () => {
+    const label = checkSite.textContent;
+    checkSite.disabled = true;
+    checkSite.innerHTML = '<span class="spinner"></span> Checking…';
+    try {
+      const got = await window.postJSON(`/api/businesses/${BUSINESS_ID}/website/check`);
+      document.getElementById('site-check-note').textContent = got.message || '';
+      flash(got.message || 'Checked.', got.status === 'unreachable' ? 'warn' : 'ok');
+      if (got.status) window.setTimeout(() => window.location.reload(), 1400);
+    } catch (err) {
+      flash(err.message, 'error');
+    } finally {
+      checkSite.disabled = false;
+      checkSite.textContent = label;
+    }
+  });
 
   // window.postJSON (static/app.js) reads the body as text before parsing, so a
   // proxy's HTML error page produces a readable message rather than a JSON
