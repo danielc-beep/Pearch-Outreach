@@ -207,6 +207,18 @@
         {% endif %}
 
         {% if is_client %}
+        <div class="card" id="booking">
+          <h3>Adpoint booking</h3>
+          <p class="help" style="margin-top:0">ACM invoices out of Adpoint, so a sale
+            with no booking number against it is a sale nobody is billing.</p>
+          <form id="booking-form" autocomplete="off">
+            <input type="text" id="booking-ref" maxlength="60"
+                   value="{{ b.booking_ref or '' }}" placeholder="e.g. AP-118342">
+            <button class="btn btn-sm {{ 'btn-primary' if not b.booking_ref }}" type="submit">
+              {{ 'Update' if b.booking_ref else 'Save the number' }}</button>
+          </form>
+        </div>
+
         <div class="card" id="content">
           <h3>Content</h3>
           <p class="help" style="margin-top:0">Their twelve months starts the day this
@@ -301,6 +313,19 @@
 {% block scripts %}
 <script>
   const BUSINESS_ID = {{ b.id }};
+
+  const bookingForm = document.getElementById('booking-form');
+  if (bookingForm) bookingForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    try {
+      const got = await window.postJSON(`/api/businesses/${BUSINESS_ID}/booking`,
+        {booking_ref: document.getElementById('booking-ref').value});
+      flash(got.booking_ref
+        ? `Booked against <strong>${got.booking_ref}</strong>.`
+        : 'Booking number cleared.', 'ok');
+      window.setTimeout(() => window.location.reload(), 900);
+    } catch (err) { flash(err.message, 'warn'); }
+  });
 
   // The content, and the report on it each month.
   document.querySelectorAll('.js-advance').forEach((b) => {

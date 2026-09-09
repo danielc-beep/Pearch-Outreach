@@ -22,7 +22,9 @@ DESCRIPTION = (
     "try the whole workflow without any API keys. Domains end in .example.com.au."
 )
 FIELDS = [
-    Field("industry", "Industry", "mortgage broker", required=True),
+    Field("name", "Business name", "Coastal Plumbing",
+          help="One business you already know of, rather than a whole trade."),
+    Field("industry", "Industry", "mortgage broker"),
     Field("location", "Location", "Newcastle NSW", required=True),
     Field("limit", "How many", "20", kind="number", default="20"),
 ]
@@ -68,12 +70,17 @@ def _resolve_location(location: str) -> tuple[str, str, str, str]:
 
 
 def search(query: dict[str, Any]) -> list[dict[str, Any]]:
+    wanted = (query.get("name") or "").strip()
     industry = (query.get("industry") or "business").strip()
     location = (query.get("location") or "Newcastle NSW").strip()
     try:
         limit = max(1, min(100, int(query.get("limit") or 20)))
     except (TypeError, ValueError):
         limit = 20
+    # Asked for one business by name, invent that one rather than a street of
+    # them — so the sample source behaves like the real one does.
+    if wanted:
+        limit = 1
 
     rng = _seeded_random(query)
     suburb, state, postcode, region = _resolve_location(location)
@@ -82,7 +89,7 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     used: set[str] = set()
     while len(results) < limit and len(used) < len(_PREFIXES) * len(_SUFFIXES):
-        name = f"{rng.choice(_PREFIXES)} {trade} {rng.choice(_SUFFIXES)}"
+        name = wanted or f"{rng.choice(_PREFIXES)} {trade} {rng.choice(_SUFFIXES)}"
         if name in used:
             continue
         used.add(name)

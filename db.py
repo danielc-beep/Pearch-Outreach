@@ -292,6 +292,10 @@ MIGRATIONS: list[tuple[str, str]] = [
     # is a different animal from a prospect who said no, and counting them
     # together would flatter the loss column and hide the churn.
     ("businesses", "ALTER TABLE businesses ADD COLUMN churned_at TEXT"),
+    # The Adpoint booking this sale was written against. ACM bills out of
+    # Adpoint, so a won deal with no booking number is a deal nobody is
+    # invoicing — which is a different kind of missing from a blank field.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN booking_ref TEXT"),
 ]
 
 
@@ -395,7 +399,7 @@ BUSINESS_FIELDS = (
     "linkedin", "facebook", "instagram", "description",
     "source", "source_ref", "status", "fit_score", "score_reasons",
     "notes", "website_status", "masthead", "contact_url", "deal_value", "won_at",
-    "live_at", "term_months", "churned_at",
+    "live_at", "term_months", "churned_at", "booking_ref",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -1732,6 +1736,19 @@ def reports_in_period(period: str) -> dict[int, dict[str, Any]]:
 
 
 # ---------- Following up ----------
+
+def clients_without_booking() -> int:
+    """
+    Won, not churned, and no Adpoint booking number against it.
+
+    ACM invoices out of Adpoint, so this is money agreed and not yet billable
+    — worth its own line rather than sitting inside a general "missing data".
+    """
+    row = get_conn().execute(
+        "SELECT COUNT(*) AS n FROM businesses WHERE status = 'won' AND churned_at IS NULL "
+        "AND (booking_ref IS NULL OR TRIM(booking_ref) = '')").fetchone()
+    return int(row["n"])
+
 
 def bounced(limit: int = 200) -> list[dict[str, Any]]:
     """

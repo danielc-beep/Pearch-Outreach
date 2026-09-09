@@ -1093,6 +1093,28 @@ def api_set_deal_value(body: DealValueIn) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+class BookingIn(BaseModel):
+    booking_ref: str = ""
+
+
+@app.post("/api/businesses/{business_id}/booking")
+def api_set_booking(business_id: int, body: BookingIn) -> JSONResponse:
+    """
+    The Adpoint booking this sale was written against.
+
+    Free text on purpose. Adpoint's references have changed shape before and
+    a validator that rejects a real number is worse than a field that accepts
+    a typo somebody can see and correct.
+    """
+    if not db.get_business(business_id):
+        raise HTTPException(status_code=404, detail="No such business")
+    ref = body.booking_ref.strip()[:60]
+    db.update_business(business_id, {"booking_ref": ref or None})
+    db.log_activity(business_id, "booking",
+                    f"Adpoint booking {ref}" if ref else "Adpoint booking number cleared")
+    return JSONResponse(db.get_business(business_id))
+
+
 class GoLiveIn(BaseModel):
     when: str = ""
     months: int | None = None
@@ -1331,6 +1353,9 @@ def health() -> dict[str, Any]:
 class ProspectRequest(BaseModel):
     source: str = Field(default="sample")
     enrich: bool = True
+    # A business you already know of, or a trade to sweep a town for. The
+    # sources treat them as alternatives and refuse a query carrying neither.
+    name: str = ""
     industry: str = ""
     location: str = ""
     limit: int | str = 40
@@ -1348,7 +1373,7 @@ def api_masthead_match(location: str = "") -> JSONResponse:
 
 @app.post("/api/prospect/run")
 def api_prospect_run(req: ProspectRequest) -> JSONResponse:
-    query = {"industry": req.industry, "location": req.location,
+    query = {"name": req.name, "industry": req.industry, "location": req.location,
              "limit": req.limit, "csv": req.csv, "masthead": req.masthead}
     try:
         result = prospect.run(req.source, query, enrich=req.enrich)

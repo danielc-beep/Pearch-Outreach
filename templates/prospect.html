@@ -14,8 +14,12 @@
          masthead. The fuller form below is for a source that wants more. -->
     <form class="searchbar" id="home-search" autocomplete="off">
       <div class="field">
+        <label for="hs-business">Business</label>
+        <input id="hs-business" name="name" type="text" placeholder="one you know of" />
+      </div>
+      <div class="field">
         <label for="hs-industry">Industry</label>
-        <input id="hs-industry" name="industry" type="text" placeholder="mortgage brokers" required />
+        <input id="hs-industry" name="industry" type="text" placeholder="mortgage brokers" />
       </div>
       <div class="field">
         <label for="hs-location">Location</label>
@@ -170,12 +174,25 @@
     e.preventDefault();
     const btn = document.getElementById('hs-go');
     const hint = document.getElementById('hs-hint');
+    const name = document.getElementById('hs-business').value.trim();
+    const industry = document.getElementById('hs-industry').value.trim();
+    const location = document.getElementById('hs-location').value.trim();
+    // A name and a trade are alternatives, so neither can carry `required` —
+    // which means the check has to happen here instead.
+    if (!name && !industry) {
+      hint.innerHTML = '<span style="color:var(--danger)">Name a business, or a trade '
+        + 'to search for across the town.</span>';
+      document.getElementById('hs-business').focus();
+      return;
+    }
     const body = {
       source: document.getElementById('hs-source').value,
-      industry: document.getElementById('hs-industry').value.trim(),
-      location: document.getElementById('hs-location').value.trim(),
+      name: name,
+      industry: industry,
+      location: location,
       masthead: document.getElementById('hs-masthead').value,
-      limit: 40,
+      // One business needs one result. Forty is for sweeping a trade.
+      limit: name ? 5 : 40,
     };
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span>';

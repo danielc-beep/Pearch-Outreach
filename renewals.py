@@ -146,6 +146,7 @@ def _card(business: dict[str, Any], today: date) -> dict[str, Any]:
         "term": int(contract["months"]) if contract else term_of(business),
         "value": float(contract["value"]) if contract else (business.get("deal_value") or 0.0),
         "renewals": sum(1 for c in contracts if c["kind"] == "renewal"),
+        "booking_ref": (business.get("booking_ref") or "").strip(),
         "years": len(contracts),
     }
 
@@ -176,6 +177,7 @@ def book(include_churned: bool = False, today: date | None = None) -> dict[str, 
         "at_risk_value": sum(c["value"] for c in at_risk),
         "at_risk": len(at_risk),
         "book_value": sum(c["value"] for c in cards),
+        "unbooked": sum(1 for c in cards if not c["booking_ref"]),
         "churned": db.count_churned(),
     }
 

@@ -149,6 +149,9 @@
       {% if book.counts.not_live %}
       <span class="rev-cell is-warn"><b>{{ book.counts.not_live }}</b><span>not live yet</span></span>
       {% endif %}
+      {% if book.unbooked %}
+      <span class="rev-cell is-warn"><b>{{ book.unbooked }}</b><span>with no Adpoint number</span></span>
+      {% endif %}
       {% if book.at_risk %}
       <span class="rev-cell is-warn"><b>${{ '{:,.0f}'.format(book.at_risk_value) }}</b><span>up inside three months</span></span>
       {% endif %}
@@ -170,6 +173,8 @@
             <td>
               <a href="/businesses/{{ c.id }}"><strong>{{ c.name }}</strong></a>
               <span class="sub">{{ c.suburb or c.region or '' }}{% if c.renewals %} · {{ c.renewals }} renewal{{ '' if c.renewals == 1 else 's' }}{% endif %}</span>
+              {% if c.booking_ref %}<span class="sub ren-booked">Adpoint {{ c.booking_ref }}</span>
+              {% else %}<a class="sub ren-unbooked" href="/businesses/{{ c.id }}#booking">No Adpoint number</a>{% endif %}
             </td>
             <td class="sub">{{ masthead_name(c.masthead)|masthead_label }}</td>
             <td class="sub">{{ c.live_at or '—' }}</td>

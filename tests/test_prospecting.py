@@ -120,3 +120,105 @@ def test_a_sweep_still_takes_one_trade_at_a_time(client, monkeypatch):
     prospect.territory_step("newcastleherald.com.au", "panel beater", enrich=False)
     assert len(seen) == 1
     assert seen[0]["industry"] == "panel beater"
+
+
+# ---------- Searching for one business by name ----------
+# A name and a trade are alternatives, not a pair: one asks for a business you
+# already have in mind, the other for everyone doing a job in a town.
+
+def test_a_name_finds_that_business(client):
+    import sources.seed as seed
+    got = seed.search({"name": "Coastal Plumbing", "location": "Newcastle NSW"})
+    assert [b["name"] for b in got] == ["Coastal Plumbing"]
+
+
+def test_a_name_asks_for_one_not_forty(client):
+    import sources.seed as seed
+    got = seed.search({"name": "Coastal Plumbing", "location": "Newcastle NSW", "limit": 40})
+    assert len(got) == 1, "one business needs one result"
+
+
+def test_a_trade_still_sweeps_the_town(client):
+    import sources.seed as seed
+    got = seed.search({"industry": "plumber", "location": "Newcastle NSW", "limit": 4})
+    assert len(got) == 4
+    assert len({b["name"] for b in got}) == 4
+
+
+def test_neither_a_name_nor_a_trade_is_refused(client):
+    """Google would answer a bare suburb with whatever it felt like."""
+    from unittest.mock import patch
+    import pytest
+    import sources.google_places as places
+    with patch.object(places, "available", lambda: (True, "")):
+        with pytest.raises(ValueError, match="name or a business type"):
+            places.search({"location": "Newcastle NSW"})
+
+
+def test_a_named_search_does_not_ask_google_for_a_category(client):
+    """
+    "Bakers Delight in Newcastle" reads as a filter and comes back as every
+    bakery in town. The name goes in as a plain phrase.
+    """
+    from unittest.mock import MagicMock, patch
+    import sources.google_places as places
+    sent = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"places": []}
+
+    def capture(url, headers=None, json=None, **kw):
+        sent.update(json or {})
+        return FakeResponse()
+
+    with patch.object(places, "available", lambda: (True, "")):
+        with patch.object(places.httpx, "Client") as client_cls:
+            client_cls.return_value.__enter__.return_value.post = capture
+            places.search({"name": "Bakers Delight", "location": "Newcastle NSW"})
+    assert sent["textQuery"] == "Bakers Delight Newcastle NSW"
+    assert " in " not in sent["textQuery"]
+
+
+def test_a_trade_search_still_reads_as_a_category(client):
+    from unittest.mock import patch
+    import sources.google_places as places
+    sent = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"places": []}
+
+    def capture(url, headers=None, json=None, **kw):
+        sent.update(json or {})
+        return FakeResponse()
+
+    with patch.object(places, "available", lambda: (True, "")):
+        with patch.object(places.httpx, "Client") as client_cls:
+            client_cls.return_value.__enter__.return_value.post = capture
+            places.search({"industry": "plumbers", "location": "Newcastle NSW"})
+    assert sent["textQuery"] == "plumbers in Newcastle NSW"
+
+
+def test_the_search_bar_offers_both(client):
+    body = client.get("/prospect").text
+    assert 'id="hs-business"' in body and 'id="hs-industry"' in body
+    bar = body.split('class="searchbar"')[1].split("</form>")[0]
+    # Either one will do, so neither can demand itself. Location still can:
+    # a search always needs somewhere to search.
+    for field in ("hs-business", "hs-industry"):
+        tag = bar.split(f'id="{field}"')[1].split(">")[0]
+        assert "required" not in tag, tag
+    assert "required" in bar.split('id="hs-location"')[1].split(">")[0]
+
+
+def test_the_run_endpoint_takes_a_name(client):
+    got = client.post("/api/prospect/run",
+                      json={"source": "sample", "name": "Coastal Plumbing",
+                            "location": "Newcastle NSW", "enrich": False}).json()
+    assert got["found"] == 1
+    assert got["businesses"][0]["name"] == "Coastal Plumbing"

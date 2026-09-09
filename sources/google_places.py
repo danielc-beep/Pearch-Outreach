@@ -28,7 +28,14 @@ DESCRIPTION = (
     "phone, rating and review count."
 )
 FIELDS = [
-    Field("industry", "Business type", "mortgage brokers", required=True),
+    # A name and a trade are alternatives, not a pair: one asks Google for a
+    # business you already have in mind, the other for everyone doing a job in
+    # a town. Neither is required on its own, and search() refuses a query
+    # carrying neither rather than sending Google a bare suburb.
+    Field("name", "Business name", "Coastal Plumbing",
+          help="Looking for one business you already know of? Put its name here "
+               "and leave the trade blank."),
+    Field("industry", "Business type", "mortgage brokers"),
     Field("location", "Location", "Newcastle NSW", required=True),
     Field("limit", "How many", "60", kind="number", default="60",
           help="Google returns 20 per page and caps a text search at 60 results."),
@@ -109,11 +116,19 @@ def search(query: dict[str, Any]) -> list[dict[str, Any]]:
     if not ok:
         raise RuntimeError(reason)
 
+    name = (query.get("name") or "").strip()
     industry = (query.get("industry") or "").strip()
     location = (query.get("location") or "").strip()
-    text_query = " in ".join(part for part in (industry, location) if part)
-    if not text_query:
-        raise ValueError("industry or location is required")
+    if not name and not industry:
+        raise ValueError("a business name or a business type is required")
+    if name:
+        # "Coastal Plumbing Newcastle NSW" — how a person types a business they
+        # already know of. "in" belongs to a category search and reads as a
+        # filter here, which is how "Bakers Delight in Newcastle" comes back as
+        # every bakery in town.
+        text_query = " ".join(part for part in (name, industry, location) if part)
+    else:
+        text_query = " in ".join(part for part in (industry, location) if part)
     try:
         limit = max(1, min(MAX_RESULTS, int(query.get("limit") or 60)))
     except (TypeError, ValueError):

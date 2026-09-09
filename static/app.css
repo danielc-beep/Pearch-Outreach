@@ -1481,6 +1481,17 @@ table.bare tr.is-stale td:first-child { box-shadow: inset 2px 0 0 var(--warning)
 }
 
 #brief-form, #report-form { display: grid; gap: 8px; }
+/* The topbar is sticky, so a jump to one of these landed it underneath the
+   nav — the heading you were sent to see hidden behind the thing that sent
+   you. Clear its height plus a little air. */
+#booking, #content, #reports, #renewals, #target { scroll-margin-top: 96px; }
+#booking-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#booking-form input {
+  flex: 1; min-width: 150px; font: inherit; font-size: 13px; color: var(--text);
+  background: var(--ink-sunken); border: 1px solid var(--border);
+  border-radius: 9px; padding: 7px 10px;
+}
+#booking-form input:focus { outline: none; border-color: var(--border-lit); }
 .del-fields { display: flex; flex-wrap: wrap; gap: 8px; }
 .del-fields label, .del-file {
   display: flex; flex-direction: column; gap: 3px; font-size: 11.5px;
@@ -1511,6 +1522,10 @@ table.bare tr.is-stale td:first-child { box-shadow: inset 2px 0 0 var(--warning)
 .ren-state.is-soon     { color: var(--cyan-soft); background: rgba(0,154,199,0.16); }
 .ren-state.is-running  { color: var(--success); background: rgba(63,214,147,0.13); }
 table.renewals td { vertical-align: top; }
+/* Present and correct, or a link to the one screen that fixes it. */
+.ren-booked { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ren-unbooked { color: var(--warning); text-decoration: none; }
+.ren-unbooked:hover { text-decoration: underline; }
 /* A sub-line under the thing it belongs to, in any of these tables. Only
    inside a cell, never a cell that happens to carry the class — matching
    those turned every td into a block and stacked the table into one column. */

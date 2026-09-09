@@ -238,6 +238,15 @@ Uploaded files live beside the database and are **not** inside a snapshot. The
 backups page says so and prints the folder — a snapshot records that a report
 exists and what it said, not the file.
 
+**The Adpoint booking number** sits on each client's own page once they are
+won. ACM invoices out of Adpoint, so a sale with no booking number against it
+is money agreed and nothing to bill — a different kind of missing from a blank
+field, which is why it gets its own line on the board and its own column in
+the client book rather than sitting inside a general "incomplete record". The
+field is free text on purpose: Adpoint's references have changed shape before,
+and a validator that rejects a real number is worse than a field that takes a
+typo somebody can see.
+
 Underneath is the client book. A won deal with no go-live date is the top row,
 not a hidden one — that is a client whose content nobody has published. A
 renewal starts the day the current term ends, so renewing early or late does

@@ -85,6 +85,12 @@ def board() -> list[dict[str, Any]]:
               "Every live client gets the Pearch report each month. It is the evidence "
               "the renewal conversation rests on.",
               "File them", "/revenue/delivery"),
+        # Sold and not booked in Adpoint is sold and not being invoiced.
+        _item("booking", db.clients_without_booking(),
+              "sales with no Adpoint number",
+              "ACM invoices out of Adpoint, so until the booking number is on the "
+              "record there is nothing to bill against.",
+              "Add the numbers", "/revenue#renewals", "warn"),
         _item("renewals", book["counts"].get("overdue", 0)
               + book["counts"].get("imminent", 0),
               "up for renewal",
