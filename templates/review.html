@@ -9,8 +9,11 @@
       <div>
         <div class="eyebrow">Review queue</div>
         <h2>Work the list, <em>one at a time</em></h2>
-        <p class="lede">Read the business, read its email, and decide. Approve sends it to
-          the outbox ready to go; not a fit takes it out for good.</p>
+        <p class="lede">The judgement calls only. A business rated above
+          {{ '%g'|format(auto_bar.rating) }} with a live website, an address to write to and a
+          fit score above {{ auto_bar.score }} qualifies itself and never appears here &mdash;
+          its email is still read in the outbox before it sends. What is left is the
+          ones the rule cannot settle.</p>
       </div>
       <div class="row">
         {% if undrafted %}
@@ -60,6 +63,20 @@
     </form>
 
     <div id="flash"></div>
+
+    <!-- Anything already in the database that clears the bar. New businesses
+         qualify themselves as they are found; this is the backlog. -->
+    {% if auto_waiting %}
+    <div class="notice notice-info">
+      <strong>{{ auto_waiting }} of these need nobody.</strong>
+      They are rated above {{ '%g'|format(auto_bar.rating) }}, their website answers, there is
+      an address on file and they score above {{ auto_bar.score }} &mdash; every measure this
+      app has says prospect.
+      <button class="btn btn-sm btn-primary" id="qualify-sweep" style="margin-left:8px">
+        Qualify {{ 'it' if auto_waiting == 1 else 'them' }}
+      </button>
+    </div>
+    {% endif %}
 
     <!-- The batch the checks are happy with. Approving one at a time is
          re-running a filter by hand: the gates already decided these are
@@ -136,6 +153,23 @@
     flashEl.innerHTML = '<div class="notice notice-' + kind + '">' + escapeHtml(message) + '</div>';
     window.setTimeout(() => { flashEl.innerHTML = ''; }, 4000);
   }
+
+  // Moving the backlog the rule already covers. Same reload reasoning as the
+  // batch approval below: the count, the tabs and the queue all move at once.
+  const sweep = document.getElementById('qualify-sweep');
+  if (sweep) sweep.addEventListener('click', async () => {
+    sweep.disabled = true;
+    sweep.innerHTML = '<span class="spinner"></span> Qualifying…';
+    try {
+      const got = await window.postJSON('/api/qualify/sweep');
+      flash(got.qualified + ' qualified. ' + got.remaining + ' left to decide.', 'ok');
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch (err) {
+      flash(err.message, 'error');
+      sweep.disabled = false;
+      sweep.textContent = 'Qualify them';
+    }
+  });
 
   // Approving the batch, then reloading — the counts, the tabs and the
   // remaining queue all move, and a page that half-updates itself after a

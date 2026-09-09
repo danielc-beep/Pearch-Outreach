@@ -20,6 +20,7 @@ import sources
 from config import MIN_PROSPECT_RATING, region_for_postcode
 import enrich
 from enrich import enrich_from_website, guess_industry
+import qualify
 from scoring import apply_score, score_business
 from util import clean_email, clean_phone, domain_of, normalise_url, parse_address, truncate
 
@@ -263,7 +264,11 @@ def run(source_key: str, query: dict[str, Any], *, enrich: bool = True) -> dict[
 
     db.finish_run(run_id, found=found_count, new=new_count, dupes=dupe_count,
                   result_ids=[int(b['id']) for b in touched if b.get('id')])
+    # Anything that already clears the bar is qualified on the spot rather
+    # than queued for somebody to agree with the filter it just passed.
+    qualified = qualify.sweep()["qualified"]
     return {
+        "qualified": qualified,
         "run_id": run_id,
         "source": source_key,
         "source_label": info.label,
@@ -382,6 +387,8 @@ def reenrich(business_id: int) -> dict[str, Any] | None:
         db.add_contact(business_id, {"email": email, "source": "website"})
     db.log_activity(business_id, "enriched",
                     note or f"Found {enriched.get('email')} on the website")
+    # Finding the address can be the last gate it was missing.
+    qualify.qualify_one(business_id)
     return db.get_business(business_id)
 
 
@@ -457,6 +464,9 @@ def enrich_missing(limit: int = 12, recheck: bool = False) -> dict[str, Any]:
     return {
         "checked": len(updated),
         "found": found,
+        # The address is usually the last gate a business is missing, so the
+        # ones that now clear the bar move without waiting to be agreed with.
+        "qualified": qualify.sweep()["qualified"],
         # `outstanding` counted everything still needing enrichment before this
         # batch, so the unfinished ones are already inside it — adding them
         # again would make remaining grow, and the caller's progress guard
@@ -536,6 +546,8 @@ def verify_websites(limit: int = 25, recheck: bool = False,
              len(targets), live, blocked, unreachable)
     return {"checked": len(targets), "live": live, "unreachable": unreachable,
             "blocked": blocked, "remaining": max(0, outstanding - len(targets)),
+            # A site confirmed live is a gate cleared.
+            "qualified": qualify.sweep()["qualified"],
             # Echoed so the caller can pass it back and the next batch knows
             # which records this sweep has already been to.
             "checked_before": started}
@@ -576,6 +588,7 @@ def check_one_website(business_id: int) -> dict[str, Any]:
     # carrying the penalty the wrong verdict gave it.
     if "website_status" in fields:
         reenrich_score_only(business_id)
+        qualify.qualify_one(business_id)
     return {"status": status, "message": message}
 
 

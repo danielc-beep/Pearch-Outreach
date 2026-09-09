@@ -29,6 +29,26 @@
       Sending is live. {{ sends_today }} of {{ daily_cap }} sends used today.
     </div>
     {% endif %}
+    <!-- The drafts nobody has read. A business that qualified itself skips the
+         review queue, so this is where its letter gets checked — the same
+         checks, run over the drafts instead of over the queue. -->
+    {% if clean_drafts %}
+    <div class="notice notice-info row">
+      <span><strong>{{ clean_drafts }} draft{{ '' if clean_drafts == 1 else 's' }} pass every check.</strong>
+        Right masthead named, a real address, no repeat to a firm we have already written to.
+        Approving puts {{ 'it' if clean_drafts == 1 else 'them' }} in the send queue; it sends nothing.</span>
+      <button class="btn btn-sm btn-primary right" id="btn-approve-clean">
+        Approve {{ clean_drafts }}
+      </button>
+    </div>
+    {% endif %}
+    {% if flagged_drafts %}
+    <div class="notice notice-warn">
+      <strong>{{ flagged_drafts }} draft{{ '' if flagged_drafts == 1 else 's' }} tripped a check.</strong>
+      Those want reading properly.
+      <a href="/admin/review">Work them one at a time</a>.
+    </div>
+    {% endif %}
     {% if approved_count %}
     <div class="notice notice-info row">
       <span><strong>{{ approved_count }} approved and ready.</strong>
@@ -158,6 +178,25 @@
       }
     });
   }
+  // Approving every clean draft at once. The server re-checks each one rather
+  // than trusting the count this page was rendered with.
+  const approveClean = document.getElementById('btn-approve-clean');
+  if (approveClean) approveClean.addEventListener('click', async () => {
+    approveClean.disabled = true;
+    approveClean.innerHTML = '<span class="spinner"></span> Approving…';
+    try {
+      const got = await window.postJSON('/api/messages/approve-clean', {ids: []});
+      const held = (got.skipped || []).length;
+      flash(got.approved + ' approved'
+            + (held ? ', ' + held + ' held back for a read' : '') + '.', 'ok');
+      window.setTimeout(() => window.location.reload(), 1200);
+    } catch (e) {
+      flash(e.message, 'error');
+      approveClean.disabled = false;
+      approveClean.textContent = 'Approve';
+    }
+  });
+
   document.querySelectorAll('.js-approve').forEach((b) => b.addEventListener('click', async () => {
     try { await act('/api/messages/' + b.dataset.id + '/approve'); location.reload(); }
     catch (e) { flash(e.message, 'error'); }

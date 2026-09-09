@@ -86,16 +86,33 @@ def inspect(business_id: int) -> dict[str, Any] | None:
             "flags": flags_for(business, draft)}
 
 
-def triage(**filters: Any) -> dict[str, Any]:
+def drafts_awaiting_approval(limit: int = 5000) -> list[int]:
     """
-    Split the queue into what a person needs to read and what they do not.
+    Business ids with a draft nobody has approved yet, best fit first.
+
+    A business that qualified itself never passes through the review queue, so
+    this is how its letter still gets read: the same checks, run over the
+    drafts instead of over the queue.
+    """
+    pending = {int(m["business_id"]) for m in db.list_messages(status="draft", limit=limit)
+               if m.get("business_id")}
+    if not pending:
+        return []
+    rows, _ = db.list_businesses(sort="score", limit=limit)
+    return [int(r["id"]) for r in rows if int(r["id"]) in pending]
+
+
+def triage(ids: list[int] | None = None, **filters: Any) -> dict[str, Any]:
+    """
+    Split a set of businesses into what a person needs to read and what they
+    do not.
 
     Returns ids rather than records: the clean list exists to be approved in
     one go, and the flagged list is worked one card at a time as before.
     """
     clean: list[int] = []
     flagged: list[dict[str, Any]] = []
-    for business_id in queue_ids(**filters):
+    for business_id in (queue_ids(**filters) if ids is None else ids):
         business = db.get_business(business_id)
         if not business:
             continue

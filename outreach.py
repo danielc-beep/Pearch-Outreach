@@ -420,7 +420,9 @@ def draft_batch(limit: int = 8, use_ai: bool = True,
     A business that cannot be drafted for (no address, suppressed, marked
     do-not-contact) is reported and skipped rather than failing the batch.
     """
-    targets, outstanding = db.list_businesses(needs_review=True, needs_draft=True,
+    # `contactable`, not `needs_review`: a business that qualified itself has
+    # left the review queue but still needs its letter written.
+    targets, outstanding = db.list_businesses(contactable=True, needs_draft=True,
                                               sort="score", limit=limit, **filters)
     if not targets:
         return {"drafted": 0, "skipped": 0, "remaining": 0, "problems": [], "businesses": []}

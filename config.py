@@ -170,6 +170,19 @@ ICP = {
 # dropped too. Set PEARCH_MIN_RATING=0 to take everything.
 MIN_PROSPECT_RATING = float(os.getenv("PEARCH_MIN_RATING", "4.0"))
 
+# ---------- The bar a business clears without anybody looking at it ----------
+# The review queue exists for judgement calls. A business rated above four
+# stars, with a website we have confirmed answers, a contact address on file
+# and a fit score above sixty is not a judgement call — asking somebody to
+# press Approve on it four hundred times is asking them to re-run a filter by
+# hand. These four are checked together; clearing three of them is not
+# clearing the bar.
+#
+# The email itself is still read before it sends. This qualifies the business,
+# not the letter.
+AUTO_QUALIFY_MIN_RATING = float(os.getenv("PEARCH_AUTO_QUALIFY_RATING", "4.0"))
+AUTO_QUALIFY_MIN_SCORE = int(os.getenv("PEARCH_AUTO_QUALIFY_SCORE", "60"))
+
 # What a deal is worth when nobody has priced it. Zero means "do not guess",
 # which is the default: an invented pipeline number is worse than a small one.
 # Set it to the average package price and the dashboard will fill in the

@@ -302,8 +302,8 @@ def test_verification_flags_a_website_that_does_not_resolve(client, monkeypatch)
                         lambda url: "unreachable" if "example.com.au" in url else "live")
 
     result = client.post("/api/websites/verify").json()
-    assert {k: v for k, v in result.items() if k != "checked_before"} == {
-        "checked": 2, "live": 1, "unreachable": 1, "blocked": 0, "remaining": 0}
+    tally = {k: v for k, v in result.items() if k not in ("checked_before", "qualified")}
+    assert tally == {"checked": 2, "live": 1, "unreachable": 1, "blocked": 0, "remaining": 0}
 
     dead = client.get("/api/businesses?").json()["businesses"]
     by_name = {b["name"]: b["website_status"] for b in dead}

@@ -1031,7 +1031,7 @@ def delete_business(business_id: int, reason: str = "deleted by hand") -> str:
 # two different truths on one screen.
 
 FILTERS = ("q", "status", "region", "state", "industry", "source", "has_email",
-           "has_website", "website_status", "masthead", "needs_review",
+           "has_website", "website_status", "masthead", "contactable", "needs_review",
            "needs_draft", "min_score", "min_rating")
 
 
@@ -1046,6 +1046,7 @@ def _where(
     has_website: bool | None = None,
     website_status: str = "",
     masthead: str = "",
+    contactable: bool = False,
     needs_review: bool = False,
     needs_draft: bool = False,
     min_score: int = 0,
@@ -1086,10 +1087,16 @@ def _where(
         where.append("website IS NOT NULL AND website != ''")
     elif has_website is False:
         where.append("(website IS NULL OR website = '')")
-    if needs_review:
-        # The review queue: everyone still awaiting a decision. Contactable,
-        # not settled either way, and without a draft already approved or
-        # sent — approving is what takes a business out of the queue.
+    if needs_review or contactable:
+        # `contactable` is everyone worth writing to: rated, aligned to a real
+        # masthead, an address to write to, nothing decided against them and no
+        # draft already approved or sent.
+        #
+        # `needs_review` is that set minus the ones already qualified — the
+        # review queue is for judgement calls, and a business that clears the
+        # bar on its own is not one. Drafting asks for `contactable`, so an
+        # auto-qualified business still gets its letter written; it just does
+        # not need somebody to press Approve on the business first.
         #
         # And at or above the rating floor. Discovery already filters on it,
         # but a CSV import does not, and rows that predate the floor are still
@@ -1114,6 +1121,8 @@ def _where(
         where.append("status NOT IN ('contacted','replied','won','lost','disqualified')")
         where.append("id NOT IN (SELECT business_id FROM messages "
                      "WHERE status IN ('approved','sent'))")
+    if needs_review:
+        where.append("status != 'qualified'")
     if needs_draft:
         # In the queue and with nothing written yet — what a bulk draft run
         # is for. Anything already drafted is left alone rather than getting
@@ -1469,6 +1478,69 @@ def sends_today() -> int:
 
 
 # ---------- Activities ----------
+
+# ---------- Qualifying without a person ----------
+# The gates live in qualify.py; this is the same test written in SQL so the
+# whole backlog moves in one statement rather than four hundred round trips.
+# Kept beside each other on purpose: two copies of a rule is a rule that
+# drifts, so the tests run a record through both and insist they agree.
+_CLEARS_THE_BAR = """
+    rating IS NOT NULL AND rating > :min_rating
+    AND website_status = 'live'
+    AND email IS NOT NULL AND TRIM(email) != ''
+    AND fit_score > :min_score
+    AND do_not_contact = 0
+"""
+
+
+def _bar_clause(min_rating: float, min_score: int,
+                statuses: tuple[str, ...]) -> tuple[str, dict[str, Any]]:
+    marks = ", ".join(f":s{i}" for i in range(len(statuses)))
+    params: dict[str, Any] = {"min_rating": min_rating, "min_score": min_score}
+    params.update({f"s{i}": s for i, s in enumerate(statuses)})
+    return f"status IN ({marks}) AND {_CLEARS_THE_BAR}", params
+
+
+def count_clearing_the_bar(min_rating: float, min_score: int,
+                           statuses: tuple[str, ...], **filters: Any) -> int:
+    """How many businesses would qualify themselves if the sweep ran now."""
+    clause, params = _bar_clause(min_rating, min_score, statuses)
+    row = get_conn().execute(
+        f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}", params).fetchone()
+    return int(row["n"])
+
+
+def qualify_clearing_the_bar(min_rating: float, min_score: int,
+                             statuses: tuple[str, ...],
+                             limit: int = 0) -> list[dict[str, Any]]:
+    """
+    Move every business clearing the bar to qualified. Returns what moved.
+
+    Read first, then write: the caller wants to say which businesses moved,
+    and an UPDATE cannot tell it. Both happen inside one transaction, so a
+    record cannot change in between and be reported as something it is not.
+    """
+    clause, params = _bar_clause(min_rating, min_score, statuses)
+    sql = f"SELECT id, name, fit_score FROM businesses WHERE {clause} ORDER BY fit_score DESC"
+    if limit:
+        sql += f" LIMIT {int(limit)}"
+    with tx() as conn:
+        rows = conn.execute(sql, params).fetchall()
+        if not rows:
+            return []
+        ids = [int(r["id"]) for r in rows]
+        marks = ", ".join("?" for _ in ids)
+        conn.execute(f"UPDATE businesses SET status = 'qualified', updated_at = ? "
+                     f"WHERE id IN ({marks})", (now(), *ids))
+        conn.executemany(
+            "INSERT INTO activities (created_at, business_id, kind, detail) "
+            "VALUES (?, ?, 'qualified', ?)",
+            [(now(), int(r["id"]),
+              f"Clears the bar on its own: rated above {min_rating:g}, website live, "
+              f"contact address, fit score {r['fit_score']}") for r in rows],
+        )
+    return [{"id": int(r["id"]), "name": r["name"], "fit_score": r["fit_score"]} for r in rows]
+
 
 def log_activity(business_id: int | None, kind: str, detail: str = "") -> None:
     with tx() as conn:

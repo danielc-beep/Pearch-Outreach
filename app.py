@@ -32,6 +32,7 @@ import mastheads
 import demo
 import outreach
 import prospect
+import qualify
 import review
 import target
 import worklist
@@ -48,7 +49,7 @@ import sources
 import auth
 from auth import PasswordMiddleware
 from config import (ANTHROPIC_API_KEY, APP_NAME, APP_PASSWORD, APP_TAGLINE, APP_USERNAME,
-                    INBOUND_SECRET,
+                    AUTO_QUALIFY_MIN_RATING, AUTO_QUALIFY_MIN_SCORE, INBOUND_SECRET,
                     DB_PATH, DAILY_SEND_CAP, MIN_PROSPECT_RATING, SEND_ENABLED,
                     STATIC_DIR, TEMPLATES_DIR)
 from scoring import band
@@ -317,11 +318,17 @@ def review_page(request: Request) -> HTMLResponse:
         counts=_review_counts(),
         triaged=review.triage(**filters),
         total=len(review.queue_ids(**filters)),
-        undrafted=db.list_businesses(needs_review=True, needs_draft=True, limit=1, **filters)[1],
+        # `contactable`, matching what the draft run actually writes for: a
+        # business that qualified itself is no longer in this queue but still
+        # needs its letter, and a button whose number disagrees with what it
+        # does is worse than no number.
+        undrafted=db.list_businesses(contactable=True, needs_draft=True, limit=1, **filters)[1],
         f={k: (request.query_params.get(k) or "") for k in REVIEW_FILTERS},
         regions=db.distinct_values("region"),
         industries=db.industry_options(),
         has_filters=bool(filters),
+        auto_waiting=qualify.waiting(),
+        auto_bar={"rating": AUTO_QUALIFY_MIN_RATING, "score": AUTO_QUALIFY_MIN_SCORE},
     )
 
 
@@ -371,6 +378,41 @@ class ApproveClean(BaseModel):
 def api_review_approve_clean(body: ApproveClean) -> JSONResponse:
     """Approve a batch, re-checking each one rather than trusting the list."""
     return JSONResponse(review.approve_all(body.ids))
+
+
+@app.post("/api/qualify/sweep")
+def api_qualify_sweep() -> JSONResponse:
+    """
+    Qualify everything already in the database that clears the bar.
+
+    New businesses qualify themselves as they are found; this is for the ones
+    that were already sitting in the queue when the rule arrived.
+    """
+    result = qualify.sweep()
+    log.info("auto-qualified %s businesses", result["qualified"])
+    return JSONResponse({"qualified": result["qualified"],
+                         "remaining": len(review.queue_ids())})
+
+
+@app.get("/api/messages/clean")
+def api_clean_drafts() -> JSONResponse:
+    """The drafts the automated checks are happy with, and the ones they are not."""
+    result = review.triage(ids=review.drafts_awaiting_approval())
+    return JSONResponse({"clean": result["clean"], "clean_count": result["clean_count"],
+                         "flagged": result["flagged"],
+                         "flagged_count": result["flagged_count"]})
+
+
+@app.post("/api/messages/approve-clean")
+def api_approve_clean_drafts(body: ApproveClean) -> JSONResponse:
+    """
+    Approve a batch of drafts, re-checking each one rather than trusting the list.
+
+    The same checks the review queue runs. A business that qualified itself
+    still has its letter read here before anything is sendable.
+    """
+    ids = body.ids or review.triage(ids=review.drafts_awaiting_approval())["clean"]
+    return JSONResponse(review.approve_all(ids))
 
 
 class DraftBatch(BaseModel):
@@ -682,6 +724,16 @@ def api_move_stage(business_id: int, move: StageMove) -> JSONResponse:
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def _draft_triage() -> dict[str, int]:
+    """
+    How the unread drafts split. A business that qualified itself never passes
+    through the review queue, so the outbox is where its letter is checked.
+    """
+    triaged = review.triage(ids=review.drafts_awaiting_approval())
+    return {"clean_drafts": triaged["clean_count"],
+            "flagged_drafts": triaged["flagged_count"]}
+
+
 @app.get("/emails/outbox", response_class=HTMLResponse)
 def outbox(request: Request, status: str = "") -> HTMLResponse:
     return page(
@@ -694,6 +746,7 @@ def outbox(request: Request, status: str = "") -> HTMLResponse:
         sends_today=db.sends_today(),
         daily_cap=DAILY_SEND_CAP,
         approved_count=len(db.list_messages(status="approved", limit=5000)),
+        **_draft_triage(),
     )
 
 
