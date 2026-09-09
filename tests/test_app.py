@@ -29,7 +29,10 @@ def test_unknown_source_is_a_400(client):
 
 def test_filters_narrow_the_list(client, sample_run):
     total = client.get("/api/businesses").json()["total"]
-    contactable = client.get("/api/businesses?min_score=90").json()["total"]
+    # Not a round number: an unaudited business tops out below the maximum,
+    # because half the card is what its website is missing and nobody has
+    # read it yet. A filter set above that ceiling would look like a bug.
+    contactable = client.get("/api/businesses?min_score=40").json()["total"]
     assert 0 < contactable <= total
 
 

@@ -301,6 +301,17 @@ MIGRATIONS: list[tuple[str, str]] = [
     # the business — and a sweep still has to know it has been there, or it
     # hands the same records back for ever.
     ("businesses", "ALTER TABLE businesses ADD COLUMN website_checked_at TEXT"),
+    # What an answer engine can make of their website — read off the HTML
+    # enrichment already downloads, and the half of the fit score that says
+    # whether there is anything for us to sell them. See aeo.py.
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_audited_at TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_schema TEXT"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_faq INTEGER"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_blog INTEGER"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_meta INTEGER"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_pages INTEGER"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_words INTEGER"),
+    ("businesses", "ALTER TABLE businesses ADD COLUMN aeo_questions INTEGER"),
 ]
 
 
@@ -417,6 +428,8 @@ BUSINESS_FIELDS = (
     "source", "source_ref", "status", "fit_score", "score_reasons",
     "notes", "website_status", "masthead", "contact_url", "deal_value", "won_at",
     "live_at", "term_months", "churned_at", "booking_ref", "website_checked_at",
+    "aeo_audited_at", "aeo_schema", "aeo_faq", "aeo_blog", "aeo_meta",
+    "aeo_pages", "aeo_words", "aeo_questions",
     "do_not_contact", "last_contacted_at", "enriched_at",
 )
 
@@ -1212,6 +1225,31 @@ def businesses_needing_website_check(
         f"SELECT * FROM businesses WHERE {clause} "
         "ORDER BY website_checked_at IS NOT NULL, website_checked_at, id LIMIT ?",
         (*params, limit),
+    ).fetchall()
+    return [row_to_dict(r) for r in rows], int(total)
+
+
+def businesses_needing_audit(limit: int = 20,
+                            checked_before: str = "") -> tuple[list[dict[str, Any]], int]:
+    """
+    A batch of live sites nobody has read for AEO signals yet, plus the total.
+
+    Same shape and same reasoning as the website check: selects on when we
+    last looked rather than on the verdict, so a sweep terminates even when
+    every site in it comes back unreadable.
+    """
+    clause = ("website IS NOT NULL AND website != '' "
+              "AND website_status != 'unreachable' "
+              "AND (aeo_audited_at IS NULL OR aeo_audited_at < ?)")
+    params = [checked_before or now_exact()]
+    conn = get_conn()
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n FROM businesses WHERE {clause}", params).fetchone()["n"]
+    # Best prospects first: an audit changes where a business sits on the call
+    # list, so the ones already near the top are worth settling soonest.
+    rows = conn.execute(
+        f"SELECT * FROM businesses WHERE {clause} "
+        "ORDER BY fit_score DESC, id LIMIT ?", (*params, limit),
     ).fetchall()
     return [row_to_dict(r) for r in rows], int(total)
 

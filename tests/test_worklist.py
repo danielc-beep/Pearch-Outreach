@@ -40,12 +40,16 @@ def test_every_job_appears_when_there_is_work(client):
     rows = _seed(8)
     # The sample source deliberately leaves some records without an address,
     # so that count is measured as a change rather than an absolute.
-    before_no_email = db.list_businesses(has_email=False, limit=1)[1]
+    before_no_email = db.list_businesses(has_email=False, has_website=True, limit=1)[1]
 
+    # Pick by what each job needs rather than by position: `rows` is sorted by
+    # fit score, so changing the scorecard silently changed which record each
+    # of these lines was reaching for.
+    with_site = [r for r in rows if r.get("website") and r.get("email")]
     db.update_business(rows[0]["id"], {"status": "replied"})
     message = outreach.draft_message(rows[1]["id"], use_ai=False)
     outreach.approve_message(int(message["id"]))
-    db.update_business(rows[2]["id"], {"email": ""})
+    db.update_business(with_site[-1]["id"], {"email": ""})
     db.update_business(rows[3]["id"], {"masthead": ""})
 
     board = {i["key"]: i for i in worklist.board()}

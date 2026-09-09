@@ -32,6 +32,7 @@ import mastheads
 import demo
 import outreach
 import prospect
+import aeo
 import qualify
 import review
 import target
@@ -510,6 +511,7 @@ def businesses(request: Request, q: str = "", status: str = "", region: str = ""
         below_rating_count=db.count_below_rating(MIN_PROSPECT_RATING),
         unreachable_count=db.list_businesses(website_status="unreachable", limit=1)[1],
         blocked_count=db.list_businesses(website_status="blocked", limit=1)[1],
+        unaudited_count=db.businesses_needing_audit(limit=1)[1],
     )
 
 
@@ -520,6 +522,7 @@ def business_detail(request: Request, business_id: int) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="No such business")
     return page(
         request, "business_detail.html",
+        aeo_findings=aeo.findings(business),
         nav="admin",
         b=business,
         band=band(business["fit_score"]),
@@ -1542,6 +1545,18 @@ def api_verify_websites(limit: int = 25, recheck: bool = False,
                                                  scope=scope, checked_before=checked_before))
 
 
+@app.post("/api/websites/audit")
+def api_audit_websites(limit: int = 12, checked_before: str = "") -> JSONResponse:
+    """
+    Read a batch of websites for what an answer engine can make of them.
+
+    Batched; the response carries `remaining` and the caller loops.
+    """
+    checked_before = checked_before.replace(" 00:00", "+00:00")
+    return JSONResponse(prospect.audit_sites(limit=min(limit, 25),
+                                             checked_before=checked_before))
+
+
 @app.post("/api/sample/purge")
 def api_purge_sample() -> JSONResponse:
     """
@@ -1564,6 +1579,14 @@ def api_check_one_website(business_id: int) -> JSONResponse:
     if not db.get_business(business_id):
         raise HTTPException(status_code=404, detail="No such business")
     return JSONResponse(prospect.check_one_website(business_id))
+
+
+@app.post("/api/businesses/{business_id}/audit")
+def api_audit_one_site(business_id: int) -> JSONResponse:
+    """Read one business's website for what an answer engine can make of it."""
+    if not db.get_business(business_id):
+        raise HTTPException(status_code=404, detail="No such business")
+    return JSONResponse(prospect.audit_one_site(business_id))
 
 
 @app.post("/api/businesses/{business_id}/delete")

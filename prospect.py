@@ -553,6 +553,85 @@ def verify_websites(limit: int = 25, recheck: bool = False,
             "checked_before": started}
 
 
+AEO_FIELDS = ("aeo_audited_at", "aeo_schema", "aeo_faq", "aeo_blog",
+              "aeo_meta", "aeo_pages", "aeo_words", "aeo_questions")
+
+
+def audit_one_site(business_id: int) -> dict[str, Any]:
+    """Read one business's website now, and say what an answer engine sees."""
+    business = db.get_business(business_id)
+    if not business:
+        return {"error": "No such business"}
+    if not business.get("website"):
+        return {"read": False, "message": "No website on this record to read."}
+    try:
+        found = enrich.enrich_from_website(business["website"])
+    except Exception as e:
+        log.debug("audit failed for %s: %s", business.get("website"), e)
+        found = {}
+    fields = {k: found[k] for k in AEO_FIELDS if k in found} or \
+        {"aeo_audited_at": db.now_exact()}
+    db.update_business(business_id, fields)
+    reenrich_score_only(business_id)
+    qualify.qualify_one(business_id)
+    read = bool(found.get("aeo_pages"))
+    db.log_activity(business_id, "audited",
+                    f"Read {found.get('aeo_pages')} page(s) for AEO signals" if read
+                    else "Could not read the site")
+    return {"read": read, "audit": fields,
+            "business": db.get_business(business_id)}
+
+
+def audit_sites(limit: int = 12, checked_before: str = "") -> dict[str, Any]:
+    """
+    Read a batch of websites for what an answer engine can make of them.
+
+    New businesses are audited as they are enriched — the HTML is already
+    downloaded, so it costs nothing. This is for the records that were found
+    before the audit existed, and it is the half of their fit score that is
+    currently a guess.
+
+    Batched and resumable for the same reason every sweep here is: a few
+    hundred sites take minutes and a hosting proxy will not wait.
+    """
+    started = checked_before or db.now_exact()
+    targets, outstanding = db.businesses_needing_audit(limit, checked_before=started)
+    if not targets:
+        return {"checked": 0, "audited": 0, "remaining": 0, "checked_before": started}
+
+    def look(business: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+        try:
+            return business, enrich.enrich_from_website(business["website"])
+        except Exception as e:                  # a hostile site is not our problem
+            log.debug("audit failed for %s: %s", business.get("website"), e)
+            return business, {}
+
+    with ThreadPoolExecutor(max_workers=ENRICH_WORKERS) as pool:
+        looked = list(pool.map(look, targets))
+
+    audited = 0
+    stamp = db.now_exact()
+    for business, found in looked:
+        business_id = int(business["id"])
+        # Only the audit fields. This is not a re-enrichment: overwriting a
+        # contact address somebody has since corrected by hand, because we
+        # happened to be on the site for another reason, would be theft.
+        fields = {k: found[k] for k in AEO_FIELDS if k in found}
+        if fields:
+            audited += 1
+        else:
+            # Nothing read. Stamp it anyway or the sweep offers it every batch.
+            fields = {"aeo_audited_at": stamp}
+        db.update_business(business_id, fields)
+        reenrich_score_only(business_id)
+        qualify.qualify_one(business_id)
+
+    log.info("audited %s of %s sites", audited, len(targets))
+    return {"checked": len(targets), "audited": audited,
+            "remaining": max(0, outstanding - len(targets)),
+            "checked_before": started}
+
+
 def check_one_website(business_id: int) -> dict[str, Any]:
     """
     Look at one business's website now and record what came back.

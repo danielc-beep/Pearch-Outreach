@@ -61,6 +61,11 @@
     runInBatches(e.currentTarget, '/api/websites/verify?scope=failed', 'Checking again',
       websiteTally));
 
+  const auditAll = document.getElementById('btn-audit');
+  if (auditAll) auditAll.addEventListener('click', (e) =>
+    runInBatches(e.currentTarget, '/api/websites/audit', 'Reading sites',
+      (t) => 'Read ' + (t.audited || 0) + ' of ' + (t.checked || 0) + ' site(s).'));
+
   document.getElementById('btn-find-emails').addEventListener('click', (e) =>
     runInBatches(e.currentTarget, '/api/enrich/missing', 'Visiting sites',
       (t) => 'Visited ' + (t.checked || 0) + ' website(s), found '
@@ -276,6 +281,18 @@
       A firewall, a login wall or a bot filter — the business is real and the site
       is up, we just can't scrape an email address off it. Worth a phone call.
       <a href="/admin/database?website_status=blocked">See {{ 'it' if blocked_count == 1 else 'them' }}</a>.
+    </div>
+    {% endif %}
+
+    {% if unaudited_count %}
+    <div class="notice notice-info">
+      <strong>{{ unaudited_count }} site{{ '' if unaudited_count == 1 else 's' }} nobody has read.</strong>
+      Half the fit score is what an answer engine can make of their website — no
+      structured data, no questions answered, nothing published. Until a site is read
+      that half is a guess, and the call list is sorted on it.
+      <button class="btn btn-sm btn-primary" id="btn-audit" style="margin-left:8px">
+        Read {{ 'it' if unaudited_count == 1 else 'them' }}
+      </button>
     </div>
     {% endif %}
 

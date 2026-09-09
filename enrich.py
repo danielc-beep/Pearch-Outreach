@@ -17,6 +17,7 @@ from typing import Any
 
 import httpx
 
+import aeo
 from config import ABR_GUID
 from util import (clean_email, deobfuscate, domain_of, find_emails,
                   find_phone, normalise_url, strip_tags, truncate)
@@ -139,6 +140,12 @@ LIVE = "live"                 # HTML came back. Everything works.
 BLOCKED = "blocked"           # A server answered and refused us. The site is up.
 UNREACHABLE = "unreachable"   # The name does not resolve. Nothing is there.
 UNKNOWN = "error"             # Timeout, TLS, a proxy in the way. We do not know.
+
+
+def _stamp() -> str:
+    """A UTC timestamp. Local to this module so enrich does not import db."""
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _host_variants(url: str) -> list[str]:
@@ -312,6 +319,12 @@ def enrich_from_website(website: str) -> dict[str, Any]:
     industry = guess_industry(title, found.get("description"), strip_tags(blob)[:4000])
     if industry:
         found["industry"] = industry
+
+    # What an answer engine can make of the same pages. Free: the HTML is
+    # already downloaded and this is the half of the fit score that says
+    # whether there is anything worth selling them.
+    found.update(aeo.audit(pages))
+    found["aeo_audited_at"] = _stamp()
 
     found["website"] = url
     found["domain"] = domain_of(url)

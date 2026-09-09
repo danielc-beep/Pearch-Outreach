@@ -151,6 +151,42 @@
           </ul>
         </div>
 
+        <!-- The audit read back as the reason to ring them. Every line is
+             something they are missing that we sell, so this is the opening
+             of the call rather than a diagnostic. -->
+        <div class="card">
+          <h3>What we'd fix</h3>
+          {% if aeo_findings %}
+          <p class="muted small" style="margin:0 0 12px">
+            What an answer engine can make of {{ b.domain }} today. Each of these is
+            work in the package.
+          </p>
+          <ul class="reasons">
+            {% for note in aeo_findings %}<li>{{ note }}</li>{% endfor %}
+          </ul>
+          {% elif b.aeo_audited_at and b.aeo_pages %}
+          <p class="muted" style="margin:0">
+            Their site is already in good order — structured data, questions answered
+            and something published. There is no obvious gap to open on, so lead with
+            reach rather than repair.
+          </p>
+          {% else %}
+          <p class="muted" style="margin:0 0 12px">
+            Nobody has read this site for what an answer engine can see. Half the fit
+            score is a guess until somebody does.
+          </p>
+          <button class="btn btn-sm" id="btn-audit-site">Read it now</button>
+          {% endif %}
+          {% if b.aeo_audited_at and b.aeo_pages %}
+          <p class="muted small" style="margin:14px 0 0">
+            {{ b.aeo_pages }} page{{ '' if b.aeo_pages == 1 else 's' }} read,
+            about {{ '{:,}'.format(b.aeo_words or 0) }} words,
+            {{ b.aeo_questions or 0 }} question-shaped heading{{ '' if b.aeo_questions == 1 else 's' }}.
+            {% if b.aeo_schema %}Schema: <span class="mono">{{ b.aeo_schema }}</span>.{% endif %}
+          </p>
+          {% endif %}
+        </div>
+
         <div class="card">
           <h3>Update</h3>
           <div class="field-block">
@@ -401,6 +437,21 @@
       '<div class="notice notice-' + (kind || 'info') + '">' + msg + '</div>';
     window.scrollTo({top: 0, behavior: 'smooth'});
   };
+
+  // Reading one site now, rather than waiting for the sweep to reach it.
+  const auditBtn = document.getElementById('btn-audit-site');
+  if (auditBtn) auditBtn.addEventListener('click', async () => {
+    auditBtn.disabled = true;
+    auditBtn.innerHTML = '<span class="spinner"></span> Reading…';
+    try {
+      await window.postJSON('/api/businesses/' + BUSINESS_ID + '/audit');
+      window.location.reload();
+    } catch (err) {
+      flash(err.message, 'error');
+      auditBtn.disabled = false;
+      auditBtn.textContent = 'Read it now';
+    }
+  });
 
   // Settling "is this site actually dead?" on the spot, without a whole sweep.
   const checkSite = document.getElementById('btn-check-site');
