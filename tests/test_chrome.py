@@ -79,6 +79,57 @@ def test_panels_carry_no_backdrop_filter(client):
     assert "backdrop-filter: blur" not in css
 
 
+def test_no_panel_lets_the_light_field_through(client):
+    """
+    The swarm drifts behind the whole page, and every panel is drawn on top of
+    it. A translucent one puts moving stars behind the figures somebody is
+    trying to read — on the dashboard the numbers were sitting straight on the
+    sky with nothing between them at all.
+
+    Every ground here has to be a solid colour or the token that is one.
+    """
+    import re
+    css = client.get("/static/app.css").text
+
+    panel = re.search(r"^\s*--panel:\s*(#[0-9A-Fa-f]{6});", css, re.M)
+    assert panel, "the shared panel ground should be an opaque hex"
+
+    boxes = (".card", ".table-wrap", ".stats", ".dash-col", ".dash-funnel", ".convert")
+    for name in boxes:
+        rule = re.search(re.escape(name) + r"\s*\{[^}]*\}", css)
+        assert rule, name
+        ground = re.search(r"background:\s*([^;]+);", rule.group(0))
+        assert ground, f"{name} has no ground, so the sky is its ground"
+        assert "rgba" not in ground.group(1), f"{name}: {ground.group(1)}"
+        assert "transparent" not in ground.group(1), f"{name}: {ground.group(1)}"
+
+
+def test_the_panel_ground_is_lifted_off_the_page(client):
+    """
+    Opaque is not enough — a panel the same colour as the page behind it is
+    still invisible. It has to read as a surface sitting on the sky.
+    """
+    import re
+
+    def luminance(hex_colour):
+        def channel(v):
+            v /= 255
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        h = hex_colour.lstrip("#")
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    css = client.get("/static/app.css").text
+    panel = re.search(r"^\s*--panel:\s*(#\S+);", css, re.M).group(1)
+    ground = re.search(r"^\s*--ink-deep:\s*(#\S+);", css, re.M).group(1)
+    assert luminance(panel) > luminance(ground) * 2.5
+
+    # And body copy still clears 4.5:1 on it, which is the point of a panel.
+    muted = re.search(r"^\s*--text-muted:\s*(#\S+);", css, re.M).group(1)
+    contrast = (luminance(muted) + 0.05) / (luminance(panel) + 0.05)
+    assert contrast >= 4.5, contrast
+
+
 def test_the_sticky_header_is_opaque(client):
     """It could be translucent only while a blur smeared what passed under it."""
     assert "background: #101A3E;" in client.get("/static/app.css").text

@@ -30,6 +30,13 @@
   --cyan-glow:    rgba(53,198,240,0.30);
 
   --white:        #FFFFFF;
+  /* The ground every panel sits on. Opaque, and lifted a little towards white
+     so a box reads as a surface rather than a hole. It has to be a solid
+     colour: the light field drifts behind the whole page, and at 90% opacity
+     stars came through the numbers on the dashboard — the eye follows the
+     movement instead of the figure it is meant to be reading. */
+  --panel:        #2C3B66;
+  --panel-edge:   rgba(255,255,255,0.10);
   --surface:      rgba(255,255,255,0.035);
   --surface-2:    rgba(255,255,255,0.07);
   --border:       rgba(255,255,255,0.18);
@@ -256,7 +263,7 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 
 /* ---------- Cards, stats ---------- */
 .card {
-  background: rgba(31,46,92,0.90);
+  background: var(--panel);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px;
   box-shadow: var(--shadow);
 }
@@ -290,7 +297,7 @@ h3 { font-size: 17px; letter-spacing: -0.015em; font-weight: 700; margin: 0 0 8p
 /* ---------- Tables ---------- */
 .table-wrap {
   border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
-  background: rgba(31,46,92,0.90);
+  background: var(--panel);
   box-shadow: var(--shadow);
 }
 .table-scroll { overflow-x: auto; }
@@ -992,17 +999,17 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
 /* The numbers: one row, hairline dividers, no cards. */
 .stats {
   display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
-  border-top: 1px solid rgba(255,255,255,0.13);
-  border-bottom: 1px solid rgba(255,255,255,0.13);
-  margin-bottom: 14px;
+  background: var(--panel); border: 1px solid var(--panel-edge);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 4px 20px; margin-bottom: 14px;
 }
 .stat-cell {
-  display: block; padding: 12px 18px 13px; text-decoration: none;
+  display: block; padding: 14px 18px 15px; text-decoration: none; border-radius: 10px;
   border-left: 1px solid rgba(255,255,255,0.08);
   transition: background 0.15s;
 }
-.stat-cell:first-child { border-left: 0; padding-left: 0; }
-.stat-cell:hover { background: rgba(255,255,255,0.03); }
+.stat-cell:first-child { border-left: 0; }
+.stat-cell:hover { background: rgba(255,255,255,0.05); }
 .stat-label {
   display: block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.09em;
   text-transform: uppercase; color: var(--text-muted);
@@ -1036,7 +1043,11 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
   100% { text-shadow: none; }
 }
 
-.dash-funnel { margin-bottom: 16px; }
+.dash-funnel {
+  background: var(--panel); border: 1px solid var(--panel-edge);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px 20px; margin-bottom: 14px;
+}
 .dash-funnel .funnel { height: 34px; margin: 0; }
 
 /* Three columns, two rows, and the coach standing down the right of both.
@@ -1046,10 +1057,16 @@ tbody tr:hover { box-shadow: inset 2px 0 0 var(--cyan); }
    tucking the trades table into the space it was casting means nothing is
    left hanging and the whole dashboard lands on one screen. */
 .dash-grid {
-  display: grid; gap: 14px 30px; align-items: start;
+  display: grid; gap: 14px; align-items: start;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.95fr);
 }
-.dash-col { min-width: 0; }
+/* Each column is its own panel. They used to be drawn straight onto the sky,
+   which is why a row of figures had stars running through it — there was
+   nothing between the data and the animation. */
+.dash-col {
+  min-width: 0; background: var(--panel); border: 1px solid var(--panel-edge);
+  border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px 18px;
+}
 .dash-wide { grid-column: 1 / 3; }
 .dash-tall { grid-column: 3; grid-row: 1 / span 2; align-self: stretch; }
 .col-head {
@@ -1790,8 +1807,9 @@ table.bare td > .sub { display: block; font-size: 11.5px; margin-top: 1px; }
 /* ---------- Where deals go ---------- */
 .convert {
   display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap;
-  padding: 9px 0 11px; margin-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.10);
+  background: var(--panel); border: 1px solid var(--panel-edge);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 12px 20px 13px; margin-bottom: 14px;
   font-size: 12px; color: var(--text-muted);
 }
 .convert-cell { display: inline-flex; align-items: baseline; gap: 6px; }
