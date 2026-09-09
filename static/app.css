@@ -42,6 +42,14 @@
   --warning:      #FFD070;
   --success:      #5FE3A8;
 
+  /* Masthead coverage ramp: nothing found → found → being worked → earning.
+     Ordinal, so it is one hue getting stronger rather than four colours.
+     Opaque on purpose — see .cov-tile. */
+  --cov-0:        #28304C;
+  --cov-1:        #224160;
+  --cov-2:        #19587B;
+  --cov-3:        #0F7298;
+
   --serif:        'Newsreader', 'Times New Roman', serif;
   --script:       'Caveat', 'Segoe Script', cursive;
   --radius:       16px;
@@ -1663,10 +1671,10 @@ table.bare td > .sub { display: block; font-size: 11.5px; margin-top: 1px; }
 .cov-key-item { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 7px; }
 .cov-key-item b { color: var(--text); font-weight: 650; }
 .cov-chip { width: 13px; height: 13px; border-radius: 4px; flex: none; }
-.cov-chip.is-untouched { background: transparent; border: 1px dashed rgba(255,255,255,0.30); }
-.cov-chip.is-found     { background: rgba(0,154,199,0.16); border: 1px solid rgba(0,154,199,0.45); }
-.cov-chip.is-working   { background: rgba(0,154,199,0.38); border: 1px solid rgba(53,198,240,0.55); }
-.cov-chip.is-earning   { background: rgba(0,154,199,0.62); border: 1px solid var(--cyan-bright); }
+.cov-chip.is-untouched { background: var(--cov-0); border: 1px dashed rgba(255,255,255,0.34); }
+.cov-chip.is-found     { background: var(--cov-1); border: 1px solid rgba(0,154,199,0.55); }
+.cov-chip.is-working   { background: var(--cov-2); border: 1px solid rgba(53,198,240,0.60); }
+.cov-chip.is-earning   { background: var(--cov-3); border: 1px solid var(--cyan-bright); }
 
 .cov-next {
   display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
@@ -1688,18 +1696,25 @@ table.bare td > .sub { display: block; font-size: 11.5px; margin-top: 1px; }
   display: grid; gap: 8px;
   grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
 }
+/* The four bands are opaque hexes, not translucent overlays. The light field
+   drifts behind the whole page, and a tile you can see stars through reads as
+   a hole in the board rather than a card on it — the eye keeps catching the
+   movement instead of the numbers. These are the exact composites of the old
+   overlays over a ground lifted 11% towards white, so the ramp and its tested
+   contrast are unchanged; they just stop letting the sky through. */
 .cov-tile {
   display: flex; flex-direction: column; justify-content: space-between; gap: 10px;
   min-height: 74px; padding: 10px 12px; border-radius: 10px; text-decoration: none;
-  background: rgba(0,154,199,0.16); border: 1px solid rgba(0,154,199,0.45);
+  background: var(--cov-1); border: 1px solid rgba(0,154,199,0.55);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 20px -14px rgba(0,0,0,0.9);
   transition: transform 0.14s, border-color 0.14s;
 }
 .cov-tile:hover { transform: translateY(-2px); border-color: var(--cyan-bright); }
 .cov-tile.is-untouched {
-  background: transparent; border: 1px dashed rgba(255,255,255,0.16);
+  background: var(--cov-0); border: 1px dashed rgba(255,255,255,0.22);
 }
-.cov-tile.is-working { background: rgba(0,154,199,0.38); border-color: rgba(53,198,240,0.55); }
-.cov-tile.is-earning { background: rgba(0,154,199,0.62); border-color: var(--cyan-bright); }
+.cov-tile.is-working { background: var(--cov-2); border-color: rgba(53,198,240,0.60); }
+.cov-tile.is-earning { background: var(--cov-3); border-color: var(--cyan-bright); }
 .cov-name {
   font-size: 12.5px; font-weight: 650; color: var(--white); line-height: 1.25;
 }
@@ -1709,7 +1724,9 @@ table.bare td > .sub { display: block; font-size: 11.5px; margin-top: 1px; }
   font-size: 20px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
   color: var(--white); font-variant-numeric: tabular-nums;
 }
-.cov-tile.is-untouched .cov-figures b { color: rgba(255,255,255,0.28); }
+/* A quiet zero, but still a readable one: 0.28 over the old transparent
+   tile fell under 3:1, which is the floor for a number this size. */
+.cov-tile.is-untouched .cov-figures b { color: rgba(255,255,255,0.38); }
 /* Light enough to clear 4.5:1 on the brightest tile in the ramp. */
 .cov-sub { font-size: 11px; color: #DCE9F7; }
 .cov-tile.is-untouched .cov-sub { color: var(--text-muted); }

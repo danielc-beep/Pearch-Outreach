@@ -135,3 +135,50 @@ def test_prospect_sits_next_to_the_dashboard(client):
     body = client.get("/").text
     order = [body.index(f'href="{path}"') for path in ("/", "/prospect", "/review")]
     assert order == sorted(order), "Dashboard, then Prospect, then the rest"
+
+
+def test_the_light_field_never_shows_through_a_masthead_tile(client):
+    """
+    The swarm drifts behind the whole page. A tile you can see stars through
+    reads as a hole in the board rather than a card on it, and the eye keeps
+    catching the movement instead of the number. Every band is an opaque hex.
+    """
+    import re
+    css = client.get("/static/app.css").text
+    bands = re.findall(r"^\s*--cov-\d:\s*(\S+);", css, re.M)
+    assert len(bands) == 4, "the ramp should have four steps"
+    assert all(re.fullmatch(r"#[0-9A-Fa-f]{6}", b) for b in bands), bands
+
+    # And nothing sets a see-through ground on a tile or its key swatch.
+    for rule in re.findall(r"\.cov-(?:tile|chip)[^{]*\{[^}]*\}", css):
+        ground = re.search(r"background:\s*([^;]+);", rule)
+        if ground:
+            assert "transparent" not in ground.group(1), rule
+            assert "rgba" not in ground.group(1), rule
+
+
+def test_the_ramp_climbs(client):
+    """
+    Ordinal data, so the four bands have to read as one hue getting stronger.
+    Equal-looking steps are how a board stops being scannable.
+    """
+    import re
+
+    def luminance(hex_colour):
+        def channel(v):
+            v /= 255
+            return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+        h = hex_colour.lstrip("#")
+        r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
+        return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+    css = client.get("/static/app.css").text
+    steps = [luminance(c) for c in re.findall(r"^\s*--cov-\d:\s*(#\S+);", css, re.M)]
+    assert steps == sorted(steps), steps
+    # Each step at least half again as light as the one below it, so the band
+    # is legible without reading the number.
+    for lighter, darker in zip(steps[1:], steps):
+        assert lighter > darker * 1.4, steps
+    # The palest tile still has to sit off the page ground, or an empty patch
+    # looks like a gap in the grid.
+    assert steps[0] > luminance("#0D1636") * 2
